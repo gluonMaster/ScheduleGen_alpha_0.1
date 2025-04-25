@@ -1,0 +1,374 @@
+// Модуль для редактирования блоков занятий с поддержкой разных зданий
+
+// Функция инициализации редактирования блоков занятий
+function initBlockEditing() {
+    // Добавляем стили для диалогового окна
+    var style = document.createElement('style');
+    style.textContent = `
+        .dialog-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .edit-dialog {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            width: 400px;
+            max-width: 90%;
+            position: relative; /* Для предотвращения всплытия событий */
+        }
+        .edit-dialog h3 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .edit-dialog form {
+            display: flex;
+            flex-direction: column;
+        }
+        .edit-dialog label {
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+        .edit-dialog input, .edit-dialog textarea, .edit-dialog select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .edit-dialog textarea {
+            min-height: 60px;
+            resize: vertical;
+        }
+        .edit-dialog .button-row {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 15px;
+            gap: 10px;
+        }
+        .edit-dialog button {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .edit-dialog button[type="submit"] {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .edit-dialog button[type="button"] {
+            background-color: #f1f1f1;
+            color: #333;
+        }
+        .edit-dialog button:hover {
+            opacity: 0.9;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// Функция открытия диалога редактирования с поддержкой зданий
+function openEditDialog(block, origLeft, origTop, building) {
+    console.log("Открытие диалога редактирования");
+    
+    // Устанавливаем флаг, что диалог открыт
+    window.editDialogOpen = true;
+    
+    // Восстанавливаем позицию блока, если она была изменена при двойном клике
+    if (origLeft && origTop) {
+        block.style.left = origLeft;
+        block.style.top = origTop;
+    }
+
+    // Сохраняем текущие значения атрибутов для сравнения после редактирования
+    var currentDay = block.getAttribute('data-day');
+    var currentColIndex = block.getAttribute('data-col-index');
+    var currentBuilding = building || block.getAttribute('data-building') || determineBlockBuilding(block);
+    
+    // Определяем здание блока по его родительскому контейнеру, если не указано
+    function determineBlockBuilding(block) {
+        var container = block.closest('.schedule-container');
+        if (!container) return "Villa"; // По умолчанию
+        
+        var element = container.previousElementSibling;
+        while (element) {
+            if (element.tagName === 'H2') {
+                if (element.textContent.includes('Villa')) return 'Villa';
+                if (element.textContent.includes('Kolibri')) return 'Kolibri';
+                break;
+            }
+            element = element.previousElementSibling;
+        }
+        
+        return "Villa"; // По умолчанию
+    }
+    
+    // Извлекаем текущие данные из блока
+    var blockContent = block.innerHTML;
+    var subject = '';
+    var teacher = '';
+    var students = '';
+    var room = '';
+    var timeRange = '';
+
+    // Парсим содержимое блока
+    var subjectElement = block.querySelector('strong');
+    if (subjectElement) {
+        subject = subjectElement.textContent || '';
+    }
+
+    // Разбиваем HTML по тегам <br>
+    var parts = blockContent.split('<br>');
+    // Удаляем теги из первого элемента (subject)
+    var cleanSubject = parts[0].replace(/<\/?[^>]+(>|$)/g, "").trim();
+    subject = cleanSubject;
+    
+    // Получаем остальные значения
+    if (parts.length > 1) teacher = parts[1].trim();
+    if (parts.length > 2) students = parts[2].trim();
+    if (parts.length > 3) room = parts[3].trim();
+    if (parts.length > 4) timeRange = parts[4].trim();
+
+    console.log("Извлеченные данные:", {
+        subject: subject,
+        teacher: teacher,
+        students: students,
+        room: room,
+        timeRange: timeRange,
+        building: currentBuilding
+    });
+    
+    // Создаем список зданий
+    var buildingOptions = ['Villa', 'Kolibri'].map(function(b) {
+        return `<option value="${b}" ${currentBuilding === b ? 'selected' : ''}>${b}</option>`;
+    }).join('');
+
+    // Создаем HTML диалогового окна
+    var dialogHTML = `
+        <div class="edit-dialog" onclick="event.stopPropagation();">
+            <h3>Редактирование занятия</h3>
+            <form id="edit-form">
+                <label>
+                    Здание:
+                    <select id="edit-building">
+                        ${buildingOptions}
+                    </select>
+                </label>
+                <label>
+                    Предмет:
+                    <input type="text" id="edit-subject" value="${subject}" required>
+                </label>
+                <label>
+                    Преподаватель:
+                    <input type="text" id="edit-teacher" value="${teacher}">
+                </label>
+                <label>
+                    Группа/Ученики:
+                    <input type="text" id="edit-students" value="${students}">
+                </label>
+                <label>
+                    Кабинет:
+                    <input type="text" id="edit-room" value="${room}">
+                </label>
+                <label>
+                    Время (HH:MM-HH:MM):
+                    <input type="text" id="edit-time" value="${timeRange}" pattern="[0-9]{2}:[0-9]{2}-[0-9]{2}:[0-9]{2}" 
+                        placeholder="09:00-10:30" title="Формат: ЧЧ:ММ-ЧЧ:ММ">
+                </label>
+                <div class="button-row">
+                    <button type="button" id="cancel-edit">Отмена</button>
+                    <button type="submit">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    `;
+
+    // Создаем и добавляем диалог на страницу
+    var dialogElement = document.createElement('div');
+    dialogElement.className = 'dialog-overlay';
+    dialogElement.innerHTML = dialogHTML;
+    document.body.appendChild(dialogElement);
+
+    // Нужно предотвратить скролл страницы
+    document.body.style.overflow = 'hidden';
+
+    // Ставим фокус на первое поле
+    setTimeout(function() {
+        document.getElementById('edit-subject').focus();
+    }, 100);
+
+    // Предотвращаем скролл страницы при клике на overlay
+    dialogElement.addEventListener('click', function(e) {
+        if (e.target === dialogElement) {
+            closeDialog();
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    });
+
+    // Функция закрытия диалога
+    function closeDialog() {
+        document.body.removeChild(dialogElement);
+        document.body.style.overflow = '';
+        window.editDialogOpen = false;
+    }
+
+    // Обработчик отправки формы
+    var formElement = document.getElementById('edit-form');
+    if (formElement) {
+        formElement.addEventListener('submit', function(e) {
+            console.log("Форма отправлена");
+            
+            // Важно! Предотвращаем действие по умолчанию
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Получаем значения из формы
+            var newBuilding = document.getElementById('edit-building').value;
+            var newSubject = document.getElementById('edit-subject').value;
+            var newTeacher = document.getElementById('edit-teacher').value;
+            var newStudents = document.getElementById('edit-students').value;
+            var newRoom = document.getElementById('edit-room').value;
+            var newTime = document.getElementById('edit-time').value;
+            
+            console.log("Новые значения:", {
+                building: newBuilding,
+                subject: newSubject,
+                teacher: newTeacher,
+                students: newStudents,
+                room: newRoom,
+                time: newTime
+            });
+            
+            // Проверяем формат времени
+            var timeRegex = /^([0-9]{2}):([0-9]{2})-([0-9]{2}):([0-9]{2})$/;
+            var timeMatch = newTime.match(timeRegex);
+            
+            if (!timeMatch) {
+                alert('Пожалуйста, введите время в формате ЧЧ:ММ-ЧЧ:ММ');
+                return;
+            }
+
+            // Закрываем диалог до обновления блока
+            closeDialog();
+
+            // Проверяем, изменилось ли здание
+            var buildingChanged = (newBuilding !== currentBuilding);
+            
+            // Проверяем, изменился ли номер кабинета
+            var roomChanged = (newRoom !== room);
+            
+            // Обновляем содержимое блока
+            block.innerHTML = `<strong>${newSubject}</strong><br>${newTeacher}<br>${newStudents}<br>${newRoom}<br>${newTime}`;
+            
+            // Устанавливаем атрибут здания
+            block.setAttribute('data-building', newBuilding);
+            
+            // Обновляем отображение блока, если изменилось время
+            if (newTime !== timeRange) {
+                console.log("Обновление позиции блока из-за изменения времени");
+                updateBlockPosition(block, newTime);
+            }
+    
+            // Если изменился кабинет, перемещаем блок в соответствующую колонку
+            if (roomChanged) {
+                console.log("Обновление колонки блока из-за изменения кабинета");
+                updateBlockColumn(block, newRoom);
+            }
+            
+            // Если изменилось здание, перемещаем блок в соответствующий контейнер
+            if (buildingChanged) {
+                console.log("Перемещение блока в другое здание:", newBuilding);
+                moveBlockToBuilding(block, newBuilding);
+            }
+            
+            // В любом случае вызываем updateActivityPositions для согласованности
+            updateActivityPositions();
+            
+            return false; // Дополнительное предотвращение отправки формы
+        });
+    }
+
+    // Обработчик кнопки отмены
+    var cancelButton = document.getElementById('cancel-edit');
+    if (cancelButton) {
+        cancelButton.addEventListener('click', function(e) {
+            console.log("Нажата кнопка отмены");
+            e.preventDefault();
+            e.stopPropagation();
+            closeDialog();
+        });
+    }
+    
+    // Закрытие по Escape
+    function handleEscape(e) {
+        if (e.key === 'Escape') {
+            closeDialog();
+            document.removeEventListener('keydown', handleEscape);
+        }
+    }
+    document.addEventListener('keydown', handleEscape);
+}
+
+// Функция для перемещения блока в контейнер соответствующего здания
+function moveBlockToBuilding(block, newBuilding) {
+    // Находим контейнер расписания для указанного здания
+    var targetContainer = findScheduleContainerForBuilding(newBuilding);
+    if (!targetContainer) {
+        alert(`Ошибка: не найден контейнер расписания для здания ${newBuilding}`);
+        return;
+    }
+    
+    // Сохраняем данные блока перед перемещением
+    var day = block.getAttribute('data-day');
+    var room = '';
+    var parts = block.innerHTML.split('<br>');
+    if (parts.length > 3) room = parts[3].trim();
+    
+    // Обновляем колонку для нового здания
+    updateBlockColumnForBuilding(block, room, newBuilding, day);
+    
+    // Удаляем блок из текущего контейнера и добавляем в новый
+    block.parentNode.removeChild(block);
+    targetContainer.appendChild(block);
+    
+    // Обновляем позиции всех блоков для корректного отображения
+    updateActivityPositions();
+}
+
+// Вспомогательная функция для поиска контейнера расписания для определенного здания
+function findScheduleContainerForBuilding(buildingName) {
+    var buildingHeaders = document.querySelectorAll('h2');
+    
+    for (var i = 0; i < buildingHeaders.length; i++) {
+        if (buildingHeaders[i].textContent.includes(buildingName)) {
+            // Находим ближайший schedule-container после заголовка здания
+            var scheduleContainer = buildingHeaders[i].nextElementSibling;
+            while (scheduleContainer && !scheduleContainer.classList.contains('schedule-container')) {
+                scheduleContainer = scheduleContainer.nextElementSibling;
+            }
+            return scheduleContainer;
+        }
+    }
+    
+    return null;
+}
+
+// Экспортируем функции
+window.openEditDialog = openEditDialog;
+window.initBlockEditing = initBlockEditing;
+window.moveBlockToBuilding = moveBlockToBuilding;
+window.findScheduleContainerForBuilding = findScheduleContainerForBuilding;
