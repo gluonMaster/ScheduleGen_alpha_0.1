@@ -41,63 +41,64 @@ def can_schedule_sequentially(c1, c2):
     # Проверка случаев с фиксированным временем и временным окном
     if c1.start_time and not c1.end_time and c2.start_time and c2.end_time:
         # c1 фиксировано, c2 с окном
-        fixed_start = time_to_minutes(c1.start_time)
-        fixed_end = fixed_start + c1.duration + c1.pause_after
-        window_start = time_to_minutes(c2.start_time)
-        window_end = time_to_minutes(c2.end_time)
-        
-        info['c1_start'] = minutes_to_time(fixed_start)
-        info['c1_end'] = minutes_to_time(fixed_end)
-        info['c2_start'] = c2.start_time
-        info['c2_end'] = c2.end_time
-        
-        # Проверяем, помещается ли второе занятие после первого
-        if window_end - fixed_end >= c2.duration + c2.pause_before:
-            info['required_time'] = c2.duration + c2.pause_before
+        fixed_start   = time_to_minutes(c1.start_time)
+        fixed_end     = fixed_start + c1.duration + c1.pause_after
+        window_start  = time_to_minutes(c2.start_time)
+        window_end    = time_to_minutes(c2.end_time)
+    
+        # Проверяем оба направления
+        can_fit_before = (window_start + c2.duration + c2.pause_after) <= (fixed_start - c1.pause_before)
+        can_fit_after  = (window_end - fixed_end) >= (c2.duration + c2.pause_before)
+    
+        if can_fit_before and can_fit_after:
+            # Оба варианта возможны — не навязываем порядок
+            info['reason']         = 'both_orders_possible'
+            info['available_time'] = window_end - window_start
+            info['required_time']  = (c1.pause_before + c2.duration + c2.pause_after + c2.pause_before)
+            return True, info
+        elif can_fit_before:
+            info['reason']         = 'fits_before_fixed'
+            info['available_time'] = fixed_start - (window_start + c2.duration + c2.pause_after)
+            info['required_time']  = c1.pause_before
+            return True, info
+        elif can_fit_after:
+            info['reason']         = 'fits_after_fixed'
             info['available_time'] = window_end - fixed_end
-            info['reason'] = 'fits_after_fixed'
+            info['required_time']  = c2.duration + c2.pause_before
             return True, info
-            
-        # Проверяем, помещается ли первое занятие после второго занятия с окном
-        # Для этого второе должно уместиться в начало окна
-        if window_start + c2.duration + c2.pause_after <= fixed_start - c1.pause_before:
-            info['required_time'] = fixed_start - (window_start + c2.duration + c2.pause_after)
-            info['available_time'] = c1.pause_before
-            info['reason'] = 'fits_before_fixed'
-            return True, info
-            
-        info['reason'] = 'not_enough_time_around_fixed'
-        return False, info
+        else:
+            info['reason'] = 'not_enough_time_around_fixed'
+            return False, info
         
     elif c2.start_time and not c2.end_time and c1.start_time and c1.end_time:
         # c2 фиксировано, c1 с окном
-        fixed_start = time_to_minutes(c2.start_time)
-        fixed_end = fixed_start + c2.duration + c2.pause_after
-        window_start = time_to_minutes(c1.start_time)
-        window_end = time_to_minutes(c1.end_time)
-        
-        info['c2_start'] = minutes_to_time(fixed_start)
-        info['c2_end'] = minutes_to_time(fixed_end)
-        info['c1_start'] = c1.start_time
-        info['c1_end'] = c1.end_time
-        
-        # Проверяем, помещается ли первое занятие после второго
-        if window_end - fixed_end >= c1.duration + c1.pause_before:
-            info['required_time'] = c1.duration + c1.pause_before
+        fixed_start   = time_to_minutes(c2.start_time)
+        fixed_end     = fixed_start + c2.duration + c2.pause_after
+        window_start  = time_to_minutes(c1.start_time)
+        window_end    = time_to_minutes(c1.end_time)
+    
+        # Проверяем оба направления
+        can_fit_before = (window_start + c1.duration + c1.pause_after) <= (fixed_start - c2.pause_before)
+        can_fit_after  = (window_end - fixed_end) >= (c1.duration + c1.pause_before)
+    
+        if can_fit_before and can_fit_after:
+            info['reason']         = 'both_orders_possible'
+            info['available_time'] = window_end - window_start
+            info['required_time']  = (c2.pause_before + c1.duration + c1.pause_after + c1.pause_before)
+            return True, info
+        elif can_fit_before:
+            info['reason']         = 'fits_before_fixed'
+            info['available_time'] = fixed_start - (window_start + c1.duration + c1.pause_after)
+            info['required_time']  = c2.pause_before
+            return True, info
+        elif can_fit_after:
+            info['reason']         = 'fits_after_fixed'
             info['available_time'] = window_end - fixed_end
-            info['reason'] = 'fits_after_fixed'
+            info['required_time']  = c1.duration + c1.pause_before
             return True, info
-            
-        # Проверяем, помещается ли второе занятие после первого занятия с окном
-        # Для этого первое должно уместиться в начало окна
-        if window_start + c1.duration + c1.pause_after <= fixed_start - c2.pause_before:
-            info['required_time'] = fixed_start - (window_start + c1.duration + c1.pause_after)
-            info['available_time'] = c2.pause_before
-            info['reason'] = 'fits_before_fixed'
-            return True, info
-            
-        info['reason'] = 'not_enough_time_around_fixed'
-        return False, info
+        else:
+            info['reason'] = 'not_enough_time_around_fixed'
+            return False, info
         
     elif c1.start_time and c1.end_time and c2.start_time and c2.end_time:
         # Оба занятия с временными окнами

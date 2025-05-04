@@ -6,6 +6,18 @@ from conflict_detector import check_potential_conflicts
 from time_conflict_constraints import _add_time_conflict_constraints
 from time_utils import time_to_minutes, minutes_to_time 
 
+def times_overlap(c1, c2):
+    """Проверяет пересечение по времени двух занятий."""
+    if not c1.start_time or not c2.start_time:
+        # Одно из занятий не имеет фиксированного времени — считаем пересекающимся
+        return True
+    start1 = time_to_minutes(c1.start_time)
+    end1 = start1 + c1.duration
+    start2 = time_to_minutes(c2.start_time)
+    end2 = start2 + c2.duration
+    return (start1 < end2) and (start2 < end1)
+
+
 def can_schedule_sequentially(c_i, c_j):
     """
     Проверяет, могут ли два занятия быть запланированы последовательно.
@@ -112,6 +124,23 @@ def add_resource_conflict_constraints(optimizer):
         
         for j in range(i + 1, num_classes):
             c_j = optimizer.classes[j]
+
+            # Пропускаем сравнение, если занятия в разные дни
+            if c_i.day != c_j.day:
+                continue
+
+            # ВАЖНОЕ ИЗМЕНЕНИЕ: Всегда проверяем возможные конфликты по комнатам,
+            # даже если у классов разные учителя и группы
+            shared_rooms = set(c_i.possible_rooms) & set(c_j.possible_rooms)
+            if shared_rooms:
+                print(f"Checking room conflict between classes {i} and {j} in rooms {shared_rooms}")
+                # Добавляем ограничения, чтобы предотвратить конфликты по времени в одной комнате
+                _add_time_conflict_constraints(optimizer, i, j, c_i, c_j)
+                continue  # Продолжаем со следующей парой классов
+
+            # Пропускаем сравнение, если занятия не пересекаются по времени
+            if not times_overlap(c_i, c_j):
+                continue
             
             # Skip if classes are linked (already handled)
             if hasattr(c_i, 'linked_classes') and c_j in c_i.linked_classes:

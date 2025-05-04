@@ -3,341 +3,153 @@
 """
 from time_utils import time_to_minutes, minutes_to_time
 
-def _check_sequential_scheduling(optimizer, idx_fixed, idx_window, c_fixed, c_window):
+def _check_sequential_scheduling(optimizer, fixed_idx, window_idx):
     """
-    Проверяет возможность последовательного размещения занятий, когда одно имеет
-    фиксированное время, а другое - временное окно.
-    
-    Args:
-        optimizer: Экземпляр ScheduleOptimizer
-        idx_fixed: Индекс занятия с фиксированным временем
-        idx_window: Индекс занятия с временным окном
-        c_fixed: Занятие с фиксированным временем (ScheduleClass)
-        c_window: Занятие с временным окном (ScheduleClass)
-        
-    Returns:
-        tuple: (bool, str) - возможно ли последовательное размещение и режим размещения
-               ("after", "before", "both" или "none")
+    Проверяет, можно ли разместить занятие с временным окном до или после фиксированного занятия.
+    Если возможно — добавляет соответствующее ограничение. Если оба варианта невозможны — возвращает False.
     """
-    fixed_start = time_to_minutes(c_fixed.start_time)
-    fixed_end = fixed_start + c_fixed.duration + c_fixed.pause_after
-    window_start = time_to_minutes(c_window.start_time)
-    window_end = time_to_minutes(c_window.end_time)
-    
-    print(f"\nANALYZING SEQUENTIAL POSSIBILITY: Same teacher {c_fixed.teacher}, different groups")
-    print(f"  Fixed class: {c_fixed.subject} at {c_fixed.start_time} (ends at {minutes_to_time(fixed_end)})")
-    print(f"  Window class: {c_window.subject} with window {c_window.start_time}-{c_window.end_time}")
-    
-    # Проверяем, достаточно ли времени для последовательного размещения
-    # Вариант 1: Окно после фиксированного времени
-    after_fixed_possible = window_end - fixed_end >= c_window.duration + c_window.pause_before
-    
-    # Вариант 2: Окно перед фиксированным временем
-    window_class_end = window_start + c_window.duration + c_window.pause_after
-    before_fixed_possible = fixed_start - window_class_end >= c_fixed.pause_before
-    
-    # Информация для слотов
-    earliest_after_slot = None
-    latest_before_slot = None
-    
-    if after_fixed_possible:
-        print(f"  Option 1: Window class can be scheduled AFTER fixed class")
-        
-        # Находим слот для начала занятия с окном после фиксированного
-        fixed_end_time = minutes_to_time(fixed_end)
-        for slot_idx, slot_time in enumerate(optimizer.time_slots):
-            if slot_time >= fixed_end_time:
-                earliest_after_slot = slot_idx
-                break
-        
-        if earliest_after_slot is not None:
-            print(f"  Window class can start at or after slot {earliest_after_slot} ({optimizer.time_slots[earliest_after_slot]})")
-    
-    if before_fixed_possible:
-        print(f"  Option 2: Window class can be scheduled BEFORE fixed class")
-        
-        # Находим последний допустимый слот для окончания занятия с окном
-        latest_end_time = minutes_to_time(fixed_start - c_fixed.pause_before)
-        latest_end_slot = None
-        for slot_idx, slot_time in enumerate(optimizer.time_slots):
-            if slot_time > latest_end_time:
-                latest_end_slot = slot_idx - 1
-                break
-        
-        # Находим последний допустимый слот для начала занятия с окном
-        if latest_end_slot is not None:
-            window_duration_slots = (c_window.duration + c_window.pause_after) // optimizer.time_interval
-            latest_before_slot = latest_end_slot - window_duration_slots
-            
-            if latest_before_slot >= 0:
-                print(f"  Window class must start at or before slot {latest_before_slot} ({optimizer.time_slots[latest_before_slot]})")
-            else:
-                print(f"  Window class cannot be scheduled before fixed class (insufficient slots)")
-                before_fixed_possible = False
-    
-    # Определяем режим размещения
-    if after_fixed_possible and before_fixed_possible:
-        mode = "both"
-    elif after_fixed_possible:
-        mode = "after"
-    elif before_fixed_possible:
-        mode = "before"
-    else:
-        mode = "none"
-    
-    # Добавляем ограничения в зависимости от режима
-    if mode != "none" and not isinstance(optimizer.start_vars[idx_window], int):
-        if mode == "both":
-            # Создаем булеву переменную для выбора между вариантами
-            is_after = optimizer.model.NewBoolVar(f"is_after_{idx_fixed}_{idx_window}")
-            
-            # Если занятие с окном после фиксированного, то window.start >= earliest_after_slot
-            optimizer.model.Add(optimizer.start_vars[idx_window] >= earliest_after_slot).OnlyEnforceIf(is_after)
-            
-            # Если занятие с окном перед фиксированным, то window.start <= latest_before_slot
-            optimizer.model.Add(optimizer.start_vars[idx_window] <= latest_before_slot).OnlyEnforceIf(is_after.Not())
-            
-            print(f"  Added constraint: Window class either starts after slot {earliest_after_slot} OR before slot {latest_before_slot}")
-            
-        elif mode == "after":
-            optimizer.model.Add(optimizer.start_vars[idx_window] >= earliest_after_slot)
-            print(f"  Added constraint: Window class must start at or after slot {earliest_after_slot}")
-            
-        elif mode == "before":
-            optimizer.model.Add(optimizer.start_vars[idx_window] <= latest_before_slot)
-            print(f"  Added constraint: Window class must start at or before slot {latest_before_slot}")
-    
-    return mode != "none", mode
+    fixed_c = optimizer.classes[fixed_idx]
+    window_c = optimizer.classes[window_idx]
+
+    if fixed_c.day != window_c.day:
+        return False
+
+    fixed_start = time_to_minutes(fixed_c.start_time)
+    fixed_end = fixed_start + fixed_c.duration + fixed_c.pause_after
+
+    window_start = time_to_minutes(window_c.window_start)
+    window_end = time_to_minutes(window_c.window_end)
+    window_duration = window_c.duration + window_c.pause_before + window_c.pause_after
+
+    # Сначала пробуем разместить ДО фиксированного занятия
+    latest_end_before_fixed = fixed_start - fixed_c.pause_before
+    can_fit_before = (latest_end_before_fixed - window_start) >= window_duration
+    if can_fit_before:
+        latest_start_slot = optimizer.minutes_to_slot(latest_end_before_fixed - window_duration)
+        optimizer.model.Add(optimizer.start_vars[window_idx] <= latest_start_slot)
+        print(f"SEQUENTIAL SCHEDULING: Window class {window_c.subject}"
+              f" scheduled BEFORE fixed class {fixed_c.subject}"
+              f" at {fixed_c.start_time}")
+        return True
+
+    # Если «до» не подошло, пробуем «после»
+    earliest_start_after_fixed = fixed_end
+    can_fit_after = (window_end - earliest_start_after_fixed) >= window_duration
+    if can_fit_after:
+        earliest_start_slot = optimizer.minutes_to_slot(earliest_start_after_fixed)
+        optimizer.model.Add(optimizer.start_vars[window_idx] >= earliest_start_slot)
+        print(f"SEQUENTIAL SCHEDULING: Window class {window_c.subject}"
+              f" scheduled AFTER fixed class {fixed_c.subject}"
+              f" at {fixed_c.start_time}")
+        return True
+
+    # Ни туда, ни туда не влезает
+    print(f"NO SEQUENTIAL SCHEDULING POSSIBLE between {fixed_c.subject}"
+          f" and {window_c.subject}")
+    return False
+
+# Дополнительно: поддержка связанных оконных занятий в одной цепочке (linked_constraints-aware scheduling)
+def _group_window_linked_classes(optimizer):
+    """
+    Возвращает список списков — групп оконных занятий, связанных через linked_constraints.
+    """
+    linked_groups = []
+    seen = set()
+    for chain in optimizer.linked_chains:
+        window_chain = [idx for idx in chain if optimizer.classes[idx].has_time_window]
+        if len(window_chain) > 1:
+            frozen = tuple(window_chain)
+            if frozen not in seen:
+                linked_groups.append(window_chain)
+                seen.add(frozen)
+    return linked_groups
+
+def enforce_window_chain_sequencing(optimizer):
+    """
+    Добавляет ограничения между оконными занятиями, связанными логикой последовательности.
+    """
+
+    for chain in _group_window_linked_classes(optimizer):
+        for i in range(len(chain) - 1):
+            idx_a = chain[i]
+            idx_b = chain[i + 1]
+
+            a = optimizer.classes[idx_a]
+            b = optimizer.classes[idx_b]
+
+            if a.day != b.day:
+                continue  # Только один день поддерживается
+
+            duration_a = a.duration + a.pause_before + a.pause_after
+            min_gap = optimizer.time_interval // 2
+
+            optimizer.model.Add(
+                optimizer.start_vars[idx_b] >= optimizer.start_vars[idx_a] + (duration_a // optimizer.time_interval) + min_gap
+            )
+            print(f"LINKED WINDOW SCHEDULING: {a.subject} → {b.subject} (chain constraint)")
 
 # Глобальный словарь для отслеживания уже обработанных проверок
 # Это позволит избежать дублирующих сообщений и ограничений
 _processed_window_checks = set()
 
-def check_two_window_classes(optimizer, i, j, c_i, c_j):
+# sequential_scheduling_checker.py
+
+def check_two_window_classes(optimizer, idx1, idx2, class1, class2):
     """
-    Проверяет возможность последовательного размещения двух занятий с временными окнами.
-    
+    Проверяет, можно ли разместить два занятия последовательно без пересечения
+    в рамках их временных окон.
+
     Args:
-        optimizer: Экземпляр ScheduleOptimizer
-        i, j: Индексы классов
-        c_i, c_j: Экземпляры ScheduleClass с временными окнами
-        
+        optimizer: Экземпляр оптимизатора расписания.
+        idx1, idx2: Индексы занятий.
+        class1, class2: Объекты ScheduleClass.
+
     Returns:
-        bool: True, если найдено решение для последовательного размещения, иначе False
+        bool: True, если возможно разместить последовательно без конфликтов, иначе False.
     """
-    global _processed_window_checks
-    
-    # Создаем уникальный ключ для этой пары классов
-    pair_key = (min(i, j), max(i, j))
-    
-    # Проверяем, обрабатывали ли мы уже эту пару
-    if pair_key in _processed_window_checks:
-        # Уже обработано, пропускаем повторную обработку
-        return True
-    
-    # Добавляем пару в список обработанных
-    _processed_window_checks.add(pair_key)
-    
-    # Основной код проверки
-    window_i_start = time_to_minutes(c_i.start_time)
-    window_i_end = time_to_minutes(c_i.end_time)
-    window_j_start = time_to_minutes(c_j.start_time)
-    window_j_end = time_to_minutes(c_j.end_time)
-    
-    print(f"\nANALYZING WINDOWS: Same teacher {c_i.teacher}, different groups")
-    print(f"  Class {i}: {c_i.subject} with window {c_i.start_time}-{c_i.end_time}")
-    print(f"  Class {j}: {c_j.subject} with window {c_j.start_time}-{c_j.end_time}")
-    
-    # Вычисляем параметры занятий в минутах
-    duration_i_min = c_i.duration
-    duration_j_min = c_j.duration
-    
-    pause_before_i_min = c_i.pause_before
-    pause_after_i_min = c_i.pause_after
-    pause_before_j_min = c_j.pause_before
-    pause_after_j_min = c_j.pause_after
-    
-    # Вычисляем те же параметры в слотах времени
-    duration_i_slots = (duration_i_min + optimizer.time_interval - 1) // optimizer.time_interval
-    duration_j_slots = (duration_j_min + optimizer.time_interval - 1) // optimizer.time_interval
-    
-    pause_before_i_slots = pause_before_i_min // optimizer.time_interval
-    pause_after_i_slots = pause_after_i_min // optimizer.time_interval
-    pause_before_j_slots = pause_before_j_min // optimizer.time_interval
-    pause_after_j_slots = pause_after_j_min // optimizer.time_interval
-    
-    # Проверяем два варианта последовательного размещения
-    
-    # Вариант 1: класс i, затем класс j
-    i_then_j_possible = False
-    earliest_i_start_min = window_i_start
-    earliest_i_end_min = earliest_i_start_min + duration_i_min + pause_after_i_min
-    latest_j_end_min = window_j_end
-    latest_j_start_min = latest_j_end_min - duration_j_min
-    
-    if earliest_i_end_min + pause_before_j_min <= latest_j_start_min and latest_j_end_min <= window_j_end:
-        i_then_j_possible = True
-        earliest_j_start_min = earliest_i_end_min + pause_before_j_min
-        print(f"  Sequential possible: Class {i} then Class {j}")
-        print(f"    Class {i} starts no earlier than: {minutes_to_time(earliest_i_start_min)}")
-        print(f"    Class {i} finishes no earlier than: {minutes_to_time(earliest_i_end_min)}")
-        print(f"    Class {j} can start: {minutes_to_time(earliest_j_start_min)} to {minutes_to_time(latest_j_start_min)}")
-        print(f"    Class {j} must end before: {minutes_to_time(latest_j_end_min)}")
-    
-    # Вариант 2: класс j, затем класс i
-    j_then_i_possible = False
-    earliest_j_start_min = window_j_start
-    earliest_j_end_min = earliest_j_start_min + duration_j_min + pause_after_j_min
-    latest_i_end_min = window_i_end
-    latest_i_start_min = latest_i_end_min - duration_i_min
-    
-    if earliest_j_end_min + pause_before_i_min <= latest_i_start_min and latest_i_end_min <= window_i_end:
-        j_then_i_possible = True
-        earliest_i_start_min = earliest_j_end_min + pause_before_i_min
-        print(f"  Sequential possible: Class {j} then Class {i}")
-        print(f"    Class {j} starts no earlier than: {minutes_to_time(earliest_j_start_min)}")
-        print(f"    Class {j} finishes no earlier than: {minutes_to_time(earliest_j_end_min)}")
-        print(f"    Class {i} can start: {minutes_to_time(earliest_i_start_min)} to {minutes_to_time(latest_i_start_min)}")
-        print(f"    Class {i} must end before: {minutes_to_time(latest_i_end_min)}")
-    
-    # Проверяем, какой из вариантов предпочтительнее
-    # Критерий: если окно начинается раньше, то занятие должно быть размещено первым
-    prefer_j_first = window_j_start < window_i_start
-    
-    # Оба варианта возможны
-    if i_then_j_possible and j_then_i_possible:
-        print(f"  Both sequential orders are possible!")
-        
-        if not (isinstance(optimizer.start_vars[i], int) and isinstance(optimizer.start_vars[j], int)):
-            # Создаем жесткие ограничения для каждого занятия в соответствии с их временными окнами
-            
-            # Находим слоты для временных окон
-            i_start_slot = find_slot_for_time(optimizer.time_slots, c_i.start_time)
-            i_end_slot = find_slot_for_time(optimizer.time_slots, c_i.end_time)
-            j_start_slot = find_slot_for_time(optimizer.time_slots, c_j.start_time)
-            j_end_slot = find_slot_for_time(optimizer.time_slots, c_j.end_time)
-            
-            # Класс i должен начаться не ранее начала своего окна и завершиться не позднее конца окна
-            optimizer.model.Add(optimizer.start_vars[i] >= i_start_slot)
-            optimizer.model.Add(optimizer.start_vars[i] + duration_i_slots <= i_end_slot)
-            
-            # Класс j должен начаться не ранее начала своего окна и завершиться не позднее конца окна
-            optimizer.model.Add(optimizer.start_vars[j] >= j_start_slot)
-            optimizer.model.Add(optimizer.start_vars[j] + duration_j_slots <= j_end_slot)
-            
-            # Создаем переменную для выбора последовательности
-            i_before_j = optimizer.model.NewBoolVar(f"i_before_j_{i}_{j}")
-            
-            # Создаем переменные для обозначения конца занятий
-            end_i = optimizer.model.NewIntVar(0, len(optimizer.time_slots), f"end_time_{i}_{j}")
-            end_j = optimizer.model.NewIntVar(0, len(optimizer.time_slots), f"end_time_{j}_{i}")
-            
-            # Вычисляем конец i-го занятия
-            optimizer.model.Add(end_i == optimizer.start_vars[i] + duration_i_slots + pause_after_i_slots)
-            
-            # Вычисляем конец j-го занятия
-            optimizer.model.Add(end_j == optimizer.start_vars[j] + duration_j_slots + pause_after_j_slots)
-            
-            # Если i перед j, то j.start >= i.end
-            optimizer.model.Add(optimizer.start_vars[j] >= end_i).OnlyEnforceIf(i_before_j)
-            
-            # Если j перед i, то i.start >= j.end
-            optimizer.model.Add(optimizer.start_vars[i] >= end_j).OnlyEnforceIf(i_before_j.Not())
-            
-            # Предпочтение на основе времени начала окна
-            if prefer_j_first:
-                # Мягкое ограничение: добавляем стимул для j перед i
-                preference_var = optimizer.model.NewBoolVar(f"preference_{j}_before_{i}")
-                optimizer.model.Add(preference_var == i_before_j.Not())
-                print(f"  Preference: Class {j} should be scheduled before Class {i} (earlier window)")
-            else:
-                # Мягкое ограничение: добавляем стимул для i перед j
-                preference_var = optimizer.model.NewBoolVar(f"preference_{i}_before_{j}")
-                optimizer.model.Add(preference_var == i_before_j)
-                print(f"  Preference: Class {i} should be scheduled before Class {j} (earlier window)")
-            
-            print(f"  Added constraint: classes must be scheduled sequentially")
-            print(f"  Added constraint: Class {i} must start after {c_i.start_time} and end before {c_i.end_time}")
-            print(f"  Added constraint: Class {j} must start after {c_j.start_time} and end before {c_j.end_time}")
-        
-        # Последовательное размещение возможно
-        return True
-        
-    # Только один вариант возможен: i затем j
-    elif i_then_j_possible:
-        print(f"  Only one order is possible: Class {i} then Class {j}")
-        
-        if not (isinstance(optimizer.start_vars[i], int) and isinstance(optimizer.start_vars[j], int)):
-            # Находим слоты для временных окон и ограничений
-            i_start_slot = find_slot_for_time(optimizer.time_slots, c_i.start_time)
-            i_end_slot = find_slot_for_time(optimizer.time_slots, c_i.end_time)
-            j_start_slot = find_slot_for_time(optimizer.time_slots, c_j.start_time)
-            j_end_slot = find_slot_for_time(optimizer.time_slots, c_j.end_time)
-            
-            # Класс i должен начаться не ранее начала своего окна и завершиться не позднее конца окна
-            optimizer.model.Add(optimizer.start_vars[i] >= i_start_slot)
-            optimizer.model.Add(optimizer.start_vars[i] + duration_i_slots <= i_end_slot)
-            
-            # Класс j должен начаться не ранее начала своего окна и завершиться не позднее конца окна
-            optimizer.model.Add(optimizer.start_vars[j] >= j_start_slot)
-            optimizer.model.Add(optimizer.start_vars[j] + duration_j_slots <= j_end_slot)
-            
-            # Создаем переменные для конца i-го занятия
-            end_i = optimizer.model.NewIntVar(0, len(optimizer.time_slots), f"end_time_{i}")
-            optimizer.model.Add(end_i == optimizer.start_vars[i] + duration_i_slots + pause_after_i_slots)
-            
-            # j должно начинаться после окончания i
-            optimizer.model.Add(optimizer.start_vars[j] >= end_i)
-            
-            print(f"  Added constraint: Class {j} must start after Class {i} ends")
-            print(f"  Added constraint: Class {i} must start after {c_i.start_time} and end before {c_i.end_time}")
-            print(f"  Added constraint: Class {j} must start after {c_j.start_time} and end before {c_j.end_time}")
-            
-            # Добавляем стимул для раннего начала i
-            # Это будет учтено в целевой функции
-        
-        # Последовательное размещение возможно
-        return True
-        
-    # Только один вариант возможен: j затем i
-    elif j_then_i_possible:
-        print(f"  Only one order is possible: Class {j} then Class {i}")
-        
-        if not (isinstance(optimizer.start_vars[i], int) and isinstance(optimizer.start_vars[j], int)):
-            # Находим слоты для временных окон и ограничений
-            i_start_slot = find_slot_for_time(optimizer.time_slots, c_i.start_time)
-            i_end_slot = find_slot_for_time(optimizer.time_slots, c_i.end_time)
-            j_start_slot = find_slot_for_time(optimizer.time_slots, c_j.start_time)
-            j_end_slot = find_slot_for_time(optimizer.time_slots, c_j.end_time)
-            
-            # Класс i должен начаться не ранее начала своего окна и завершиться не позднее конца окна
-            optimizer.model.Add(optimizer.start_vars[i] >= i_start_slot)
-            optimizer.model.Add(optimizer.start_vars[i] + duration_i_slots <= i_end_slot)
-            
-            # Класс j должен начаться не ранее начала своего окна и завершиться не позднее конца окна
-            optimizer.model.Add(optimizer.start_vars[j] >= j_start_slot)
-            optimizer.model.Add(optimizer.start_vars[j] + duration_j_slots <= j_end_slot)
-            
-            # Создаем переменные для конца j-го занятия
-            end_j = optimizer.model.NewIntVar(0, len(optimizer.time_slots), f"end_time_{j}")
-            optimizer.model.Add(end_j == optimizer.start_vars[j] + duration_j_slots + pause_after_j_slots)
-            
-            # i должно начинаться после окончания j
-            optimizer.model.Add(optimizer.start_vars[i] >= end_j)
-            
-            print(f"  Added constraint: Class {i} must start after Class {j} ends")
-            print(f"  Added constraint: Class {i} must start after {c_i.start_time} and end before {c_i.end_time}")
-            print(f"  Added constraint: Class {j} must start after {c_j.start_time} and end before {c_j.end_time}")
-            
-            # Добавляем стимул для раннего начала j
-            # Это будет учтено в целевой функции
-        
-        # Последовательное размещение возможно
-        return True
-    
-    # Если ни один вариант не возможен
-    print(f"  Sequential scheduling not possible for these time windows")
-    return False
+
+    # Конвертация времени в минуты
+    start1 = time_to_minutes(class1.start_time)
+    end1 = time_to_minutes(class1.end_time)
+
+    start2 = time_to_minutes(class2.start_time)
+    end2 = time_to_minutes(class2.end_time)
+
+    # Длительности в минутах
+    duration1 = class1.duration
+    duration2 = class2.duration
+
+    # Возможные временные диапазоны для начала
+    earliest_start1 = start1
+    latest_start1 = end1 - duration1
+
+    earliest_start2 = start2
+    latest_start2 = end2 - duration2
+
+    # Проверяем, можем ли разместить class1 перед class2
+    can_schedule_1_before_2 = (earliest_start1 + duration1 <= latest_start2)
+
+    # Проверяем, можем ли разместить class2 перед class1
+    can_schedule_2_before_1 = (earliest_start2 + duration2 <= latest_start1)
+
+    # Проверяем наложение окон вообще
+    overlap_start = max(start1, start2)
+    overlap_end = min(end1, end2)
+    total_overlap_time = overlap_end - overlap_start
+
+    total_duration_needed = duration1 + duration2
+
+    # Если общее пересечение окон достаточно большое для двух занятий подряд
+    enough_overlap = total_overlap_time >= total_duration_needed
+
+    # Логика возврата
+    return can_schedule_1_before_2 or can_schedule_2_before_1 or enough_overlap
+
+def time_to_minutes(time_str):
+    """Преобразует строку времени 'HH:MM' в количество минут от начала суток."""
+    hours, minutes = map(int, time_str.split(":"))
+    return hours * 60 + minutes
+
 
 def reset_window_checks_cache():
     """

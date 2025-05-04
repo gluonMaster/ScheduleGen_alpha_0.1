@@ -2,8 +2,36 @@
 Модуль для добавления ограничений для связанных занятий.
 """
 
+def build_linked_chains(optimizer):
+    """Формирует список связанных цепочек занятий (индексы классов)."""
+    chains = []
+    seen = set()
+
+    for idx, c in enumerate(optimizer.classes):
+        if hasattr(c, 'linked_classes') and c.linked_classes:
+            chain = [idx]
+            current = c
+            while hasattr(current, 'linked_classes') and current.linked_classes:
+                next_class = current.linked_classes[0]
+                try:
+                    next_idx = optimizer._find_class_index(next_class)
+                    if next_idx in chain:
+                        break
+                    chain.append(next_idx)
+                    current = next_class
+                except Exception:
+                    break
+            chain_tuple = tuple(chain)
+            if chain_tuple not in seen:
+                chains.append(chain)
+                seen.add(chain_tuple)
+
+    optimizer.linked_chains = chains
+
 def add_linked_constraints(optimizer):
     """Add constraints for linked classes."""
+    build_linked_chains(optimizer)
+    
     for idx, c in enumerate(optimizer.classes):
         if hasattr(c, 'linked_classes') and c.linked_classes:
             # Process linked classes (classes that must occur in sequence)

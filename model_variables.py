@@ -92,7 +92,7 @@ def create_variables(optimizer):
             # Проверим, есть ли у этого преподавателя другие занятия в этот день
             teacher_classes_same_day = [
                 other_idx for other_idx, other_c in enumerate(optimizer.classes)
-                if other_c.teacher == c.teacher and other_c.day == c.day and other_idx != idx
+                if other_c.teacher == c.teacher and other_c.day == c.day and other_idx != idx and other_idx < idx
             ]
             
             if teacher_classes_same_day:

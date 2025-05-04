@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple, Optional, Set, Any
 
 # Импорт из локальных модулей
 from reader import ScheduleReader, ScheduleClass
-
+from sequential_scheduling_checker import enforce_window_chain_sequencing
 
 class ScheduleOptimizer:
     """
@@ -137,6 +137,8 @@ class ScheduleOptimizer:
         
         # Add constraints to prevent resource conflicts
         add_resource_conflict_constraints(self)
+
+        enforce_window_chain_sequencing(self)
         
         # Add objective function
         add_objective_function(self)

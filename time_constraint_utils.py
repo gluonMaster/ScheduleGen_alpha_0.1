@@ -66,68 +66,24 @@ def add_time_overlap_constraints(optimizer, i, j, c_i, c_j, time_overlap):
     c_j_has_window = hasattr(c_j, 'has_time_window') and c_j.has_time_window
     
     # If both start times are fixed
+    # If both start times are fixed
     if isinstance(optimizer.start_vars[i], int) and isinstance(optimizer.start_vars[j], int):
-        # Если оба класса имеют фиксированное время начала
-        if not (c_i_has_window or c_j_has_window):
-            # Для классов с фиксированным временем учитываем только реальное время занятий без пауз
-            start_i = optimizer.start_vars[i]
-            end_i = optimizer.start_vars[i] + duration_i_slots
-            
-            start_j = optimizer.start_vars[j]
-            end_j = optimizer.start_vars[j] + duration_j_slots
-            
-            # Создаем временную переменную для проверки пересечения
-            overlap_check = (start_i < end_j) and (start_j < end_i)
-            
-            # Присваиваем значение переменной time_overlap в зависимости от результата проверки
-            if overlap_check:
-                print(f"  Fixed time conflict: {c_i.subject} ({start_i}-{end_i}) and {c_j.subject} ({start_j}-{end_j})")
-                optimizer.model.Add(time_overlap == 1)
-            else:
-                optimizer.model.Add(time_overlap == 0)
+        # Для всех занятий с фиксированными временами учитываем реальное время - убираем проверку на окна
+        start_i = optimizer.start_vars[i]
+        end_i = optimizer.start_vars[i] + duration_i_slots
+        
+        start_j = optimizer.start_vars[j]
+        end_j = optimizer.start_vars[j] + duration_j_slots
+        
+        # Создаем временную переменную для проверки пересечения
+        overlap_check = (start_i < end_j) and (start_j < end_i)
+        
+        # Присваиваем значение переменной time_overlap в зависимости от результата проверки
+        if overlap_check:
+            print(f"  Fixed time conflict: {c_i.subject} ({start_i}-{end_i}) and {c_j.subject} ({start_j}-{end_j})")
+            optimizer.model.Add(time_overlap == 1)
         else:
-            # Если хотя бы один класс имеет временное окно
-            print(f"  At least one class has time window, allowing flexible scheduling")
-
-            # Создаем переменные для времени начала и окончания каждого занятия
-            if isinstance(optimizer.start_vars[i], int):
-                start_i = optimizer.start_vars[i]
-                end_i = optimizer.start_vars[i] + duration_i_slots
-            else:
-                start_i = optimizer.start_vars[i]
-                end_i = optimizer.model.NewIntVar(0, len(optimizer.time_slots), f"end_{i}_{j}")
-                optimizer.model.Add(end_i == start_i + duration_i_slots)
-
-            if isinstance(optimizer.start_vars[j], int):
-                start_j = optimizer.start_vars[j]
-                end_j = optimizer.start_vars[j] + duration_j_slots
-            else:
-                start_j = optimizer.start_vars[j]
-                end_j = optimizer.model.NewIntVar(0, len(optimizer.time_slots), f"end_{j}_{i}")
-                optimizer.model.Add(end_j == start_j + duration_j_slots)
-            
-            # Проверка пересечения
-            if isinstance(start_i, int) and isinstance(end_i, int) and isinstance(start_j, int) and isinstance(end_j, int):
-                # Если все значения фиксированы
-                if (start_i < end_j) and (start_j < end_i):
-                    optimizer.model.Add(time_overlap == 1)
-                else:
-                    optimizer.model.Add(time_overlap == 0)
-            else:
-                # Если есть переменные
-                overlap1 = optimizer.model.NewBoolVar(f"overlap1_{i}_{j}")
-                overlap2 = optimizer.model.NewBoolVar(f"overlap2_{i}_{j}")
-                
-                # Определяем условия пересечения: start_i < end_j и start_j < end_i
-                optimizer.model.Add(start_i < end_j).OnlyEnforceIf(overlap1)
-                optimizer.model.Add(start_i >= end_j).OnlyEnforceIf(overlap1.Not())
-                
-                optimizer.model.Add(start_j < end_i).OnlyEnforceIf(overlap2)
-                optimizer.model.Add(start_j >= end_i).OnlyEnforceIf(overlap2.Not())
-                
-                # Перекрытие времени есть, если оба условия выполняются
-                optimizer.model.AddBoolAnd([overlap1, overlap2]).OnlyEnforceIf(time_overlap)
-                optimizer.model.AddBoolOr([overlap1.Not(), overlap2.Not()]).OnlyEnforceIf(time_overlap.Not())
+            optimizer.model.Add(time_overlap == 0)
     else:
         # One of the start times is not fixed
         if isinstance(optimizer.start_vars[i], int):

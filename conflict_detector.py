@@ -161,33 +161,26 @@ def check_potential_conflicts(optimizer):
                         window_start = time_to_minutes(c_j.start_time)
                         window_end = time_to_minutes(c_j.end_time)
                         
-                        # Проверяем, можно ли вместить занятие с окном после фиксированного
-                        if end_i <= window_end:
-                            # Проверяем, достаточно ли времени для занятия с окном после фиксированного
-                            if window_end - end_i >= c_j.duration + c_j.pause_before:
-                                print(f"\nSEQUENTIAL SCHEDULING: Room {room} can fit window class after fixed class:")
-                                print(f"  Fixed class: {c_i.subject} at {c_i.start_time}-{minutes_to_time(end_i)} ({c_i.duration} min)")
-                                print(f"  Window class: {c_j.subject} with window {c_j.start_time}-{c_j.end_time} ({c_j.duration} min)")
-                                print(f"  Available time after fixed class: {window_end - end_i} min")
-                                print(f"  Required time for window class: {c_j.duration + c_j.pause_before} min")
-                            else:
-                                print(f"\nPOTENTIAL CONFLICT: Room {room} - not enough time for window class after fixed class:")
-                                print(f"  Fixed class: {c_i.subject} at {c_i.start_time} ({c_i.duration} min)")
-                                print(f"  Window class: {c_j.subject} with window {c_j.start_time}-{c_j.end_time} ({c_j.duration} min)")
-                                print(f"  Earliest possible start for window class: {minutes_to_time(end_i)}")
-                                print(f"  Required time: {c_j.duration + c_j.pause_before} min; Available time: {window_end - end_i} min")
-                        elif start_i >= window_start + c_j.duration + c_j.pause_after:
-                            # Вариант, когда фиксированное занятие может быть после окна
-                            print(f"\nSEQUENTIAL SCHEDULING: Room {room} can fit fixed class after window class starts:")
+                        # Сначала — можно ли вместить окно ДО фиксированного занятия?
+                        if start_i >= window_start + c_j.duration + c_j.pause_after:
+                            print(f"\nSEQUENTIAL SCHEDULING: Room {room} can fit window class BEFORE fixed class:")
                             print(f"  Window class: {c_j.subject} with window {c_j.start_time}-{c_j.end_time} ({c_j.duration} min)")
-                            print(f"  Fixed class: {c_i.subject} at {c_i.start_time} ({c_i.duration} min)")
-                            print(f"  Window class must be scheduled at the start of its window.")
-                        else:
-                            # Пересечение фиксированного занятия с окном
-                            print(f"\nPOTENTIAL CONFLICT: Room {room} - fixed class overlaps with window time:")
+                            print(f"  Fixed class: {c_i.subject} at {c_i.start_time}-{minutes_to_time(end_i)} ({c_i.duration} min)")
+                            print(f"  Window must start at the beginning of its window: {c_j.start_time}")
+
+                        # Если «до» не подошло, проверяем «после»
+                        elif window_end - end_i >= c_j.duration + c_j.pause_before:
+                            print(f"\nSEQUENTIAL SCHEDULING: Room {room} can fit window class AFTER fixed class:")
                             print(f"  Fixed class: {c_i.subject} at {c_i.start_time}-{minutes_to_time(end_i)} ({c_i.duration} min)")
                             print(f"  Window class: {c_j.subject} with window {c_j.start_time}-{c_j.end_time} ({c_j.duration} min)")
-                            print(f"  These classes may conflict depending on the window class scheduling.")
+                            print(f"  Available time after fixed: {window_end - end_i} min")
+                            print(f"  Required for window: {c_j.duration + c_j.pause_before} min")
+
+                        else:
+                            # Ни «до», ни «после» не влезает
+                            print(f"\nPOTENTIAL CONFLICT: Room {room} - cannot fit window class around fixed class")
+                            print(f"  Fixed: {c_i.subject} at {c_i.start_time}-{minutes_to_time(end_i)}")
+                            print(f"  Window: {c_j.subject} {c_j.start_time}-{c_j.end_time}")
                 
                 # Проверяем совместимость занятий с временным окном между собой
                 for i, (idx_i, c_i) in enumerate(window_classes):
