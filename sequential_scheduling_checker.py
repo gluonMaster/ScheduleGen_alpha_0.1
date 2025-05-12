@@ -68,7 +68,14 @@ def enforce_window_chain_sequencing(optimizer):
     """
     Добавляет ограничения между оконными занятиями, связанными логикой последовательности.
     """
-
+    # Проверяем, были ли уже применены улучшения по обработке временных окон
+    if hasattr(optimizer, "timewindow_already_processed") and optimizer.timewindow_already_processed:
+        print("Skipping window chain sequencing - already processed by timewindow adapter")
+        return
+        
+    # Отмечаем, что мы обработали эти ограничения
+    optimizer.window_chains_processed = True
+    
     for chain in _group_window_linked_classes(optimizer):
         for i in range(len(chain) - 1):
             idx_a = chain[i]
@@ -80,13 +87,35 @@ def enforce_window_chain_sequencing(optimizer):
             if a.day != b.day:
                 continue  # Только один день поддерживается
 
-            duration_a = a.duration + a.pause_before + a.pause_after
-            min_gap = optimizer.time_interval // 2
-
-            optimizer.model.Add(
-                optimizer.start_vars[idx_b] >= optimizer.start_vars[idx_a] + (duration_a // optimizer.time_interval) + min_gap
+            duration_a_slots = a.duration // optimizer.time_interval
+            pause_after_slots = a.pause_after // optimizer.time_interval
+            
+            # Используем точное время паузы
+            min_gap = b.pause_before // optimizer.time_interval
+            
+            # Явно обозначаем, что это ограничение связанных окон
+            constraint = optimizer.model.Add(
+                optimizer.start_vars[idx_b] >= optimizer.start_vars[idx_a] + duration_a_slots + pause_after_slots + min_gap
             )
-            print(f"LINKED WINDOW SCHEDULING: {a.subject} → {b.subject} (chain constraint)")
+            print(f"LINKED WINDOW SEQUENCING: {a.subject} → {b.subject} (constraint applied)")
+
+            #---Debug---
+            print(f"DEBUG: Preparing chain constraint between {idx_a} -> {idx_b}:")
+            print(f"  - Class {idx_a} ({a.subject}): duration={duration_a_slots}, pause_after={pause_after_slots}")
+            print(f"  - Class {idx_b} ({b.subject}): pause_before={min_gap}")
+            print(f"  - Total gap required: {duration_a_slots + pause_after_slots + min_gap} slots")
+            #-----------
+            
+            # Сохраняем примененные ограничения для будущей проверки
+            if not hasattr(optimizer, "applied_constraints"):
+                optimizer.applied_constraints = {}
+            
+            pair_key = (idx_a, idx_b)
+            optimizer.applied_constraints[pair_key] = constraint
+
+            #---Debug---
+            print(f"DEBUG: Added chain constraint {constraint}: start_vars[{idx_b}] >= start_vars[{idx_a}] + {duration_a_slots + pause_after_slots + min_gap}")
+            #-----------
 
 # Глобальный словарь для отслеживания уже обработанных проверок
 # Это позволит избежать дублирующих сообщений и ограничений

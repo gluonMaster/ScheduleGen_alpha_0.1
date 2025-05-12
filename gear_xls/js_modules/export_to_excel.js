@@ -43,21 +43,6 @@ function collectScheduleData() {
                 roomDisplay = roomName;
             }
             
-            // Вычисляем время начала и конца
-            var rowIndex = Math.floor((originalTop - headerHeight) / (gridCellHeight + borderWidth));
-            var startMinutes = gridStart + (rowIndex * timeInterval);
-            
-            // Вычисляем количество 5-минутных интервалов, которые занимает блок
-            var rowSpan = Math.ceil(blockHeight / (gridCellHeight + borderWidth * 0.5));
-            var endMinutes = startMinutes + (rowSpan * timeInterval);
-            
-            // Преобразуем минуты во времена формата HH:MM
-            var startTime = minutesToTime(startMinutes);
-            var endTime = minutesToTime(endMinutes);
-            
-            // Определяем продолжительность в минутах
-            var duration = endMinutes - startMinutes;
-            
             // Извлекаем текстовое содержимое блока для получения остальных данных
             var blockContent = block.innerHTML;
             var lines = blockContent
@@ -67,6 +52,53 @@ function collectScheduleData() {
                 .map(line => line.trim()) // Удаляем лишние пробелы
                 .filter(line => line);    // Удаляем пустые строки
             
+            // Извлекаем время начала и конца из содержимого блока
+            var timeMatch = null;
+            var startTime = '';
+            var endTime = '';
+            var duration = 0;
+            
+            // Ищем строку с временем в последних строках
+            for (var i = lines.length - 1; i >= 0; i--) {
+                timeMatch = lines[i].match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
+                if (timeMatch) {
+                    startTime = timeMatch[1];
+                    endTime = timeMatch[2];
+                    
+                    // Вычисляем продолжительность из извлеченного времени
+                    var startParts = startTime.split(':');
+                    var endParts = endTime.split(':');
+                    var startMinutes = parseInt(startParts[0]) * 60 + parseInt(startParts[1]);
+                    var endMinutes = parseInt(endParts[0]) * 60 + parseInt(endParts[1]);
+                    
+                    // Проверяем, что время логично
+                    if (startMinutes < endMinutes && startMinutes >= 0 && endMinutes <= 24*60) {
+                        duration = endMinutes - startMinutes;
+                        break;
+                    } else {
+                        console.warn('Извлеченное время выглядит неверно: ' + startTime + '-' + endTime);
+                        timeMatch = null; // Сбрасываем, чтобы использовать резервный метод
+                    }
+                }
+            }
+            
+            // Если время не найдено в содержимом блока, используем расчет по позиции (резервный вариант)
+            if (!timeMatch) {
+                console.warn('Время не найдено в содержимом блока, используем расчет по позиции для блока: ' + 
+                            (lines[0] || 'неизвестный') + ' в кабинете ' + (roomName || 'неизвестен') + 
+                            ' в день ' + day + ' в здании ' + building);
+                
+                var rowIndex = Math.floor((originalTop - headerHeight) / (gridCellHeight + borderWidth));
+                var startMinutes = gridStart + (rowIndex * timeInterval);
+                
+                var rowSpan = Math.ceil(blockHeight / (gridCellHeight + borderWidth * 0.5));
+                var endMinutes = startMinutes + (rowSpan * timeInterval);
+                
+                startTime = minutesToTime(startMinutes);
+                endTime = minutesToTime(endMinutes);
+                duration = endMinutes - startMinutes;
+            }
+
             // Извлекаем данные из содержимого блока
             var subject = lines[0] || '';  // Первая строка - название предмета
             var teacher = lines[1] || '';  // Вторая строка - преподаватель
@@ -165,13 +197,130 @@ function checkServerAvailability(callback) {
     xhr.send();
 }
 
+// Функция для показа диалога подтверждения экспорта
+function showExportConfirmation(callback) {
+    // Создаем модальное окно
+    var modal = document.createElement('div');
+    modal.id = 'exportConfirmModal';
+    modal.style.position = 'fixed';
+    modal.style.top = '0';
+    modal.style.left = '0';
+    modal.style.width = '100%';
+    modal.style.height = '100%';
+    modal.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    modal.style.zIndex = '10000';
+    modal.style.display = 'flex';
+    modal.style.justifyContent = 'center';
+    modal.style.alignItems = 'center';
+    
+    var modalContent = document.createElement('div');
+    modalContent.style.backgroundColor = 'white';
+    modalContent.style.padding = '20px';
+    modalContent.style.borderRadius = '10px';
+    modalContent.style.boxShadow = '0 4px 10px rgba(0, 0, 0, 0.3)';
+    modalContent.style.maxWidth = '500px';
+    modalContent.style.width = '90%';
+    modalContent.style.textAlign = 'center';
+    
+    modalContent.innerHTML = `
+        <div style="margin-bottom: 20px;">
+            <div style="font-size: 30px; color: #f39c12; margin-bottom: 10px;">⚠️</div>
+            <h3 style="margin: 0 0 10px 0; color: #333;">Внимание!</h3>
+            <p style="margin: 0; color: #666; line-height: 1.5;">
+                При экспорте в Excel будут сохранены данные только из <strong>видимых столбцов</strong> расписания.
+            </p>
+            <p style="margin: 10px 0 0 0; color: #666; line-height: 1.5; font-size: 14px;">
+                Убедитесь, что все нужные столбцы отображаются в таблице перед экспортом.
+            </p>
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: center;">
+            <button id="confirmExport" style="
+                background-color: #28a745;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+                font-weight: bold;
+            ">Продолжить экспорт</button>
+            <button id="cancelExport" style="
+                background-color: #dc3545;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+                font-weight: bold;
+            ">Отмена</button>
+        </div>
+    `;
+    
+    modal.appendChild(modalContent);
+    document.body.appendChild(modal);
+    
+    // Добавляем стили при наведении
+    var confirmBtn = modalContent.querySelector('#confirmExport');
+    var cancelBtn = modalContent.querySelector('#cancelExport');
+    
+    confirmBtn.addEventListener('mouseenter', function() {
+        this.style.backgroundColor = '#218838';
+    });
+    confirmBtn.addEventListener('mouseleave', function() {
+        this.style.backgroundColor = '#28a745';
+    });
+    
+    cancelBtn.addEventListener('mouseenter', function() {
+        this.style.backgroundColor = '#c82333';
+    });
+    cancelBtn.addEventListener('mouseleave', function() {
+        this.style.backgroundColor = '#dc3545';
+    });
+    
+    // Обработчики кнопок
+    confirmBtn.addEventListener('click', function() {
+        document.body.removeChild(modal);
+        callback(true);
+    });
+    
+    cancelBtn.addEventListener('click', function() {
+        document.body.removeChild(modal);
+        callback(false);
+    });
+    
+    // Закрытие по Esc
+    document.addEventListener('keydown', function escHandler(event) {
+        if (event.key === 'Escape') {
+            document.body.removeChild(modal);
+            callback(false);
+            document.removeEventListener('keydown', escHandler);
+        }
+    });
+    
+    // Закрытие по клику вне модального окна
+    modal.addEventListener('click', function(event) {
+        if (event.target === modal) {
+            document.body.removeChild(modal);
+            callback(false);
+        }
+    });
+}
+
 // Инициализация экспорта в Excel
 function initExcelExport() {
     // Находим кнопку экспорта
     var exportButton = document.getElementById('exportToExcel');
     if (exportButton) {
         // Добавляем обработчик клика на существующую кнопку
-        exportButton.addEventListener('click', exportScheduleToExcel);
+        exportButton.addEventListener('click', function() {
+            // Показываем диалог подтверждения
+            showExportConfirmation(function(confirmed) {
+                if (confirmed) {
+                    exportScheduleToExcel();
+                }
+            });
+        });
         console.log('Инициализирован обработчик экспорта в Excel');
     } else {
         console.error('Кнопка exportToExcel не найдена');

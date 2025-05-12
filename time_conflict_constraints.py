@@ -26,8 +26,8 @@ def add_sequential_constraints(optimizer, i, j, c_i, c_j):
     optimizer.model.Add(end_i == optimizer.start_vars[i] + duration_i_slots)
     optimizer.model.Add(end_j == optimizer.start_vars[j] + duration_j_slots)
     
-    # Минимальный интервал между занятиями (хотя бы 1 слот)
-    min_pause = max(1, (c_i.pause_after + c_j.pause_before) // optimizer.time_interval)
+    # Минимальный интервал между занятиями - с исправленным округлением вверх
+    min_pause = (c_i.pause_after + c_j.pause_before + optimizer.time_interval - 1) // optimizer.time_interval
     
     # Строгое ограничение: i перед j или j перед i, без перекрытия
     optimizer.model.Add(end_i + min_pause <= optimizer.start_vars[j]).OnlyEnforceIf(i_before_j)
@@ -107,6 +107,13 @@ def _add_time_conflict_constraints(optimizer, i, j, c_i, c_j):
         if c_i.day != c_j.day:
             return
         
+        # Если оба занятия оконные и имеют общие группы, всегда добавляем строгие ограничения
+        shared_groups = set(c_i.get_groups()) & set(c_j.get_groups())
+        if shared_groups:
+            print(f"  [WINDOW-WINDOW] Adding mandatory constraints for window classes with shared groups: {i},{j}")
+            add_sequential_constraints(optimizer, i, j, c_i, c_j)
+            return
+
         # Попытаться посадить их подряд в общем окне
         if check_two_window_classes(optimizer, i, j, c_i, c_j):
             # Сначала проверяем общие аудитории
@@ -127,43 +134,92 @@ def _add_time_conflict_constraints(optimizer, i, j, c_i, c_j):
             return
     # Проверяем возможность последовательного размещения для занятий одного преподавателя
     if c_i.teacher == c_j.teacher and c_i.teacher:
-        # Проверяем, что группы разные (нет общих групп)
+        # Проверяем наличие общих групп
         shared_groups = set(c_i.get_groups()) & set(c_j.get_groups())
-        # Всегда пробуем последовательное планирование (даже при shared_groups!)
+        
+        # Для занятий с общими группами проверяем ОБА варианта размещения
+        if shared_groups:
+            # Прямой порядок (c_i, затем c_j)
+            can_seq_i_j, info_i_j = can_schedule_sequentially(c_i, c_j)
+            
+            # Обратный порядок (c_j, затем c_i)
+            can_seq_j_i, info_j_i = can_schedule_sequentially(c_j, c_i)
+            
+            # Проверяем случай, когда одно занятие фиксированное, а другое оконное
+            # Если фиксированное c_i и оконное c_j
+            if c_i.start_time and not c_i.end_time and c_j.start_time and c_j.end_time:
+                if can_seq_i_j and info_i_j['reason'] == 'fits_before_fixed':
+                    # c_j можно разместить ДО c_i - предпочитаем этот вариант
+                    fixed_start = time_to_minutes(c_i.start_time)
+                    latest_end = fixed_start - c_i.pause_before
+                    latest_start = latest_end - c_j.duration
+                    latest_slot_idx = optimizer._get_time_slot_index(minutes_to_time(latest_start))
+                    
+                    print(f"  [shared_groups] PRIORITIZING window class {j} BEFORE fixed class {i}")
+                    optimizer.model.Add(optimizer.start_vars[j] <= latest_slot_idx)
+                    return
+                elif can_seq_i_j and info_i_j['reason'] == 'fits_after_fixed':
+                    # c_j можно разместить ПОСЛЕ c_i
+                    fixed_start = time_to_minutes(c_i.start_time)
+                    fixed_end = fixed_start + c_i.duration + c_i.pause_after
+                    
+                    earliest_start = fixed_end + c_j.pause_before
+                    earliest_slot = optimizer._get_time_slot_index(minutes_to_time(earliest_start))
+                    
+                    # Проверяем, хватает ли времени для размещения ПОСЛЕ
+                    window_end = time_to_minutes(c_j.end_time)
+                    if (window_end - earliest_slot * optimizer.time_interval) >= c_j.duration:
+                        print(f"  [shared_groups] Applying AFTER-fixed for class {j}")
+                        optimizer.model.Add(optimizer.start_vars[j] >= earliest_slot)
+                    else:
+                        print(f"  [WARNING] Not enough time to schedule {j} after {i}, but forcing BEFORE-fixed")
+                        # Принудительно размещаем ДО, даже если первоначально это не было обнаружено
+                        latest_end = fixed_start - c_i.pause_before
+                        latest_start = latest_end - c_j.duration
+                        latest_slot_idx = optimizer._get_time_slot_index(minutes_to_time(latest_start))
+                        optimizer.model.Add(optimizer.start_vars[j] <= latest_slot_idx)
+                    return
+                
+            # Если фиксированное c_j и оконное c_i
+            elif c_j.start_time and not c_j.end_time and c_i.start_time and c_i.end_time:
+                if can_seq_j_i and info_j_i['reason'] == 'fits_before_fixed':
+                    # c_i можно разместить ДО c_j - предпочитаем этот вариант
+                    fixed_start = time_to_minutes(c_j.start_time)
+                    latest_end = fixed_start - c_j.pause_before
+                    latest_start = latest_end - c_i.duration
+                    latest_slot_idx = optimizer._get_time_slot_index(minutes_to_time(latest_start))
+                    
+                    print(f"  [shared_groups] PRIORITIZING window class {i} BEFORE fixed class {j}")
+                    optimizer.model.Add(optimizer.start_vars[i] <= latest_slot_idx)
+                    return
+                elif can_seq_j_i and info_j_i['reason'] == 'fits_after_fixed':
+                    # c_i можно разместить ПОСЛЕ c_j
+                    fixed_start = time_to_minutes(c_j.start_time)
+                    fixed_end = fixed_start + c_j.duration + c_j.pause_after
+                    
+                    earliest_start = fixed_end + c_i.pause_before
+                    earliest_slot = optimizer._get_time_slot_index(minutes_to_time(earliest_start))
+                    
+                    # Проверяем, хватает ли времени для размещения ПОСЛЕ
+                    window_end = time_to_minutes(c_i.end_time)
+                    if (window_end - earliest_slot * optimizer.time_interval) >= c_i.duration:
+                        print(f"  [shared_groups] Applying AFTER-fixed for class {i}")
+                        optimizer.model.Add(optimizer.start_vars[i] >= earliest_slot)
+                    else:
+                        print(f"  [WARNING] Not enough time to schedule {i} after {j}, but forcing BEFORE-fixed")
+                        # Принудительно размещаем ДО, даже если первоначально это не было обнаружено
+                        latest_end = fixed_start - c_j.pause_before
+                        latest_start = latest_end - c_i.duration
+                        latest_slot_idx = optimizer._get_time_slot_index(minutes_to_time(latest_start))
+                        optimizer.model.Add(optimizer.start_vars[i] <= latest_slot_idx)
+                    return
+                
+            # Оба занятия с временными окнами или оба фиксированные
+            # Стандартная обработка
+        
+        # Продолжаем с существующей логикой для случаев без общих групп
+        # или если не удалось применить особую обработку выше
         can_seq, info = can_schedule_sequentially(c_i, c_j)
-
-        if can_seq:
-            # 1) если fits_before_fixed — навязываем «до»
-            if info['reason'] == 'fits_before_fixed':
-                # c_i.fixed → c_j.window
-                fixed_start = time_to_minutes(c_i.start_time)
-                fixed_end   = fixed_start + c_i.duration + c_i.pause_after
-
-                # конец window перед fixed
-                latest_end      = fixed_start - c_j.pause_before
-                latest_start    = latest_end - c_j.duration
-                latest_slot_idx = optimizer._get_time_slot_index(minutes_to_time(latest_start))
-
-                print(f"  [shared_groups] Applying BEFORE-fixed for class {j}")
-                optimizer.model.Add(optimizer.start_vars[j] <= latest_slot_idx)
-                return
-
-            # 2) если fits_after_fixed — навязываем «после»
-            elif info['reason'] == 'fits_after_fixed':
-                fixed_start = time_to_minutes(c_i.start_time)
-                fixed_end   = fixed_start + c_i.duration + c_i.pause_after
-
-                earliest_start = fixed_end + c_j.pause_before
-                earliest_slot  = optimizer._get_time_slot_index(minutes_to_time(earliest_start))
-
-                print(f"  [shared_groups] Applying AFTER-fixed for class {j}")
-                optimizer.model.Add(optimizer.start_vars[j] >= earliest_slot)
-                return
-
-            # 3) если both_orders_possible — НЕ навязываем ничего
-            else:  # both_orders_possible
-                print(f"  [shared_groups] both_orders_possible — leaving free")
-                return
 
         # Если can_seq==False, fall through к стандартному конфликтному блоку
         

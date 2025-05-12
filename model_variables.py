@@ -31,7 +31,7 @@ def create_variables(optimizer):
                 start_minutes = time_to_minutes(c.start_time)
                 end_minutes = time_to_minutes(c.end_time)
                 class_duration = c.duration
-                
+
                 print(f"\nProcessing class {c.subject} with time window {c.start_time}-{c.end_time}:")
                 print(f"  Start minutes: {start_minutes}")
                 print(f"  End minutes: {end_minutes}")
@@ -67,6 +67,14 @@ def create_variables(optimizer):
                 c.has_time_window = True
                 c.fixed_start_time = False
                 print(f"Class {c.subject} has time window: {c.start_time}-{c.end_time}")
+
+                #---Debug---
+                # Для классов с временными окнами:
+                print(f"DEBUG: Creating variable for window class {idx} '{c.subject}':")
+                print(f"  - Window: {c.start_time}-{c.end_time}")
+                print(f"  - Duration: {c.duration} min")
+                print(f"  - Slot range: {start_slot}-{max_start_slot} ({optimizer.time_slots[start_slot]}-{optimizer.time_slots[max_start_slot]})")
+                #-----------
             else:
                 # Если конец временного окна не указан, используем фиксированное время начала
                 start_slot = find_closest_slot(optimizer.time_slots, c.start_time)

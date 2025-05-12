@@ -137,9 +137,7 @@ class ScheduleOptimizer:
         
         # Add constraints to prevent resource conflicts
         add_resource_conflict_constraints(self)
-
-        enforce_window_chain_sequencing(self)
-        
+   
         # Add objective function
         add_objective_function(self)
     
@@ -160,9 +158,9 @@ class ScheduleOptimizer:
         try:
             from timewindow_adapter import apply_timewindow_improvements
             apply_timewindow_improvements(self)
+            self.timewindow_already_processed = True
         except ImportError:
             print("Warning: timewindow_adapter module not found, skipping timewindow improvements")
-    
         
         # Create the solver
         solver = cp_model.CpSolver()
@@ -173,6 +171,9 @@ class ScheduleOptimizer:
         
         # Solve the model
         status = solver.Solve(self.model)
+        
+        # Инициализация solution перед любым использованием
+        solution = []
         
         # Детальное логирование статуса
         print(f"\nSolver status: {status}")
@@ -193,7 +194,6 @@ class ScheduleOptimizer:
         
         if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
             # Store the solution
-            solution = []
             for idx, c in enumerate(self.classes):
                 # Get assigned values
                 day = self.day_vars[idx]
@@ -232,7 +232,22 @@ class ScheduleOptimizer:
                     "pause_after": c.pause_after
                 })
             
-            self.solution = solution
-            return True
-        else:
-            return False
+        # В случае INFEASIBLE, вызвать анализ конфликтов
+        if status == cp_model.INFEASIBLE:
+            print("\nAnalyzing conflicts in the model...")
+            try:
+                sufficient_conflicts = solver.SufficientAssumptionsForInfeasibility()
+                print(f"Found {len(sufficient_conflicts)} conflicting constraints:")
+                for i, var_index in enumerate(sufficient_conflicts):
+                    if var_index >= 0:
+                        print(f"  Conflict {i+1}: Constraint with index {var_index}")
+                    else:
+                        print(f"  Conflict {i+1}: Assumption with index {-var_index-1}")
+            except:
+                print("Could not analyze conflicts - feature not supported in this version of OR-Tools")
+            
+        # Сохраняем solution независимо от результата
+        self.solution = solution
+        
+        # Возвращаем True только если найдено оптимальное или допустимое решение
+        return status == cp_model.OPTIMAL or status == cp_model.FEASIBLE

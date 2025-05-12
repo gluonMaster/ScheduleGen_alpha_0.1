@@ -423,24 +423,47 @@ class HtmlExportMixin:
         # Генерируем HTML для одного блока занятия
         block_html = []
         
-        # Определяем цвет блока на основе первого слова в названии группы
+#        # Определяем цвет блока на основе первого слова в названии группы
+#        group_name = lesson['group']
+#        
+#        # Проверяем, является ли название группы шаблоном "цифра+буква"
+#        if re.match(r'^\d+[A-Za-z]$', group_name):
+#            # Все группы вида "1A", "3D", "12E" должны иметь одинаковый цвет
+#            color_key = "DIGIT_LETTER_GROUP"
+#        else:
+#            # Получаем первое слово из названия группы
+#            first_word = group_name.split()[0] if ' ' in group_name else group_name
+#            color_key = first_word
+#        
+#        # Генерируем HEX-цвет на основе ключа
+#        hash_obj = hashlib.md5(color_key.encode())
+#        hash_int = int(hash_obj.hexdigest(), 16)
+#        hue = (hash_int % 1000) / 1000.0
+#        r_bg, g_bg, b_bg = colorsys.hsv_to_rgb(hue, 0.5, 0.95)
+#        bg_color = f'#{int(r_bg*255):02x}{int(g_bg*255):02x}{int(b_bg*255):02x}'
+
+        # Определяем цвет блока на основе специальных правил
         group_name = lesson['group']
+        lower_group = group_name.lower() if group_name else ""
         
-        # Проверяем, является ли название группы шаблоном "цифра+буква"
+        # Правило 1: Если входит число+буква (например 2D, 11B) -> бледно-зеленый
         if re.match(r'^\d+[A-Za-z]$', group_name):
-            # Все группы вида "1A", "3D", "12E" должны иметь одинаковый цвет
-            color_key = "DIGIT_LETTER_GROUP"
-        else:
-            # Получаем первое слово из названия группы
-            first_word = group_name.split()[0] if ' ' in group_name else group_name
-            color_key = first_word
+            bg_color = '#ccffcc'  # бледно-зеленый в HEX
+            #bg_color = '#ffffff'
         
-        # Генерируем HEX-цвет на основе ключа
-        hash_obj = hashlib.md5(color_key.encode())
-        hash_int = int(hash_obj.hexdigest(), 16)
-        hue = (hash_int % 1000) / 1000.0
-        r_bg, g_bg, b_bg = colorsys.hsv_to_rgb(hue, 0.5, 0.95)
-        bg_color = f'#{int(r_bg*255):02x}{int(g_bg*255):02x}{int(b_bg*255):02x}'
+        # Правило 2: Если содержит слово "kunst" -> бледно-голубой
+        elif "kunst" in lower_group:
+            bg_color = '#ccf2ff'  # бледно-голубой в HEX
+            #bg_color = '#ffffff'
+        
+        # Правило 3: Если содержит слово "tanz" -> бледно-желтый
+        elif "tanz" in lower_group:
+            bg_color = '#ffffcc'  # бледно-желтый в HEX
+            #bg_color = '#ffffff'
+        
+        # Правило 4: Во всех остальных случаях -> белый
+        else:
+            bg_color = '#ffffff'  # белый в HEX
         
         # Определяем цвет контура на основе названия здания
         building_name = lesson['building']
@@ -451,8 +474,9 @@ class HtmlExportMixin:
         border_color = f'#{int(r_border*255):02x}{int(g_border*255):02x}{int(b_border*255):02x}'
         
         # Определяем цвет текста (черный или белый) в зависимости от яркости фона
-        luminance = 0.299 * r_bg + 0.587 * g_bg + 0.114 * b_bg
-        text_color = '#000000' if luminance > 0.5 else '#ffffff'
+#        luminance = 0.299 * r_bg + 0.587 * g_bg + 0.114 * b_bg
+#        text_color = '#000000' if luminance > 0.5 else '#ffffff'
+        text_color = '#000000'
         
         # Добавляем атрибут данных для возможности фильтрации
         data_attributes = f'data-group="{lesson["group"]}" data-teacher="{lesson["teacher"]}" data-building="{lesson["building"]}"'

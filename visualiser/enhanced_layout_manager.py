@@ -4,7 +4,6 @@
 """
 from color_manager import initialize_group_colors, initialize_building_colors
 
-
 class EnhancedScheduleLayout:
     """Улучшенный класс для управления компоновкой расписания со скругленными углами"""
     
@@ -20,9 +19,9 @@ class EnhancedScheduleLayout:
         self.schedule_by_day = schedule_by_day
         self.day_translations = {
             'Mo': 'Montag',
-            'Di': 'Dinstag',
+            'Di': 'Dienstag',
             'Mi': 'Mittwoch',
-            'Do': 'Donerstag',
+            'Do': 'Donnerstag',
             'Fr': 'Freitag',
             'Sa': 'Samstag',
             'So': 'Sonntag'

@@ -40,9 +40,9 @@ class EnhancedExportManager:
         # Словарь для перевода дней недели
         self.day_translations = {
             'Mo': 'Montag',
-            'Di': 'Dinstag',
+            'Di': 'Dienstag',
             'Mi': 'Mittwoch',
-            'Do': 'Donerstag',
+            'Do': 'Donnerstag',
             'Fr': 'Freitag',
             'Sa': 'Samstag',
             'So': 'Sonntag'
