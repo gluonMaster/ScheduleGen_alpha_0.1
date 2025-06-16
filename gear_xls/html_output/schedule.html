@@ -1541,21 +1541,6 @@ function collectScheduleData() {
                 roomDisplay = roomName;
             }
             
-            // Вычисляем время начала и конца
-            var rowIndex = Math.floor((originalTop - headerHeight) / (gridCellHeight + borderWidth));
-            var startMinutes = gridStart + (rowIndex * timeInterval);
-            
-            // Вычисляем количество 5-минутных интервалов, которые занимает блок
-            var rowSpan = Math.ceil(blockHeight / (gridCellHeight + borderWidth * 0.5));
-            var endMinutes = startMinutes + (rowSpan * timeInterval);
-            
-            // Преобразуем минуты во времена формата HH:MM
-            var startTime = minutesToTime(startMinutes);
-            var endTime = minutesToTime(endMinutes);
-            
-            // Определяем продолжительность в минутах
-            var duration = endMinutes - startMinutes;
-            
             // Извлекаем текстовое содержимое блока для получения остальных данных
             var blockContent = block.innerHTML;
             var lines = blockContent
@@ -1565,6 +1550,53 @@ function collectScheduleData() {
                 .map(line => line.trim()) // Удаляем лишние пробелы
                 .filter(line => line);    // Удаляем пустые строки
             
+            // Извлекаем время начала и конца из содержимого блока
+            var timeMatch = null;
+            var startTime = '';
+            var endTime = '';
+            var duration = 0;
+            
+            // Ищем строку с временем в последних строках
+            for (var i = lines.length - 1; i >= 0; i--) {
+                timeMatch = lines[i].match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
+                if (timeMatch) {
+                    startTime = timeMatch[1];
+                    endTime = timeMatch[2];
+                    
+                    // Вычисляем продолжительность из извлеченного времени
+                    var startParts = startTime.split(':');
+                    var endParts = endTime.split(':');
+                    var startMinutes = parseInt(startParts[0]) * 60 + parseInt(startParts[1]);
+                    var endMinutes = parseInt(endParts[0]) * 60 + parseInt(endParts[1]);
+                    
+                    // Проверяем, что время логично
+                    if (startMinutes < endMinutes && startMinutes >= 0 && endMinutes <= 24*60) {
+                        duration = endMinutes - startMinutes;
+                        break;
+                    } else {
+                        console.warn('Извлеченное время выглядит неверно: ' + startTime + '-' + endTime);
+                        timeMatch = null; // Сбрасываем, чтобы использовать резервный метод
+                    }
+                }
+            }
+            
+            // Если время не найдено в содержимом блока, используем расчет по позиции (резервный вариант)
+            if (!timeMatch) {
+                console.warn('Время не найдено в содержимом блока, используем расчет по позиции для блока: ' + 
+                            (lines[0] || 'неизвестный') + ' в кабинете ' + (roomName || 'неизвестен') + 
+                            ' в день ' + day + ' в здании ' + building);
+                
+                var rowIndex = Math.floor((originalTop - headerHeight) / (gridCellHeight + borderWidth));
+                var startMinutes = gridStart + (rowIndex * timeInterval);
+                
+                var rowSpan = Math.ceil(blockHeight / (gridCellHeight + borderWidth * 0.5));
+                var endMinutes = startMinutes + (rowSpan * timeInterval);
+                
+                startTime = minutesToTime(startMinutes);
+                endTime = minutesToTime(endMinutes);
+                duration = endMinutes - startMinutes;
+            }
+
             // Извлекаем данные из содержимого блока
             var subject = lines[0] || '';  // Первая строка - название предмета
             var teacher = lines[1] || '';  // Вторая строка - преподаватель
@@ -1663,13 +1695,130 @@ function checkServerAvailability(callback) {
     xhr.send();
 }
 
+// Функция для показа диалога подтверждения экспорта
+function showExportConfirmation(callback) {
+    // Создаем модальное окно
+    var modal = document.createElement('div');
+    modal.id = 'exportConfirmModal';
+    modal.style.position = 'fixed';
+    modal.style.top = '0';
+    modal.style.left = '0';
+    modal.style.width = '100%';
+    modal.style.height = '100%';
+    modal.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    modal.style.zIndex = '10000';
+    modal.style.display = 'flex';
+    modal.style.justifyContent = 'center';
+    modal.style.alignItems = 'center';
+    
+    var modalContent = document.createElement('div');
+    modalContent.style.backgroundColor = 'white';
+    modalContent.style.padding = '20px';
+    modalContent.style.borderRadius = '10px';
+    modalContent.style.boxShadow = '0 4px 10px rgba(0, 0, 0, 0.3)';
+    modalContent.style.maxWidth = '500px';
+    modalContent.style.width = '90%';
+    modalContent.style.textAlign = 'center';
+    
+    modalContent.innerHTML = `
+        <div style="margin-bottom: 20px;">
+            <div style="font-size: 30px; color: #f39c12; margin-bottom: 10px;">⚠️</div>
+            <h3 style="margin: 0 0 10px 0; color: #333;">Внимание!</h3>
+            <p style="margin: 0; color: #666; line-height: 1.5;">
+                При экспорте в Excel будут сохранены данные только из <strong>видимых столбцов</strong> расписания.
+            </p>
+            <p style="margin: 10px 0 0 0; color: #666; line-height: 1.5; font-size: 14px;">
+                Убедитесь, что все нужные столбцы отображаются в таблице перед экспортом.
+            </p>
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: center;">
+            <button id="confirmExport" style="
+                background-color: #28a745;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+                font-weight: bold;
+            ">Продолжить экспорт</button>
+            <button id="cancelExport" style="
+                background-color: #dc3545;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+                font-weight: bold;
+            ">Отмена</button>
+        </div>
+    `;
+    
+    modal.appendChild(modalContent);
+    document.body.appendChild(modal);
+    
+    // Добавляем стили при наведении
+    var confirmBtn = modalContent.querySelector('#confirmExport');
+    var cancelBtn = modalContent.querySelector('#cancelExport');
+    
+    confirmBtn.addEventListener('mouseenter', function() {
+        this.style.backgroundColor = '#218838';
+    });
+    confirmBtn.addEventListener('mouseleave', function() {
+        this.style.backgroundColor = '#28a745';
+    });
+    
+    cancelBtn.addEventListener('mouseenter', function() {
+        this.style.backgroundColor = '#c82333';
+    });
+    cancelBtn.addEventListener('mouseleave', function() {
+        this.style.backgroundColor = '#dc3545';
+    });
+    
+    // Обработчики кнопок
+    confirmBtn.addEventListener('click', function() {
+        document.body.removeChild(modal);
+        callback(true);
+    });
+    
+    cancelBtn.addEventListener('click', function() {
+        document.body.removeChild(modal);
+        callback(false);
+    });
+    
+    // Закрытие по Esc
+    document.addEventListener('keydown', function escHandler(event) {
+        if (event.key === 'Escape') {
+            document.body.removeChild(modal);
+            callback(false);
+            document.removeEventListener('keydown', escHandler);
+        }
+    });
+    
+    // Закрытие по клику вне модального окна
+    modal.addEventListener('click', function(event) {
+        if (event.target === modal) {
+            document.body.removeChild(modal);
+            callback(false);
+        }
+    });
+}
+
 // Инициализация экспорта в Excel
 function initExcelExport() {
     // Находим кнопку экспорта
     var exportButton = document.getElementById('exportToExcel');
     if (exportButton) {
         // Добавляем обработчик клика на существующую кнопку
-        exportButton.addEventListener('click', exportScheduleToExcel);
+        exportButton.addEventListener('click', function() {
+            // Показываем диалог подтверждения
+            showExportConfirmation(function(confirmed) {
+                if (confirmed) {
+                    exportScheduleToExcel();
+                }
+            });
+        });
         console.log('Инициализирован обработчик экспорта в Excel');
     } else {
         console.error('Кнопка exportToExcel не найдена');
@@ -3854,7 +4003,7 @@ window.initDeleteBlocksObserver = initDeleteBlocksObserver;
 <button id="saveIntermediate">Сохранить промежуточный результат</button>
 <button id="saveSchedule">Сохранить финальную версию</button>
 <button id="exportToExcel">Экспорт в Excel</button>
-<input type="hidden" id="csrf_token" value="d89f1845-5ba7-4193-af31-092d3cb5de53">
+<input type="hidden" id="csrf_token" value="dae22dc8-09d2-4c4b-ac2f-615c87d90c80">
 </div>
 <h1>Расписание занятий</h1>
 <h2>Здание: Villa</h2>
@@ -10311,6 +10460,7 @@ window.initDeleteBlocksObserver = initDeleteBlocksObserver;
 <div class='activity-block activity-day-Di' data-day='Di' data-col-index='1' data-building='' style='top:1657.0px; left:1080px; width:100px; height:137.0px; background-color:#b99aeb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Di 4B<br>1.03<br>17:40-18:25</div>
 <div class='activity-block activity-day-Di' data-day='Di' data-col-index='4' data-building='' style='top:1347.0px; left:1380px; width:100px; height:137.0px; background-color:#9bd82f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>5G<br>2.07<br>16:00-16:45</div>
 <div class='activity-block activity-day-Di' data-day='Di' data-col-index='5' data-building='' style='top:1347.0px; left:1480px; width:100px; height:182.75px; background-color:#53b953; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Eichmann Irina<br>Deutsch ab 5J Di<br>2.09<br>16:00-17:00</div>
+<div class='activity-block activity-day-Di' data-day='Di' data-col-index='5' data-building='' style='top:1548.5px; left:1480px; width:100px; height:137.0px; background-color:#1ca0e2; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>12C<br>2.09<br>17:05-17:50</div>
 <div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='2' data-building='' style='top:1347.0px; left:1780px; width:100px; height:137.0px; background-color:#d105ae; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Mi 6B<br>1.05<br>16:00-16:45</div>
 <div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='5' data-building='' style='top:1533.0px; left:2080px; width:100px; height:228.5px; background-color:#d105ae; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>6B<br>2.07<br>17:00-18:15</div>
 <div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='5' data-building='' style='top:1781.0px; left:2080px; width:100px; height:137.0px; background-color:#d105ae; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Mathe</strong><br>Tchoudnovskaia Anna<br>6B<br>2.07<br>18:20-19:05</div>
@@ -10319,13 +10469,13 @@ window.initDeleteBlocksObserver = initDeleteBlocksObserver;
 <div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='0' data-building='' style='top:1347.0px; left:1580px; width:100px; height:137.0px; background-color:#f55cc2; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Mi A<br>K.11<br>16:00-16:45</div>
 <div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='0' data-building='' style='top:1502.0px; left:1580px; width:100px; height:137.0px; background-color:#ff67cd; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Mi B<br>K.11<br>16:50-17:35</div>
 <div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='1' data-building='' style='top:1533.0px; left:1680px; width:100px; height:274.25px; background-color:#083476; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Mi StudioO<br>1.03<br>17:00-18:30</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='2' data-building='' style='top:1533.0px; left:1780px; width:100px; height:274.25px; background-color:#c98db1; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Mi StudioP<br>1.05<br>17:00-18:30</div>
 <div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='3' data-building='' style='top:1347.0px; left:1880px; width:100px; height:182.75px; background-color:#61c7fa; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Mi ab 7J<br>1.06<br>16:00-17:00</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='3' data-building='' style='top:1533.0px; left:1880px; width:100px; height:274.25px; background-color:#52b8eb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Mi ab 11J <br>1.06<br>17:00-18:30</div>
+<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='3' data-building='' style='top:1533.0px; left:1880px; width:100px; height:274.25px; background-color:#55bbee; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Mi ab 11J<br>1.06<br>17:00-18:30</div>
 <div class='activity-block activity-day-Do' data-day='Do' data-col-index='1' data-building='' style='top:1393.5px; left:2280px; width:100px; height:137.0px; background-color:#47f700; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Do 9G+5B<br>1.03<br>16:15-17:00</div>
 <div class='activity-block activity-day-Do' data-day='Do' data-col-index='4' data-building='' style='top:1579.5px; left:2580px; width:100px; height:274.25px; background-color:#14ef8a; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>5B<br>2.04<br>17:15-18:45</div>
 <div class='activity-block activity-day-Do' data-day='Do' data-col-index='5' data-building='' style='top:1347.0px; left:2680px; width:100px; height:182.75px; background-color:#738c83; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>9B<br>2.09<br>16:00-17:00</div>
 <div class='activity-block activity-day-Do' data-day='Do' data-col-index='1' data-building='' style='top:1548.5px; left:2280px; width:100px; height:137.0px; background-color:#738c83; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Do 9B<br>1.03<br>17:05-17:50</div>
+<div class='activity-block activity-day-Do' data-day='Do' data-col-index='5' data-building='' style='top:1548.5px; left:2680px; width:100px; height:182.75px; background-color:#8fd740; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Urich Evgenia<br>9G<br>2.09<br>17:05-18:05</div>
 <div class='activity-block activity-day-Do' data-day='Do' data-col-index='2' data-building='' style='top:1300.5px; left:2380px; width:100px; height:274.25px; background-color:#5fc5f8; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Do 6-7J<br>1.06<br>15:45-17:15</div>
 <div class='activity-block activity-day-Do' data-day='Do' data-col-index='2' data-building='' style='top:1610.5px; left:2380px; width:100px; height:274.25px; background-color:#74daff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Do 10-11J<br>1.06<br>17:25-18:55</div>
 <div class='activity-block activity-day-Do' data-day='Do' data-col-index='4' data-building='' style='top:1161.0px; left:2580px; width:100px; height:137.0px; background-color:#738aeb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>10C<br>2.04<br>15:00-15:45</div>
@@ -10333,43 +10483,42 @@ window.initDeleteBlocksObserver = initDeleteBlocksObserver;
 <div class='activity-block activity-day-Do' data-day='Do' data-col-index='3' data-building='' style='top:1347.0px; left:2480px; width:100px; height:182.75px; background-color:#5fc55f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Olekh Katerina<br>Deutsch 5-7kl Do<br>2.03<br>16:00-17:00</div>
 <div class='activity-block activity-day-Do' data-day='Do' data-col-index='3' data-building='' style='top:1548.5px; left:2480px; width:100px; height:182.75px; background-color:#6ed46e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Olekh Katerina<br>Deutsch 7-9kl Do<br>2.03<br>17:05-18:05</div>
 <div class='activity-block activity-day-Do' data-day='Do' data-col-index='0' data-building='' style='top:1579.5px; left:2180px; width:100px; height:137.0px; background-color:#d93693; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Theater</strong><br>Müller Lüsia<br>Theater ab 6J<br>0.08<br>17:15-18:00</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='5' data-building='' style='top:1300.5px; left:3280px; width:100px; height:274.25px; background-color:#276758; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Wagner Galina<br>7B<br>2.04<br>15:45-17:15</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='4' data-building='' style='top:1300.5px; left:3180px; width:100px; height:274.25px; background-color:#276758; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Wagner Galina<br>7B<br>2.03<br>15:45-17:15</div>
 <div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='2' data-building='' style='top:1595.0px; left:2980px; width:100px; height:137.0px; background-color:#72e9d3; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Fr 5D+7B<br>1.05<br>17:20-18:05</div>
 <div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='6' data-building='' style='top:1300.5px; left:3380px; width:100px; height:274.25px; background-color:#1ade4e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Urich Evgenia<br>5D<br>2.07<br>15:45-17:15</div>
 <div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='6' data-building='' style='top:1595.0px; left:3380px; width:100px; height:228.5px; background-color:#994076; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>8D<br>2.07<br>17:20-18:35</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='4' data-building='' style='top:1548.5px; left:3180px; width:100px; height:182.75px; background-color:#c309f0; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Kremenchutski Larissa<br>2D<br>2.03<br>17:05-18:05</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='5' data-building='' style='top:1579.5px; left:3280px; width:100px; height:182.75px; background-color:#c309f0; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Kremenchutski Larissa<br>2D<br>2.04<br>17:15-18:15</div>
 <div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='7' data-building='' style='top:1347.0px; left:3480px; width:100px; height:182.75px; background-color:#53b953; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Audzyeenka Swietlana<br>Deutsch ab 5J Fr<br>2.09<br>16:00-17:00</div>
 <div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='7' data-building='' style='top:1548.5px; left:3480px; width:100px; height:182.75px; background-color:#79df79; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Eichmann Irina<br>Deutsch ab 6J Fr<br>2.09<br>17:05-18:05</div>
 <div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='0' data-building='' style='top:1347.0px; left:2780px; width:100px; height:182.75px; background-color:#5d26c8; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Orchester</strong><br>Nepomnaschi Tatiana<br>Orchester Fr<br>0.08<br>16:00-17:00</div>
 <div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='1' data-building='' style='top:1393.5px; left:2880px; width:100px; height:137.0px; background-color:#f8bc2f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Fr 2B<br>1.03<br>16:15-17:00</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='2' data-building='' style='top:1440.0px; left:2980px; width:100px; height:137.0px; background-color:#994076; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Fr 8D<br>1.05<br>16:30-17:15</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='2' data-building='' style='top:1409.0px; left:2980px; width:100px; height:137.0px; background-color:#994076; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Fr 8D<br>1.05<br>16:20-17:05</div>
 <div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='3' data-building='' style='top:1347.0px; left:3080px; width:100px; height:274.25px; background-color:#72d8ff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Fr 14-15J<br>1.06<br>16:00-17:30</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='4' data-building='' style='top:1347.0px; left:3180px; width:100px; height:137.0px; background-color:#71149d; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>10A<br>2.03<br>16:00-16:45</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='5' data-building='' style='top:1347.0px; left:3280px; width:100px; height:137.0px; background-color:#71149d; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>10A<br>2.04<br>16:00-16:45</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='0' data-building='' style='top:91.5px; left:3580px; width:100px; height:137.0px; background-color:#ff79df; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Sa C<br>K.11<br>09:15-10:00</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='0' data-building='' style='top:246.5px; left:3580px; width:100px; height:137.0px; background-color:#fc63c9; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Sa D<br>K.11<br>10:05-10:50</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='0' data-building='' style='top:417.0px; left:3580px; width:100px; height:137.0px; background-color:#fb62c8; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Sa E<br>K.11<br>11:00-11:45</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='0' data-building='' style='top:603.0px; left:3580px; width:100px; height:137.0px; background-color:#fe65cb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Sa F<br>K.11<br>12:00-12:45</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='' style='top:91.5px; left:3780px; width:100px; height:182.75px; background-color:#66ccff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Sa 4J<br>0.08<br>09:15-10:15</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='' style='top:293.0px; left:3780px; width:100px; height:228.5px; background-color:#69cfff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Sa 5J<br>0.08<br>10:20-11:35</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='' style='top:525.5px; left:3780px; width:100px; height:274.25px; background-color:#79dfff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Sokolovska Natalia<br>Tanz Sa Ukr<br>0.08<br>11:35-13:05</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='' style='top:541.0px; left:3780px; width:100px; height:274.25px; background-color:#79dfff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Sokolovska Natalia<br>Tanz Sa Ukr<br>0.08<br>11:40-13:10</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='5' data-building='' style='top:91.5px; left:4080px; width:100px; height:274.25px; background-color:#55bbee; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Sa 12-13J<br>1.06<br>09:15-10:45</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='5' data-building='' style='top:417.0px; left:4080px; width:100px; height:274.25px; background-color:#79dfff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Sa 14-15J<br>1.06<br>11:00-12:30</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='5' data-building='' style='top:789.0px; left:4080px; width:100px; height:274.25px; background-color:#76dcff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Sa 10-11J<br>1.06<br>13:00-14:30</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='4' data-building='' style='top:91.5px; left:3980px; width:100px; height:137.0px; background-color:#a35aea; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa 1B<br>1.05<br>09:15-10:00</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='5' data-building='' style='top:727.0px; left:4080px; width:100px; height:274.25px; background-color:#76dcff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Sa 10-11J<br>1.06<br>12:40-14:10</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='3' data-building='' style='top:91.5px; left:3880px; width:100px; height:137.0px; background-color:#a35aea; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 1B<br>1.03<br>09:15-10:00</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='10' data-building='' style='top:277.5px; left:4580px; width:100px; height:182.75px; background-color:#a35aea; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>1B<br>2.09<br>10:15-11:15</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='1' data-building='' style='top:479.0px; left:3680px; width:100px; height:137.0px; background-color:#a35aea; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Musik</strong><br>Nepomnaschi Tatiana<br>Musik 1B<br>0.06<br>11:20-12:05</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='' style='top:882.0px; left:3780px; width:100px; height:274.25px; background-color:#26defa; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Orchester</strong><br>Nepomnaschi Tatiana<br>Orchester Sa<br>0.08<br>13:30-15:00</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='10' data-building='' style='top:479.0px; left:4580px; width:100px; height:274.25px; background-color:#f78518; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Urich Evgenia<br>9C<br>2.09<br>11:20-12:50</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='10' data-building='' style='top:45.0px; left:4580px; width:100px; height:182.75px; background-color:#d1052c; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>9D<br>2.09<br>09:00-10:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='3' data-building='' style='top:277.5px; left:3880px; width:100px; height:137.0px; background-color:#a32e42; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 9D+9C+7C<br>1.03<br>10:15-11:00</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='3' data-building='' style='top:262.0px; left:3880px; width:100px; height:137.0px; background-color:#a32e42; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 9D+9C+7C<br>1.03<br>10:10-10:55</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='9' data-building='' style='top:448.0px; left:4480px; width:100px; height:274.25px; background-color:#d448da; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>7C<br>2.07<br>11:10-12:40</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='9' data-building='' style='top:758.0px; left:4480px; width:100px; height:137.0px; background-color:#d448da; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Mathe</strong><br>Tchoudnovskaia Anna<br>Mathe 7C<br>2.07<br>12:50-13:35</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='9' data-building='' style='top:184.5px; left:4480px; width:100px; height:228.5px; background-color:#073169; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>2C<br>2.07<br>09:45-11:00</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='4' data-building='' style='top:448.0px; left:3980px; width:100px; height:137.0px; background-color:#99594c; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa 3D+2C<br>1.05<br>11:10-11:55</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='1' data-building='' style='top:634.0px; left:3680px; width:100px; height:137.0px; background-color:#073169; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Musik</strong><br>Nepomnaschi Tatiana<br>2C<br>0.06<br>12:10-12:55</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='7' data-building='' style='top:138.0px; left:4280px; width:100px; height:274.25px; background-color:#3848ad; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Kremenchutski Larissa<br>4C<br>2.03<br>09:30-11:00</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='7' data-building='' style='top:107.0px; left:4280px; width:100px; height:274.25px; background-color:#3848ad; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Kremenchutski Larissa<br>4C<br>2.03<br>09:20-10:50</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='4' data-building='' style='top:262.0px; left:3980px; width:100px; height:137.0px; background-color:#6dd949; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa 3B<br>1.05<br>10:10-10:55</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='7' data-building='' style='top:448.0px; left:4280px; width:100px; height:274.25px; background-color:#6dd949; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>3B<br>2.03<br>11:10-12:40</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='7' data-building='' style='top:417.0px; left:4280px; width:100px; height:274.25px; background-color:#6dd949; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>3B<br>2.03<br>11:00-12:30</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='3' data-building='' style='top:448.0px; left:3880px; width:100px; height:137.0px; background-color:#602caf; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 4C+10B<br>1.03<br>11:10-11:55</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='6' data-building='' style='top:603.0px; left:4180px; width:100px; height:137.0px; background-color:#d28cf0; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Mathe</strong><br>Zelenska Olena<br>Mathe 10B<br>1.09<br>12:00-12:45</div>
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='6' data-building='' style='top:789.0px; left:4180px; width:100px; height:274.25px; background-color:#d28cf0; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Wittmer Irina<br>10B<br>1.09<br>13:00-14:30</div>
@@ -12502,7 +12651,7 @@ window.initDeleteBlocksObserver = initDeleteBlocksObserver;
 <div class='activity-block activity-day-Do' data-day='Do' data-col-index='0' data-building='' style='top:1533.0px; left:680px; width:100px; height:137.0px; background-color:#c78a5b; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukr. Mus.</strong><br>Dosenko Evgeniy<br>Ukrainische Musik Do 4-5J<br>2.2<br>17:00-17:45</div>
 <div class='activity-block activity-day-Do' data-day='Do' data-col-index='2' data-building='' style='top:1347.0px; left:880px; width:100px; height:182.75px; background-color:#d1a45a; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>4Jahrige</strong><br>Wagner Galina<br>4JC<br>2.7<br>16:00-17:00</div>
 <div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='1' data-building='' style='top:1347.0px; left:1080px; width:100px; height:137.0px; background-color:#1bbf7e; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>4Jahrige</strong><br>Kremenchutski Larissa<br>4JB<br>2.3<br>16:00-16:45</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='1' data-building='' style='top:1579.5px; left:1080px; width:100px; height:91.25px; background-color:#efa9bc; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>3JA        <br>2.3<br>17:15-17:45</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='1' data-building='' style='top:1579.5px; left:1080px; width:100px; height:91.25px; background-color:#efa9bc; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>3JA<br>2.3<br>17:15-17:45</div>
 <div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='0' data-building='' style='top:1347.0px; left:980px; width:100px; height:182.75px; background-color:#ee69ca; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Logorithmika</strong><br>Shik Swetlana<br>3JB_Log<br>2.2<br>16:00-17:00</div>
 <div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='0' data-building='' style='top:1533.0px; left:980px; width:100px; height:137.0px; background-color:#fed1d5; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Logorithmika</strong><br>Shik Swetlana<br>4JB_Log<br>2.2<br>17:00-17:45</div>
 <div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='2' data-building='' style='top:1347.0px; left:1180px; width:100px; height:182.75px; background-color:#dae8bf; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukrainisch</strong><br>Gorochovska Olena<br>Ukrainisch Fr ab 6J<br>2.4<br>16:00-17:00</div>

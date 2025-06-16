@@ -15,7 +15,7 @@ except ImportError:
     PDF_EXPORT_AVAILABLE = False
 
 try:
-    from pdf2image import convert_from_path
+    from enhanced_export_manager_extra import convert_from_path
     PNG_EXPORT_AVAILABLE = True
 except ImportError:
     PNG_EXPORT_AVAILABLE = False

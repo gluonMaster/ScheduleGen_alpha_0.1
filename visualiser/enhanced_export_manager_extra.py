@@ -205,3 +205,4 @@ class ExtraExportMixin:
         except Exception as e:
             print(f"Ошибка при экспорте в ICS: {e}")
             return False
+        
