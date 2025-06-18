@@ -3,7 +3,7 @@
 // Функция для поиска подходящей колонки в заданном здании
 function findMatchingColumnInBuilding(day, room, building) {
     // Находим контейнер расписания для указанного здания
-    var container = findScheduleContainerForBuilding(building);
+    var container = BuildingService.findScheduleContainerForBuilding(building);
     if (!container) {
         console.error(`Не найден контейнер расписания для здания ${building}`);
         return -1;

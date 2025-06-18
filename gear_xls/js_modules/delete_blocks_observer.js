@@ -35,7 +35,7 @@ function initDeleteBlocksObserver() {
         var block = e.currentTarget;
         
         // Получаем информацию о блоке для уведомления
-        var building = block.getAttribute('data-building') || getBlockBuilding(block);
+        var building = BuildingService.determineBuildingForBlock(block) || "Неизвестно";
         var day = block.getAttribute('data-day');
         var subject = '';
         var teacher = '';
@@ -63,23 +63,7 @@ function initDeleteBlocksObserver() {
         }
     }
     
-    // Функция для определения здания блока по его родительскому контейнеру
-    function getBlockBuilding(block) {
-        var container = block.closest('.schedule-container');
-        if (!container) return "Неизвестно";
-        
-        var element = container.previousElementSibling;
-        while (element) {
-            if (element.tagName === 'H2') {
-                if (element.textContent.includes('Villa')) return 'Villa';
-                if (element.textContent.includes('Kolibri')) return 'Kolibri';
-                break;
-            }
-            element = element.previousElementSibling;
-        }
-        
-        return "Неизвестно";
-    }
+    // Функция удалена - используем BuildingService.determineBuildingForBlock()
     
     // Функция для отображения уведомления (дублируем для автономности)
     function showNotification(message, type = 'info') {

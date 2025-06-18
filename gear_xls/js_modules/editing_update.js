@@ -1,4 +1,5 @@
 // Модуль для редактирования блоков занятий с поддержкой разных зданий
+// ОБНОВЛЕН: использует BuildingService вместо дублированных функций
 
 // Функция инициализации редактирования блоков занятий
 function initBlockEditing() {
@@ -96,25 +97,10 @@ function openEditDialog(block, origLeft, origTop, building) {
     // Сохраняем текущие значения атрибутов для сравнения после редактирования
     var currentDay = block.getAttribute('data-day');
     var currentColIndex = block.getAttribute('data-col-index');
-    var currentBuilding = building || block.getAttribute('data-building') || determineBlockBuilding(block);
     
-    // Определяем здание блока по его родительскому контейнеру, если не указано
-    function determineBlockBuilding(block) {
-        var container = block.closest('.schedule-container');
-        if (!container) return "Villa"; // По умолчанию
-        
-        var element = container.previousElementSibling;
-        while (element) {
-            if (element.tagName === 'H2') {
-                if (element.textContent.includes('Villa')) return 'Villa';
-                if (element.textContent.includes('Kolibri')) return 'Kolibri';
-                break;
-            }
-            element = element.previousElementSibling;
-        }
-        
-        return "Villa"; // По умолчанию
-    }
+    // ИСПОЛЬЗУЕМ НОВЫЙ BuildingService вместо дублированной функции
+    var currentBuilding = building || block.getAttribute('data-building') || 
+                         BuildingService.determineBuildingForBlock(block);
     
     // Извлекаем текущие данные из блока
     var blockContent = block.innerHTML;
@@ -151,8 +137,9 @@ function openEditDialog(block, origLeft, origTop, building) {
         building: currentBuilding
     });
     
-    // Создаем список зданий
-    var buildingOptions = ['Villa', 'Kolibri'].map(function(b) {
+    // ИСПОЛЬЗУЕМ BuildingService для получения списка зданий
+    var availableBuildings = BuildingService.getAvailableBuildings();
+    var buildingOptions = availableBuildings.map(function(b) {
         return `<option value="${b}" ${currentBuilding === b ? 'selected' : ''}>${b}</option>`;
     }).join('');
 
@@ -292,7 +279,12 @@ function openEditDialog(block, origLeft, origTop, building) {
             // Если изменилось здание, перемещаем блок в соответствующий контейнер
             if (buildingChanged) {
                 console.log("Перемещение блока в другое здание:", newBuilding);
-                moveBlockToBuilding(block, newBuilding);
+                // ИСПОЛЬЗУЕМ BuildingService для перемещения блока
+                var moveSuccess = BuildingService.moveBlockToBuilding(block, newBuilding);
+                if (!moveSuccess) {
+                    console.error("Не удалось переместить блок в здание:", newBuilding);
+                    alert(`Ошибка: не удалось переместить блок в здание ${newBuilding}`);
+                }
             }
             
             // В любом случае вызываем updateActivityPositions для согласованности
@@ -323,52 +315,21 @@ function openEditDialog(block, origLeft, origTop, building) {
     document.addEventListener('keydown', handleEscape);
 }
 
-// Функция для перемещения блока в контейнер соответствующего здания
-function moveBlockToBuilding(block, newBuilding) {
-    // Находим контейнер расписания для указанного здания
-    var targetContainer = findScheduleContainerForBuilding(newBuilding);
-    if (!targetContainer) {
-        alert(`Ошибка: не найден контейнер расписания для здания ${newBuilding}`);
-        return;
-    }
-    
-    // Сохраняем данные блока перед перемещением
-    var day = block.getAttribute('data-day');
-    var room = '';
-    var parts = block.innerHTML.split('<br>');
-    if (parts.length > 3) room = parts[3].trim();
-    
-    // Обновляем колонку для нового здания
-    updateBlockColumnForBuilding(block, room, newBuilding, day);
-    
-    // Удаляем блок из текущего контейнера и добавляем в новый
-    block.parentNode.removeChild(block);
-    targetContainer.appendChild(block);
-    
-    // Обновляем позиции всех блоков для корректного отображения
-    updateActivityPositions();
-}
+// ФУНКЦИЯ УДАЛЕНА: moveBlockToBuilding теперь является методом BuildingService
 
-// Вспомогательная функция для поиска контейнера расписания для определенного здания
-function findScheduleContainerForBuilding(buildingName) {
-    var buildingHeaders = document.querySelectorAll('h2');
-    
-    for (var i = 0; i < buildingHeaders.length; i++) {
-        if (buildingHeaders[i].textContent.includes(buildingName)) {
-            // Находим ближайший schedule-container после заголовка здания
-            var scheduleContainer = buildingHeaders[i].nextElementSibling;
-            while (scheduleContainer && !scheduleContainer.classList.contains('schedule-container')) {
-                scheduleContainer = scheduleContainer.nextElementSibling;
-            }
-            return scheduleContainer;
-        }
-    }
-    
-    return null;
-}
+// ФУНКЦИЯ УДАЛЕНА: findScheduleContainerForBuilding теперь является методом BuildingService
 
 // Экспортируем функции
 window.openEditDialog = openEditDialog;
 window.initBlockEditing = initBlockEditing;
-window.moveBlockToBuilding = moveBlockToBuilding;
-window.findScheduleContainerForBuilding = findScheduleContainerForBuilding;
+
+// Обратная совместимость для старых функций (с предупреждениями)
+window.moveBlockToBuilding = function(block, newBuilding) {
+    console.warn('Deprecated: use BuildingService.moveBlockToBuilding() instead');
+    return BuildingService.moveBlockToBuilding(block, newBuilding);
+};
+
+window.findScheduleContainerForBuilding = function(buildingName) {
+    console.warn('Deprecated: use BuildingService.findScheduleContainerForBuilding() instead');
+    return BuildingService.findScheduleContainerForBuilding(buildingName);
+};

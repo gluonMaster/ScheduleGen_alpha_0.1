@@ -55,8 +55,10 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
         var measuredTimeColWidth = 0;
     """
     
-    # Список названий базовых модулей для загрузки
+    # Список названий модулей для загрузки (обновленный порядок)
+    # ВАЖНО: services/building_service должен загружаться первым, так как используется другими модулями
     base_module_names = [
+        'services/building_service',  # НОВЫЙ СЕРВИС - загружается первым
         'core',
         'position',
         'drag_drop',
@@ -68,7 +70,7 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
         'export_to_excel'  # Модуль для экспорта расписания в Excel
     ]
     
-    # Список названий новых модулей для добавления блоков
+    # Список названий модулей для добавления блоков
     add_blocks_module_names = [
         'add_blocks_main',
         'block_creation_dialog',
@@ -86,13 +88,20 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
     
     # Загружаем содержимое базовых модулей
     for module_name in base_module_names:
-        module_path = os.path.join(js_dir, f"{module_name}.js")
+        # Обрабатываем путь для модулей в подпапках (например, services/building_service)
+        if '/' in module_name:
+            module_path = os.path.join(js_dir, f"{module_name}.js")
+        else:
+            module_path = os.path.join(js_dir, f"{module_name}.js")
+            
         try:
             with open(module_path, 'r', encoding='utf-8') as f:
                 js_modules[module_name] = f.read()
+                print(f"Loaded JS module: {module_name}")  # Для отладки
         except FileNotFoundError:
-            # Если файл не найден, добавляем заглушку
-            js_modules[module_name] = f"// Модуль {module_name}.js не найден"
+            # Если файл не найден, добавляем заглушку с предупреждением
+            js_modules[module_name] = f"// ВНИМАНИЕ: Модуль {module_name}.js не найден по пути {module_path}"
+            print(f"WARNING: JS module not found: {module_path}")
     
     # Загружаем содержимое модулей добавления блоков
     for module_name in add_blocks_module_names:
@@ -100,15 +109,20 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
         try:
             with open(module_path, 'r', encoding='utf-8') as f:
                 js_modules[module_name] = f.read()
+                print(f"Loaded JS module: {module_name}")  # Для отладки
         except FileNotFoundError:
             # Если файл не найден, добавляем заглушку
-            js_modules[module_name] = f"// Модуль {module_name}.js не найден"
+            js_modules[module_name] = f"// ВНИМАНИЕ: Модуль {module_name}.js не найден по пути {module_path}"
+            print(f"WARNING: JS module not found: {module_path}")
     
     # Формируем полный JavaScript-код
     full_js = f"""
     <script>
         document.addEventListener('DOMContentLoaded', function() {{
             {js_variables}
+            
+            // === НОВЫЙ СЕРВИС ДЛЯ РАБОТЫ СО ЗДАНИЯМИ ===
+            {js_modules.get('services/building_service', '')}
             
             // Подключение основных модулей
             {js_modules.get('core', '')}
@@ -167,6 +181,14 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
             
             // Первоначальное позиционирование
             updateActivityPositions();
+            
+            // Инициализация BuildingService (новый сервис)
+            if (typeof BuildingService !== 'undefined') {{
+                console.log('BuildingService initialized successfully');
+                console.log('Available buildings:', BuildingService.getAvailableBuildings());
+            }} else {{
+                console.error('BuildingService failed to load');
+            }}
         }});
         
         // Функции для сохранения и загрузки настроек

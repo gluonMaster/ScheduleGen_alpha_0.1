@@ -215,6 +215,232 @@
         var measuredTimeColWidth = 0;
     
             
+            // === НОВЫЙ СЕРВИС ДЛЯ РАБОТЫ СО ЗДАНИЯМИ ===
+            // Единый сервис для работы со зданиями в расписании
+// Заменяет дублированные функции в 8+ JavaScript файлах
+
+/**
+ * Сервис для работы со зданиями и их контейнерами расписания
+ */
+class BuildingService {
+    
+    /**
+     * Определяет здание для указанного блока занятия.
+     * Ищет родительский контейнер расписания и анализирует заголовок здания.
+     * 
+     * @param {HTMLElement} block - Элемент блока занятия
+     * @returns {string} Название здания ('Villa', 'Kolibri' или 'Villa' по умолчанию)
+     */
+    static determineBuildingForBlock(block) {
+        if (!block) {
+            console.warn('BuildingService.determineBuildingForBlock: block is null or undefined');
+            return "Villa"; // По умолчанию
+        }
+        
+        // Находим родительский контейнер расписания
+        var container = block.closest('.schedule-container');
+        if (!container) {
+            console.warn('BuildingService.determineBuildingForBlock: schedule-container not found for block');
+            return "Villa"; // По умолчанию
+        }
+        
+        // Ищем заголовок здания перед контейнером
+        var element = container.previousElementSibling;
+        while (element) {
+            if (element.tagName === 'H2') {
+                var headerText = element.textContent;
+                if (headerText.includes('Villa')) return 'Villa';
+                if (headerText.includes('Kolibri')) return 'Kolibri';
+                break;
+            }
+            element = element.previousElementSibling;
+        }
+        
+        return "Villa"; // По умолчанию, если не определено
+    }
+    
+    /**
+     * Находит контейнер расписания для указанного здания.
+     * 
+     * @param {string} buildingName - Название здания ('Villa' или 'Kolibri')
+     * @returns {HTMLElement|null} Контейнер расписания или null если не найден
+     */
+    static findScheduleContainerForBuilding(buildingName) {
+        if (!buildingName) {
+            console.warn('BuildingService.findScheduleContainerForBuilding: buildingName is empty');
+            return null;
+        }
+        
+        var buildingHeaders = document.querySelectorAll('h2');
+        
+        for (var i = 0; i < buildingHeaders.length; i++) {
+            var headerText = buildingHeaders[i].textContent;
+            if (headerText.includes(buildingName)) {
+                // Находим ближайший schedule-container после заголовка здания
+                var scheduleContainer = buildingHeaders[i].nextElementSibling;
+                while (scheduleContainer && !scheduleContainer.classList.contains('schedule-container')) {
+                    scheduleContainer = scheduleContainer.nextElementSibling;
+                }
+                return scheduleContainer;
+            }
+        }
+        
+        console.warn(`BuildingService.findScheduleContainerForBuilding: container not found for building ${buildingName}`);
+        return null;
+    }
+    
+    /**
+     * Возвращает список всех доступных зданий на странице.
+     * 
+     * @returns {string[]} Массив названий зданий
+     */
+    static getAvailableBuildings() {
+        var buildings = [];
+        var buildingHeaders = document.querySelectorAll('h2');
+        
+        for (var i = 0; i < buildingHeaders.length; i++) {
+            var headerText = buildingHeaders[i].textContent;
+            if (headerText.includes('Villa') && buildings.indexOf('Villa') === -1) {
+                buildings.push('Villa');
+            }
+            if (headerText.includes('Kolibri') && buildings.indexOf('Kolibri') === -1) {
+                buildings.push('Kolibri');
+            }
+        }
+        
+        // Если ничего не найдено, возвращаем стандартный набор
+        if (buildings.length === 0) {
+            buildings = ['Villa', 'Kolibri'];
+        }
+        
+        return buildings;
+    }
+    
+    /**
+     * Проверяет существует ли здание на странице.
+     * 
+     * @param {string} buildingName - Название здания для проверки
+     * @returns {boolean} true если здание существует, false иначе
+     */
+    static buildingExists(buildingName) {
+        var availableBuildings = this.getAvailableBuildings();
+        return availableBuildings.indexOf(buildingName) !== -1;
+    }
+    
+    /**
+     * Перемещает блок занятия в контейнер указанного здания.
+     * 
+     * @param {HTMLElement} block - Блок занятия для перемещения
+     * @param {string} targetBuilding - Целевое здание
+     * @returns {boolean} true если перемещение успешно, false иначе
+     */
+    static moveBlockToBuilding(block, targetBuilding) {
+        if (!block || !targetBuilding) {
+            console.error('BuildingService.moveBlockToBuilding: invalid parameters');
+            return false;
+        }
+        
+        // Проверяем что целевое здание существует
+        if (!this.buildingExists(targetBuilding)) {
+            console.error(`BuildingService.moveBlockToBuilding: building ${targetBuilding} does not exist`);
+            return false;
+        }
+        
+        // Находим контейнер целевого здания
+        var targetContainer = this.findScheduleContainerForBuilding(targetBuilding);
+        if (!targetContainer) {
+            console.error(`BuildingService.moveBlockToBuilding: container not found for building ${targetBuilding}`);
+            return false;
+        }
+        
+        // Обновляем атрибут здания у блока
+        block.setAttribute('data-building', targetBuilding);
+        
+        // Перемещаем блок в новый контейнер
+        try {
+            block.parentNode.removeChild(block);
+            targetContainer.appendChild(block);
+            console.log(`Block moved to building: ${targetBuilding}`);
+            return true;
+        } catch (error) {
+            console.error('BuildingService.moveBlockToBuilding: error moving block:', error);
+            return false;
+        }
+    }
+    
+    /**
+     * Получает информацию о здании блока.
+     * 
+     * @param {HTMLElement} block - Блок занятия
+     * @returns {Object} Объект с информацией о здании
+     */
+    static getBlockBuildingInfo(block) {
+        var building = this.determineBuildingForBlock(block);
+        var container = this.findScheduleContainerForBuilding(building);
+        
+        return {
+            name: building,
+            container: container,
+            exists: this.buildingExists(building)
+        };
+    }
+    
+    /**
+     * Валидирует название здания.
+     * 
+     * @param {string} buildingName - Название здания для валидации
+     * @returns {boolean} true если название валидно, false иначе
+     */
+    static isValidBuildingName(buildingName) {
+        if (!buildingName || typeof buildingName !== 'string') {
+            return false;
+        }
+        
+        var validBuildings = ['Villa', 'Kolibri'];
+        return validBuildings.indexOf(buildingName) !== -1;
+    }
+    
+    /**
+     * Получает статистику по зданиям.
+     * 
+     * @returns {Object} Объект со статистикой: количество блоков по зданиям
+     */
+    static getBuildingStatistics() {
+        var stats = {};
+        var allBlocks = document.querySelectorAll('.activity-block');
+        
+        for (var i = 0; i < allBlocks.length; i++) {
+            var block = allBlocks[i];
+            var building = this.determineBuildingForBlock(block);
+            
+            if (!stats[building]) {
+                stats[building] = 0;
+            }
+            stats[building]++;
+        }
+        
+        return stats;
+    }
+}
+
+// Экспортируем сервис в глобальную область видимости для использования в других модулях
+window.BuildingService = BuildingService;
+
+// Для отладки - выводим информацию о загрузке сервиса
+console.log('BuildingService loaded successfully');
+
+// Дополнительно экспортируем основные функции для обратной совместимости
+window.determineBuildingForBlock = function(block) {
+    console.warn('Deprecated: use BuildingService.determineBuildingForBlock() instead');
+    return BuildingService.determineBuildingForBlock(block);
+};
+
+window.findScheduleContainerForBuilding = function(buildingName) {
+    console.warn('Deprecated: use BuildingService.findScheduleContainerForBuilding() instead');
+    return BuildingService.findScheduleContainerForBuilding(buildingName);
+};
+
+            
             // Подключение основных модулей
             // Основной модуль с базовыми функциями расписания
 
@@ -961,7 +1187,7 @@ function fallbackProcessBlockDrop(block) {
 // Функция для поиска подходящей колонки в заданном здании
 function findMatchingColumnInBuilding(day, room, building) {
     // Находим контейнер расписания для указанного здания
-    var container = findScheduleContainerForBuilding(building);
+    var container = BuildingService.findScheduleContainerForBuilding(building);
     if (!container) {
         console.error(`Не найден контейнер расписания для здания ${building}`);
         return -1;
@@ -2183,7 +2409,7 @@ function createNewBlock(building, day, colIndex, subject, teacher, students, roo
     console.log(`Создание нового блока в здании: ${building}, день: ${day}, колонка: ${colIndex}`);
     
     // Находим контейнер расписания для указанного здания
-    var container = findScheduleContainerForBuilding(building);
+    var container = BuildingService.findScheduleContainerForBuilding(building);
     if (!container) {
         console.error(`Не найден контейнер расписания для здания ${building}`);
         // Пробуем использовать первый контейнер как запасной вариант
@@ -2284,6 +2510,7 @@ window.createNewBlock = createNewBlock;
 window.positionNewBlock = positionNewBlock;
             
             // Модуль с обработчиками событий для блоков занятий
+// ОБНОВЛЕН: использует BuildingService вместо дублированных функций
 
 // Функция для добавления обработчиков событий новому блоку
 function addEventListenersToBlock(block) {
@@ -2343,33 +2570,17 @@ function addEventListenersToBlock(block) {
         
         // Открываем диалог редактирования (передаем информацию о здании)
         if (!window.editDialogOpen) {
+            // ИСПОЛЬЗУЕМ BuildingService для определения здания блока
             var building = block.getAttribute('data-building') || 
-                          determineBuildingForBlock(block);
+                          BuildingService.determineBuildingForBlock(block);
             openEditDialog(block, origLeft, origTop, building);
-        }
-        
-        // Функция для определения здания блока
-        function determineBuildingForBlock(block) {
-            var container = block.closest('.schedule-container');
-            if (!container) return "Villa";
-            
-            var element = container.previousElementSibling;
-            while (element) {
-                if (element.tagName === 'H2') {
-                    if (element.textContent.includes('Villa')) return 'Villa';
-                    if (element.textContent.includes('Kolibri')) return 'Kolibri';
-                    break;
-                }
-                element = element.previousElementSibling;
-            }
-            
-            return "Villa";
         }
     });
 }
 
 // Экспортируем функцию для использования в других модулях
 window.addEventListenersToBlock = addEventListenersToBlock;
+
             
             // Модуль для работы с диалогом создания новых блоков
 
@@ -2974,7 +3185,9 @@ function initQuickAddByClick(addBlockButton) {
         
         // Определяем здание, в котором находится ячейка
         var scheduleContainer = cell.closest('.schedule-container');
-        var clickedBuilding = determineBuildingForContainer(scheduleContainer);
+        var clickedBuilding = BuildingService.determineBuildingForBlock(
+            scheduleContainer.querySelector('.activity-block')
+        ) || 'Villa';
         
         // Если кликнуто по ячейке не в активном здании, меняем активное здание
         if (clickedBuilding !== activeBuilding) {
@@ -2987,23 +3200,7 @@ function initQuickAddByClick(addBlockButton) {
         openCreateBlockDialog(e, day, colIndex, rowIndex, activeBuilding);
     });
     
-    // Вспомогательная функция для определения здания по контейнеру расписания
-    function determineBuildingForContainer(container) {
-        if (!container) return "Villa"; // По умолчанию, если не найден
-        
-        // Ищем заголовок здания перед контейнером
-        var element = container.previousElementSibling;
-        while (element) {
-            if (element.tagName === 'H2') {
-                if (element.textContent.includes('Villa')) return 'Villa';
-                if (element.textContent.includes('Kolibri')) return 'Kolibri';
-                break;
-            }
-            element = element.previousElementSibling;
-        }
-        
-        return "Villa"; // По умолчанию, если не определено
-    }
+    // Функция удалена - используем BuildingService.determineBuildingForBlock()
 }
 
 // Экспортируем функцию
@@ -3117,6 +3314,7 @@ window.initAddBlocks = initAddBlocks;
             
             // Подключение обновленного модуля редактирования с поддержкой зданий
             // Модуль для редактирования блоков занятий с поддержкой разных зданий
+// ОБНОВЛЕН: использует BuildingService вместо дублированных функций
 
 // Функция инициализации редактирования блоков занятий
 function initBlockEditing() {
@@ -3214,25 +3412,10 @@ function openEditDialog(block, origLeft, origTop, building) {
     // Сохраняем текущие значения атрибутов для сравнения после редактирования
     var currentDay = block.getAttribute('data-day');
     var currentColIndex = block.getAttribute('data-col-index');
-    var currentBuilding = building || block.getAttribute('data-building') || determineBlockBuilding(block);
     
-    // Определяем здание блока по его родительскому контейнеру, если не указано
-    function determineBlockBuilding(block) {
-        var container = block.closest('.schedule-container');
-        if (!container) return "Villa"; // По умолчанию
-        
-        var element = container.previousElementSibling;
-        while (element) {
-            if (element.tagName === 'H2') {
-                if (element.textContent.includes('Villa')) return 'Villa';
-                if (element.textContent.includes('Kolibri')) return 'Kolibri';
-                break;
-            }
-            element = element.previousElementSibling;
-        }
-        
-        return "Villa"; // По умолчанию
-    }
+    // ИСПОЛЬЗУЕМ НОВЫЙ BuildingService вместо дублированной функции
+    var currentBuilding = building || block.getAttribute('data-building') || 
+                         BuildingService.determineBuildingForBlock(block);
     
     // Извлекаем текущие данные из блока
     var blockContent = block.innerHTML;
@@ -3269,8 +3452,9 @@ function openEditDialog(block, origLeft, origTop, building) {
         building: currentBuilding
     });
     
-    // Создаем список зданий
-    var buildingOptions = ['Villa', 'Kolibri'].map(function(b) {
+    // ИСПОЛЬЗУЕМ BuildingService для получения списка зданий
+    var availableBuildings = BuildingService.getAvailableBuildings();
+    var buildingOptions = availableBuildings.map(function(b) {
         return `<option value="${b}" ${currentBuilding === b ? 'selected' : ''}>${b}</option>`;
     }).join('');
 
@@ -3410,7 +3594,12 @@ function openEditDialog(block, origLeft, origTop, building) {
             // Если изменилось здание, перемещаем блок в соответствующий контейнер
             if (buildingChanged) {
                 console.log("Перемещение блока в другое здание:", newBuilding);
-                moveBlockToBuilding(block, newBuilding);
+                // ИСПОЛЬЗУЕМ BuildingService для перемещения блока
+                var moveSuccess = BuildingService.moveBlockToBuilding(block, newBuilding);
+                if (!moveSuccess) {
+                    console.error("Не удалось переместить блок в здание:", newBuilding);
+                    alert(`Ошибка: не удалось переместить блок в здание ${newBuilding}`);
+                }
             }
             
             // В любом случае вызываем updateActivityPositions для согласованности
@@ -3441,58 +3630,29 @@ function openEditDialog(block, origLeft, origTop, building) {
     document.addEventListener('keydown', handleEscape);
 }
 
-// Функция для перемещения блока в контейнер соответствующего здания
-function moveBlockToBuilding(block, newBuilding) {
-    // Находим контейнер расписания для указанного здания
-    var targetContainer = findScheduleContainerForBuilding(newBuilding);
-    if (!targetContainer) {
-        alert(`Ошибка: не найден контейнер расписания для здания ${newBuilding}`);
-        return;
-    }
-    
-    // Сохраняем данные блока перед перемещением
-    var day = block.getAttribute('data-day');
-    var room = '';
-    var parts = block.innerHTML.split('<br>');
-    if (parts.length > 3) room = parts[3].trim();
-    
-    // Обновляем колонку для нового здания
-    updateBlockColumnForBuilding(block, room, newBuilding, day);
-    
-    // Удаляем блок из текущего контейнера и добавляем в новый
-    block.parentNode.removeChild(block);
-    targetContainer.appendChild(block);
-    
-    // Обновляем позиции всех блоков для корректного отображения
-    updateActivityPositions();
-}
+// ФУНКЦИЯ УДАЛЕНА: moveBlockToBuilding теперь является методом BuildingService
 
-// Вспомогательная функция для поиска контейнера расписания для определенного здания
-function findScheduleContainerForBuilding(buildingName) {
-    var buildingHeaders = document.querySelectorAll('h2');
-    
-    for (var i = 0; i < buildingHeaders.length; i++) {
-        if (buildingHeaders[i].textContent.includes(buildingName)) {
-            // Находим ближайший schedule-container после заголовка здания
-            var scheduleContainer = buildingHeaders[i].nextElementSibling;
-            while (scheduleContainer && !scheduleContainer.classList.contains('schedule-container')) {
-                scheduleContainer = scheduleContainer.nextElementSibling;
-            }
-            return scheduleContainer;
-        }
-    }
-    
-    return null;
-}
+// ФУНКЦИЯ УДАЛЕНА: findScheduleContainerForBuilding теперь является методом BuildingService
 
 // Экспортируем функции
 window.openEditDialog = openEditDialog;
 window.initBlockEditing = initBlockEditing;
-window.moveBlockToBuilding = moveBlockToBuilding;
-window.findScheduleContainerForBuilding = findScheduleContainerForBuilding;
+
+// Обратная совместимость для старых функций (с предупреждениями)
+window.moveBlockToBuilding = function(block, newBuilding) {
+    console.warn('Deprecated: use BuildingService.moveBlockToBuilding() instead');
+    return BuildingService.moveBlockToBuilding(block, newBuilding);
+};
+
+window.findScheduleContainerForBuilding = function(buildingName) {
+    console.warn('Deprecated: use BuildingService.findScheduleContainerForBuilding() instead');
+    return BuildingService.findScheduleContainerForBuilding(buildingName);
+};
+
             
             // Подключение модулей для удаления блоков
             // Модуль для удаления блоков занятий из расписания
+// ОБНОВЛЕН: использует BuildingService вместо дублированных функций
 
 // Функция инициализации режима удаления блоков
 function initDeleteBlocks() {
@@ -3648,8 +3808,9 @@ function addDeleteBlockButton() {
         // Получаем блок, на который кликнули
         var block = e.currentTarget;
         
-        // Получаем информацию о блоке для уведомления
-        var building = block.getAttribute('data-building') || getBlockBuilding(block);
+        // ИСПОЛЬЗУЕМ BuildingService для определения здания блока
+        var building = block.getAttribute('data-building') || 
+                      BuildingService.determineBuildingForBlock(block);
         var day = block.getAttribute('data-day');
         var subject = '';
         var teacher = '';
@@ -3677,23 +3838,7 @@ function addDeleteBlockButton() {
         }
     }
     
-    // Функция для определения здания блока по его родительскому контейнеру
-    function getBlockBuilding(block) {
-        var container = block.closest('.schedule-container');
-        if (!container) return "Неизвестно";
-        
-        var element = container.previousElementSibling;
-        while (element) {
-            if (element.tagName === 'H2') {
-                if (element.textContent.includes('Villa')) return 'Villa';
-                if (element.textContent.includes('Kolibri')) return 'Kolibri';
-                break;
-            }
-            element = element.previousElementSibling;
-        }
-        
-        return "Неизвестно";
-    }
+    // ФУНКЦИЯ УДАЛЕНА: getBlockBuilding теперь заменена на BuildingService.determineBuildingForBlock
     
     // Функция для отображения уведомления
     function showNotification(message, type = 'info') {
@@ -3763,6 +3908,7 @@ function addDeleteBlockButton() {
 
 // Экспортируем функцию инициализации
 window.initDeleteBlocks = initDeleteBlocks;
+
             
             // Модуль для отслеживания новых блоков и применения к ним обработчиков удаления
 
@@ -3801,7 +3947,7 @@ function initDeleteBlocksObserver() {
         var block = e.currentTarget;
         
         // Получаем информацию о блоке для уведомления
-        var building = block.getAttribute('data-building') || getBlockBuilding(block);
+        var building = BuildingService.determineBuildingForBlock(block) || "Неизвестно";
         var day = block.getAttribute('data-day');
         var subject = '';
         var teacher = '';
@@ -3829,23 +3975,7 @@ function initDeleteBlocksObserver() {
         }
     }
     
-    // Функция для определения здания блока по его родительскому контейнеру
-    function getBlockBuilding(block) {
-        var container = block.closest('.schedule-container');
-        if (!container) return "Неизвестно";
-        
-        var element = container.previousElementSibling;
-        while (element) {
-            if (element.tagName === 'H2') {
-                if (element.textContent.includes('Villa')) return 'Villa';
-                if (element.textContent.includes('Kolibri')) return 'Kolibri';
-                break;
-            }
-            element = element.previousElementSibling;
-        }
-        
-        return "Неизвестно";
-    }
+    // Функция удалена - используем BuildingService.determineBuildingForBlock()
     
     // Функция для отображения уведомления (дублируем для автономности)
     function showNotification(message, type = 'info') {
@@ -3970,6 +4100,14 @@ window.initDeleteBlocksObserver = initDeleteBlocksObserver;
             
             // Первоначальное позиционирование
             updateActivityPositions();
+            
+            // Инициализация BuildingService (новый сервис)
+            if (typeof BuildingService !== 'undefined') {
+                console.log('BuildingService initialized successfully');
+                console.log('Available buildings:', BuildingService.getAvailableBuildings());
+            } else {
+                console.error('BuildingService failed to load');
+            }
         });
         
         // Функции для сохранения и загрузки настроек
@@ -4003,7 +4141,7 @@ window.initDeleteBlocksObserver = initDeleteBlocksObserver;
 <button id="saveIntermediate">Сохранить промежуточный результат</button>
 <button id="saveSchedule">Сохранить финальную версию</button>
 <button id="exportToExcel">Экспорт в Excel</button>
-<input type="hidden" id="csrf_token" value="dae22dc8-09d2-4c4b-ac2f-615c87d90c80">
+<input type="hidden" id="csrf_token" value="3dfb5c63-34f5-4ef5-b7e5-831d6f5bb11c">
 </div>
 <h1>Расписание занятий</h1>
 <h2>Здание: Villa</h2>
@@ -10470,7 +10608,7 @@ window.initDeleteBlocksObserver = initDeleteBlocksObserver;
 <div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='0' data-building='' style='top:1502.0px; left:1580px; width:100px; height:137.0px; background-color:#ff67cd; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Mi B<br>K.11<br>16:50-17:35</div>
 <div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='1' data-building='' style='top:1533.0px; left:1680px; width:100px; height:274.25px; background-color:#083476; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Mi StudioO<br>1.03<br>17:00-18:30</div>
 <div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='3' data-building='' style='top:1347.0px; left:1880px; width:100px; height:182.75px; background-color:#61c7fa; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Mi ab 7J<br>1.06<br>16:00-17:00</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='3' data-building='' style='top:1533.0px; left:1880px; width:100px; height:274.25px; background-color:#55bbee; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Mi ab 11J<br>1.06<br>17:00-18:30</div>
+<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='3' data-building='' style='top:1533.0px; left:1880px; width:100px; height:274.25px; background-color:#52b8eb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Mi ab 11J <br>1.06<br>17:00-18:30</div>
 <div class='activity-block activity-day-Do' data-day='Do' data-col-index='1' data-building='' style='top:1393.5px; left:2280px; width:100px; height:137.0px; background-color:#47f700; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Do 9G+5B<br>1.03<br>16:15-17:00</div>
 <div class='activity-block activity-day-Do' data-day='Do' data-col-index='4' data-building='' style='top:1579.5px; left:2580px; width:100px; height:274.25px; background-color:#14ef8a; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>5B<br>2.04<br>17:15-18:45</div>
 <div class='activity-block activity-day-Do' data-day='Do' data-col-index='5' data-building='' style='top:1347.0px; left:2680px; width:100px; height:182.75px; background-color:#738c83; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>9B<br>2.09<br>16:00-17:00</div>
@@ -12651,7 +12789,7 @@ window.initDeleteBlocksObserver = initDeleteBlocksObserver;
 <div class='activity-block activity-day-Do' data-day='Do' data-col-index='0' data-building='' style='top:1533.0px; left:680px; width:100px; height:137.0px; background-color:#c78a5b; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukr. Mus.</strong><br>Dosenko Evgeniy<br>Ukrainische Musik Do 4-5J<br>2.2<br>17:00-17:45</div>
 <div class='activity-block activity-day-Do' data-day='Do' data-col-index='2' data-building='' style='top:1347.0px; left:880px; width:100px; height:182.75px; background-color:#d1a45a; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>4Jahrige</strong><br>Wagner Galina<br>4JC<br>2.7<br>16:00-17:00</div>
 <div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='1' data-building='' style='top:1347.0px; left:1080px; width:100px; height:137.0px; background-color:#1bbf7e; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>4Jahrige</strong><br>Kremenchutski Larissa<br>4JB<br>2.3<br>16:00-16:45</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='1' data-building='' style='top:1579.5px; left:1080px; width:100px; height:91.25px; background-color:#efa9bc; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>3JA<br>2.3<br>17:15-17:45</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='1' data-building='' style='top:1579.5px; left:1080px; width:100px; height:91.25px; background-color:#efa9bc; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>3JA        <br>2.3<br>17:15-17:45</div>
 <div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='0' data-building='' style='top:1347.0px; left:980px; width:100px; height:182.75px; background-color:#ee69ca; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Logorithmika</strong><br>Shik Swetlana<br>3JB_Log<br>2.2<br>16:00-17:00</div>
 <div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='0' data-building='' style='top:1533.0px; left:980px; width:100px; height:137.0px; background-color:#fed1d5; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Logorithmika</strong><br>Shik Swetlana<br>4JB_Log<br>2.2<br>17:00-17:45</div>
 <div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='2' data-building='' style='top:1347.0px; left:1180px; width:100px; height:182.75px; background-color:#dae8bf; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukrainisch</strong><br>Gorochovska Olena<br>Ukrainisch Fr ab 6J<br>2.4<br>16:00-17:00</div>

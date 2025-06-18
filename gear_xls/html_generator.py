@@ -3,15 +3,21 @@
 """
 Модуль для генерации HTML-версии расписания с интерактивными возможностями
 и автоматическим подбором контрастного цвета текста.
+ОБНОВЛЕН: Логика работы с цветами вынесена в ColorService.
 """
 
 import os
 import logging
 import re
 import uuid
+
+# Импортируем необходимые модули
 from utils import minutes_to_time
 from html_styles import get_css_styles
 from html_javascript import get_javascript
+
+# Импортируем новый сервис цветов
+from services.color_service import ColorService
 
 # Настройка логирования
 logging.basicConfig(
@@ -20,45 +26,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger('html_generator')
 
-def is_light_color(hex_color):
-    """
-    Определяет, является ли цвет светлым.
-    
-    Args:
-        hex_color (str): Цвет в формате HEX (#RRGGBB)
-        
-    Returns:
-        bool: True если цвет светлый, иначе False
-    """
-    # Удаляем # из начала строки, если он есть
-    hex_color = hex_color.lstrip('#')
-    
-    # Преобразуем HEX в RGB
-    r = int(hex_color[0:2], 16) / 255.0
-    g = int(hex_color[2:4], 16) / 255.0
-    b = int(hex_color[4:6], 16) / 255.0
-    
-    # Вычисляем яркость по формуле (0.299*R + 0.587*G + 0.114*B)
-    brightness = 0.299 * r + 0.587 * g + 0.114 * b
-    
-    # Возвращаем True, если яркость больше 0.55 (цвет считается светлым)
-    return brightness > 0.55
-
-def get_contrast_text_color(hex_color):
-    """
-    Возвращает цвет текста, контрастный к фону.
-    
-    Args:
-        hex_color (str): Цвет фона в формате HEX (#RRGGBB)
-        
-    Returns:
-        str: Цвет текста (#FFFFFF или #000000)
-    """
-    if not hex_color or not hex_color.startswith('#'):
-        # По умолчанию предполагаем, что фон светлый
-        return '#000000'
-    
-    return '#000000' if is_light_color(hex_color) else '#FFFFFF'
 
 def generate_html_schedule(buildings, output_html="schedule.html", output_css="schedule.css", time_interval=5, borderWidth=0.5):
     """
@@ -219,6 +186,7 @@ def generate_activity_blocks(data, days_order, dayCellWidth, cellHeight, headerH
     """
     Генерирует HTML-код для блоков активностей (занятий) с корректными координатами,
     учитывая толщину границ ячеек таблицы и добавляя контрастный цвет текста.
+    ОБНОВЛЕНО: Использует ColorService для работы с цветами.
     
     Args:
         data (dict): Данные расписания для конкретного здания
@@ -266,7 +234,9 @@ def generate_activity_blocks(data, days_order, dayCellWidth, cellHeight, headerH
             
             # Получаем цвет фона и определяем контрастный цвет текста
             bg_color = interval.get('color', '#FFFBD3')  # Желтый по умолчанию
-            text_color = get_contrast_text_color(bg_color)
+            
+            # ИСПОЛЬЗУЕМ ColorService для определения контрастного цвета текста
+            text_color = ColorService.get_contrast_text_color(bg_color)
             
             # Текстовая тень в зависимости от цвета текста (для улучшения читаемости)
             text_shadow = "0 0 1px rgba(0, 0, 0, 0.7)" if text_color == "#FFFFFF" else "0 0 1px rgba(255, 255, 255, 0.5)"
@@ -291,3 +261,108 @@ def generate_activity_blocks(data, days_order, dayCellWidth, cellHeight, headerH
             )
     
     return "\n".join(html_blocks)
+
+
+# ========================================
+# ФУНКЦИИ ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ
+# (удалены - теперь используют ColorService)
+# ========================================
+
+# ФУНКЦИЯ УДАЛЕНА: is_light_color() - теперь ColorService.is_light_color()
+# ФУНКЦИЯ УДАЛЕНА: get_contrast_text_color() - теперь ColorService.get_contrast_text_color()
+
+# Обертки для обратной совместимости с предупреждениями
+def is_light_color(hex_color):
+    """
+    DEPRECATED: Используйте ColorService.is_light_color()
+    
+    Args:
+        hex_color (str): Цвет в формате HEX
+        
+    Returns:
+        bool: True если цвет светлый
+    """
+    logger.warning("DEPRECATED: is_light_color() устарел, используйте ColorService.is_light_color()")
+    return ColorService.is_light_color(hex_color)
+
+
+def get_contrast_text_color(hex_color):
+    """
+    DEPRECATED: Используйте ColorService.get_contrast_text_color()
+    
+    Args:
+        hex_color (str): Цвет фона в формате HEX
+        
+    Returns:
+        str: Контрастный цвет текста
+    """
+    logger.warning("DEPRECATED: get_contrast_text_color() устарел, используйте ColorService.get_contrast_text_color()")
+    return ColorService.get_contrast_text_color(hex_color)
+
+
+# ========================================
+# ДОПОЛНИТЕЛЬНЫЕ УТИЛИТЫ
+# ========================================
+
+def validate_html_generation_params(buildings, time_interval, borderWidth):
+    """
+    Валидирует параметры для генерации HTML.
+    
+    Args:
+        buildings (dict): Структура расписания
+        time_interval (int): Интервал времени
+        borderWidth (float): Толщина границ
+        
+    Returns:
+        bool: True если параметры валидны
+    """
+    if not buildings or not isinstance(buildings, dict):
+        logger.error("Некорректная структура buildings")
+        return False
+        
+    if not isinstance(time_interval, int) or time_interval <= 0:
+        logger.error(f"Некорректный time_interval: {time_interval}")
+        return False
+        
+    if not isinstance(borderWidth, (int, float)) or borderWidth < 0:
+        logger.error(f"Некорректный borderWidth: {borderWidth}")
+        return False
+        
+    return True
+
+
+def get_html_generator_info():
+    """
+    Возвращает информацию о HTML генераторе.
+    
+    Returns:
+        dict: Словарь с метаинформацией
+    """
+    return {
+        'version': '2.0.0',  # Увеличена версия после рефакторинга
+        'color_service_integration': True,
+        'features': [
+            'interactive_schedule',
+            'drag_and_drop',
+            'color_contrast_detection',
+            'responsive_design',
+            'excel_export'
+        ],
+        'color_service_version': ColorService.get_service_info()['version'],
+        'refactored': True
+    }
+
+
+if __name__ == "__main__":
+    # Тест функциональности при прямом запуске
+    print("=== HTML Generator Info ===")
+    info = get_html_generator_info()
+    for key, value in info.items():
+        print(f"{key}: {value}")
+    
+    print("\n=== ColorService Integration Test ===")
+    test_colors = ['#FF0000', '#00FF00', '#0000FF', '#FFFFFF', '#000000']
+    for color in test_colors:
+        is_light = ColorService.is_light_color(color)
+        contrast = ColorService.get_contrast_text_color(color)
+        print(f"Цвет: {color} → Светлый: {is_light}, Контрастный текст: {contrast}")

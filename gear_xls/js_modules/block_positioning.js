@@ -5,7 +5,7 @@ function createNewBlock(building, day, colIndex, subject, teacher, students, roo
     console.log(`Создание нового блока в здании: ${building}, день: ${day}, колонка: ${colIndex}`);
     
     // Находим контейнер расписания для указанного здания
-    var container = findScheduleContainerForBuilding(building);
+    var container = BuildingService.findScheduleContainerForBuilding(building);
     if (!container) {
         console.error(`Не найден контейнер расписания для здания ${building}`);
         // Пробуем использовать первый контейнер как запасной вариант

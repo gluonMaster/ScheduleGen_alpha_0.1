@@ -1,4 +1,5 @@
 // Модуль с обработчиками событий для блоков занятий
+// ОБНОВЛЕН: использует BuildingService вместо дублированных функций
 
 // Функция для добавления обработчиков событий новому блоку
 function addEventListenersToBlock(block) {
@@ -58,27 +59,10 @@ function addEventListenersToBlock(block) {
         
         // Открываем диалог редактирования (передаем информацию о здании)
         if (!window.editDialogOpen) {
+            // ИСПОЛЬЗУЕМ BuildingService для определения здания блока
             var building = block.getAttribute('data-building') || 
-                          determineBuildingForBlock(block);
+                          BuildingService.determineBuildingForBlock(block);
             openEditDialog(block, origLeft, origTop, building);
-        }
-        
-        // Функция для определения здания блока
-        function determineBuildingForBlock(block) {
-            var container = block.closest('.schedule-container');
-            if (!container) return "Villa";
-            
-            var element = container.previousElementSibling;
-            while (element) {
-                if (element.tagName === 'H2') {
-                    if (element.textContent.includes('Villa')) return 'Villa';
-                    if (element.textContent.includes('Kolibri')) return 'Kolibri';
-                    break;
-                }
-                element = element.previousElementSibling;
-            }
-            
-            return "Villa";
         }
     });
 }

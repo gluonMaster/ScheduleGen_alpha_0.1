@@ -144,7 +144,9 @@ function initQuickAddByClick(addBlockButton) {
         
         // Определяем здание, в котором находится ячейка
         var scheduleContainer = cell.closest('.schedule-container');
-        var clickedBuilding = determineBuildingForContainer(scheduleContainer);
+        var clickedBuilding = BuildingService.determineBuildingForBlock(
+            scheduleContainer.querySelector('.activity-block')
+        ) || 'Villa';
         
         // Если кликнуто по ячейке не в активном здании, меняем активное здание
         if (clickedBuilding !== activeBuilding) {
@@ -157,23 +159,7 @@ function initQuickAddByClick(addBlockButton) {
         openCreateBlockDialog(e, day, colIndex, rowIndex, activeBuilding);
     });
     
-    // Вспомогательная функция для определения здания по контейнеру расписания
-    function determineBuildingForContainer(container) {
-        if (!container) return "Villa"; // По умолчанию, если не найден
-        
-        // Ищем заголовок здания перед контейнером
-        var element = container.previousElementSibling;
-        while (element) {
-            if (element.tagName === 'H2') {
-                if (element.textContent.includes('Villa')) return 'Villa';
-                if (element.textContent.includes('Kolibri')) return 'Kolibri';
-                break;
-            }
-            element = element.previousElementSibling;
-        }
-        
-        return "Villa"; // По умолчанию, если не определено
-    }
+    // Функция удалена - используем BuildingService.determineBuildingForBlock()
 }
 
 // Экспортируем функцию

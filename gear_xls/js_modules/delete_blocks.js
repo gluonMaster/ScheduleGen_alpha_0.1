@@ -1,4 +1,5 @@
 // Модуль для удаления блоков занятий из расписания
+// ОБНОВЛЕН: использует BuildingService вместо дублированных функций
 
 // Функция инициализации режима удаления блоков
 function initDeleteBlocks() {
@@ -154,8 +155,9 @@ function addDeleteBlockButton() {
         // Получаем блок, на который кликнули
         var block = e.currentTarget;
         
-        // Получаем информацию о блоке для уведомления
-        var building = block.getAttribute('data-building') || getBlockBuilding(block);
+        // ИСПОЛЬЗУЕМ BuildingService для определения здания блока
+        var building = block.getAttribute('data-building') || 
+                      BuildingService.determineBuildingForBlock(block);
         var day = block.getAttribute('data-day');
         var subject = '';
         var teacher = '';
@@ -183,23 +185,7 @@ function addDeleteBlockButton() {
         }
     }
     
-    // Функция для определения здания блока по его родительскому контейнеру
-    function getBlockBuilding(block) {
-        var container = block.closest('.schedule-container');
-        if (!container) return "Неизвестно";
-        
-        var element = container.previousElementSibling;
-        while (element) {
-            if (element.tagName === 'H2') {
-                if (element.textContent.includes('Villa')) return 'Villa';
-                if (element.textContent.includes('Kolibri')) return 'Kolibri';
-                break;
-            }
-            element = element.previousElementSibling;
-        }
-        
-        return "Неизвестно";
-    }
+    // ФУНКЦИЯ УДАЛЕНА: getBlockBuilding теперь заменена на BuildingService.determineBuildingForBlock
     
     // Функция для отображения уведомления
     function showNotification(message, type = 'info') {

@@ -13,12 +13,21 @@ import time
 import webbrowser
 from pathlib import Path
 
+# Импортируем новый сервис пайплайна
+from services.schedule_pipeline import SchedulePipeline, SchedulePipelineError
+from utils import create_output_directories
+
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger('integration')
+
+# Константы конфигурации
+DEFAULT_TIME_INTERVAL = 5
+DEFAULT_BORDER_WIDTH = 0.5
+
 
 def setup_environment():
     """
@@ -63,6 +72,7 @@ def setup_environment():
         traceback.print_exc()
         return False
 
+
 def start_flask_server_subprocess():
     """
     Запускает Flask-сервер в отдельном процессе для обработки запросов экспорта.
@@ -71,6 +81,8 @@ def start_flask_server_subprocess():
         subprocess.Popen: Процесс Flask-сервера или None в случае ошибки
     """
     try:
+        import sys
+        
         # Запускаем server_routes.py как отдельный процесс
         server_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "server_routes.py")
         
@@ -100,19 +112,32 @@ def start_flask_server_subprocess():
         traceback.print_exc()
         return None
 
-def run_full_pipeline(excel_file_path):
+
+def run_full_pipeline(excel_file_path: str, 
+                     time_interval: int = DEFAULT_TIME_INTERVAL,
+                     border_width: float = DEFAULT_BORDER_WIDTH,
+                     open_browser: bool = True,
+                     start_server: bool = True) -> bool:
     """
     Запускает полный процесс обработки Excel-файла:
     1. Парсинг Excel и генерация HTML/PDF
-    2. Запуск Flask-сервера для обработки запросов экспорта
-    3. Открытие HTML-версии в браузере
+    2. Запуск Flask-сервера для обработки запросов экспорта (опционально)
+    3. Открытие HTML-версии в браузере (опционально)
     
     Args:
         excel_file_path (str): Путь к исходному Excel-файлу
+        time_interval (int): Интервал времени в минутах для сетки расписания
+        border_width (float): Толщина границ ячеек в пикселях  
+        open_browser (bool): Открывать ли браузер автоматически
+        start_server (bool): Запускать ли Flask-сервер
         
     Returns:
         bool: True если процесс успешно запущен, False в случае ошибки
     """
+    logger.info(f"Запуск полного пайплайна для файла: {excel_file_path}")
+    logger.info(f"Параметры: interval={time_interval}, border={border_width}, "
+               f"browser={open_browser}, server={start_server}")
+    
     try:
         # Проверяем наличие файла
         if not os.path.exists(excel_file_path):
@@ -124,51 +149,119 @@ def run_full_pipeline(excel_file_path):
             logger.error("Не удалось подготовить окружение")
             return False
         
-        # Импортируем основные модули
-        from excel_parser import parse_schedule
-        from schedule_structure import build_schedule_structure
-        from html_generator import generate_html_schedule
-        from pdf_generator import generate_pdf_schedule
-        from utils import create_output_directories
-        
         # Создаем директории для выходных файлов
         output_dirs = create_output_directories()
         
-        # Парсим Excel-файл
-        activities = parse_schedule(excel_file_path)
-        if not activities:
-            logger.error("Не удалось извлечь данные о занятиях из Excel файла")
-            return False
+        # Создаем экземпляр пайплайна с указанными настройками
+        pipeline = SchedulePipeline(
+            time_interval=time_interval,
+            border_width=border_width
+        )
         
-        # Строим структуру расписания
-        buildings = build_schedule_structure(activities, time_interval=5)
-        if not buildings:
-            logger.error("Не удалось создать структуру расписания")
-            return False
+        # Выполняем основную обработку
+        logger.info("Запуск обработки через SchedulePipeline...")
+        result = pipeline.process_excel_to_outputs(excel_file_path, output_dirs)
         
-        # Генерируем HTML-расписание
-        html_file = os.path.join(output_dirs["html"], "schedule.html")
-        generate_html_schedule(buildings, output_html=html_file, time_interval=5, borderWidth=0.5)
+        # Логируем подробные результаты
+        logger.info("Обработка завершена успешно:")
+        logger.info(f"  - Входной файл: {excel_file_path}")
+        logger.info(f"  - Занятий обработано: {result['activities_count']}")
+        logger.info(f"  - Зданий создано: {result['buildings_count']}")
+        logger.info(f"  - HTML файл: {result['html_file']}")
+        logger.info(f"  - PDF файлов создано: {len(result['pdf_files'])}")
         
-        # Генерируем PDF-расписание
-        generate_pdf_schedule(buildings, output_dir=output_dirs["pdf"], time_interval=5)
+        for pdf_file in result['pdf_files']:
+            logger.info(f"    • {pdf_file}")
         
-        # Запускаем Flask-сервер для обработки запросов экспорта
-        server_process = start_flask_server_subprocess()
+        # Запускаем Flask-сервер для обработки запросов экспорта (если требуется)
+        server_process = None
+        if start_server:
+            logger.info("Запуск Flask-сервера...")
+            server_process = start_flask_server_subprocess()
+            if server_process:
+                logger.info("Flask-сервер успешно запущен")
+            else:
+                logger.warning("Не удалось запустить Flask-сервер, экспорт в Excel будет недоступен")
         
-        # Открываем HTML-файл в браузере
-        if os.path.exists(html_file):
-            webbrowser.open(f'file://{os.path.abspath(html_file)}')
-            logger.info(f"HTML-расписание открыто в браузере: {html_file}")
+        # Открываем HTML-файл в браузере (если требуется)
+        if open_browser and os.path.exists(result['html_file']):
+            logger.info("Открытие HTML-расписания в браузере...")
+            webbrowser.open(f'file://{os.path.abspath(result["html_file"])}')
+            logger.info(f"HTML-расписание открыто в браузере: {result['html_file']}")
         
-        logger.info("Полный процесс обработки запущен успешно")
+        logger.info("Полный процесс обработки завершен успешно")
         return True
-    
+        
+    except SchedulePipelineError as e:
+        logger.error(f"Ошибка пайплайна при обработке: {e}")
+        return False
+        
     except Exception as e:
-        logger.error(f"Ошибка при запуске полного процесса: {e}")
+        logger.error(f"Неожиданная ошибка при запуске полного процесса: {e}")
         import traceback
         traceback.print_exc()
         return False
+
+
+def validate_and_run_pipeline(excel_file_path: str, **kwargs) -> bool:
+    """
+    Проверяет файл и запускает пайплайн только если файл валиден.
+    
+    Args:
+        excel_file_path (str): Путь к Excel файлу
+        **kwargs: Дополнительные параметры для run_full_pipeline
+        
+    Returns:
+        bool: True если валидация прошла и пайплайн запущен успешно
+    """
+    logger.info(f"Валидация файла: {excel_file_path}")
+    
+    # Быстрая проверка валидности
+    pipeline = SchedulePipeline()
+    if not pipeline.validate_excel_file(excel_file_path):
+        logger.error(f"Файл не прошел валидацию: {excel_file_path}")
+        return False
+    
+    logger.info("Файл прошел валидацию, запуск полного пайплайна...")
+    return run_full_pipeline(excel_file_path, **kwargs)
+
+
+def get_pipeline_status() -> dict:
+    """
+    Возвращает информацию о состоянии пайплайна и доступных возможностях.
+    
+    Returns:
+        dict: Словарь со статусом компонентов системы
+    """
+    status = {
+        'pipeline_available': True,
+        'environment_ready': False,
+        'server_script_exists': False,
+        'output_dirs_exist': False
+    }
+    
+    try:
+        # Проверяем готовность окружения
+        status['environment_ready'] = setup_environment()
+        
+        # Проверяем наличие скрипта сервера
+        server_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "server_routes.py")
+        status['server_script_exists'] = os.path.exists(server_script)
+        
+        # Проверяем наличие выходных директорий
+        output_dirs = create_output_directories()
+        status['output_dirs_exist'] = all(os.path.exists(d) for d in output_dirs.values())
+        
+        # Получаем информацию о версии пайплайна
+        pipeline = SchedulePipeline()
+        status['pipeline_info'] = pipeline.get_pipeline_info()
+        
+    except Exception as e:
+        logger.error(f"Ошибка при получении статуса: {e}")
+        status['error'] = str(e)
+    
+    return status
+
 
 if __name__ == "__main__":
     import sys
@@ -176,6 +269,25 @@ if __name__ == "__main__":
     # Если передан аргумент - используем его как путь к файлу
     if len(sys.argv) > 1:
         excel_file = sys.argv[1]
-        run_full_pipeline(excel_file)
+        
+        # Дополнительные параметры из командной строки
+        time_interval = int(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_TIME_INTERVAL
+        border_width = float(sys.argv[3]) if len(sys.argv) > 3 else DEFAULT_BORDER_WIDTH
+        
+        success = run_full_pipeline(
+            excel_file,
+            time_interval=time_interval,
+            border_width=border_width
+        )
+        
+        sys.exit(0 if success else 1)
     else:
-        print("Использование: python integration.py путь_к_excel_файлу.xlsx")
+        print("Использование: python integration.py путь_к_excel_файлу.xlsx [интервал_времени] [толщина_границ]")
+        print(f"По умолчанию: интервал={DEFAULT_TIME_INTERVAL}, границы={DEFAULT_BORDER_WIDTH}")
+        
+        # Показываем статус системы
+        status = get_pipeline_status()
+        print(f"\nСтатус системы:")
+        for key, value in status.items():
+            print(f"  {key}: {value}")
+            

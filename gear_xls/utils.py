@@ -2,12 +2,15 @@
 # -*- coding: utf-8 -*-
 """
 Вспомогательный модуль с набором утилитарных функций, используемых в разных частях программы.
+ОБНОВЛЕН: Логика работы с цветами вынесена в ColorService.
 """
 
 import re
-import hashlib
 import os
 import logging
+
+# Импортируем новый сервис цветов
+from services.color_service import ColorService
 
 # Настройка логирования
 logging.basicConfig(
@@ -16,12 +19,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger('utils')
 
-# Глобальный словарь для сопоставления отдельных аббревиатур с объединённым ключом.
-COMPOUND_MAPPING = {
-    # Например, если обнаружено, что группы с "2a" и "4c" должны иметь единый ключ:
-    "2a": "2a+4c",
-    "4c": "2a+4c"
-}
 
 def create_output_directories():
     """
@@ -40,6 +37,11 @@ def create_output_directories():
         
     return output_dirs
 
+
+# ========================================
+# ФУНКЦИИ ДЛЯ РАБОТЫ СО ВРЕМЕНЕМ
+# ========================================
+
 def time_to_minutes(time_str):
     """
     Преобразует время в формате 'HH:MM' в количество минут с начала суток.
@@ -51,14 +53,16 @@ def time_to_minutes(time_str):
         int: Количество минут с начала суток
     """
     if not time_str or not isinstance(time_str, str):
+        logger.warning(f"Некорректное время: {time_str}, возвращаем 0")
         return 0
         
     try:
         hours, minutes = map(int, time_str.split(':'))
         return hours * 60 + minutes
-    except (ValueError, AttributeError):
-        logger.warning(f"Невозможно преобразовать время '{time_str}' в минуты. Возвращаем 0.")
+    except (ValueError, AttributeError) as e:
+        logger.warning(f"Невозможно преобразовать время '{time_str}' в минуты: {e}. Возвращаем 0.")
         return 0
+
 
 def minutes_to_time(m):
     """
@@ -74,6 +78,7 @@ def minutes_to_time(m):
         return "00:00"
     return f"{m // 60:02d}:{m % 60:02d}"
 
+
 def add_minutes(t, mins):
     """
     Прибавляет к времени в формате 'HH:MM' заданное число минут.
@@ -87,6 +92,11 @@ def add_minutes(t, mins):
     """
     total = time_to_minutes(t) + mins
     return minutes_to_time(total)
+
+
+# ========================================
+# ФУНКЦИИ ДЛЯ РАБОТЫ С КАБИНЕТАМИ
+# ========================================
 
 def room_sort_key(room_name):
     """
@@ -135,14 +145,17 @@ def room_sort_key(room_name):
     
     return (float('inf'), room_name)  # Если формат не соответствует ожидаемому
 
+
+# ========================================
+# ФУНКЦИИ ДЛЯ РАБОТЫ С ЦВЕТАМИ
+# ОБНОВЛЕНО: Теперь используют ColorService
+# ========================================
+
 def get_color(group):
     """
     Возвращает цвет в формате '#RRGGBB' для заданной группы.
     
-    Если в названии группы присутствует конструкция с плюсом, 
-    то извлекаются все аббревиатуры, сортируются и объединяются в ключ.
-    Если же найдена только одна аббревиатура, то проверяется, входит ли она
-    в состав уже известного объединённого ключа (COMPOUND_MAPPING).
+    Это функция обратной совместимости, которая использует новый ColorService.
     
     Args:
         group (str): Название группы
@@ -150,48 +163,166 @@ def get_color(group):
     Returns:
         str: Цвет в формате '#RRGGBB'
     """
-    if not group:
-        return "#CCCCCC"  # Дефолтный серый для пустых групп
-    
-    group_lower = str(group).lower()
+    try:
+        return ColorService.get_color_for_group(group)
+    except Exception as e:
+        logger.error(f"Ошибка при генерации цвета для группы '{group}': {e}")
+        return "#CCCCCC"  # Серый цвет по умолчанию при ошибке
 
-    # Обработка специальных категорий
-    special_categories = {
-        "schach": "#ff66cc",
-        "tanz": "#66ccff",
-        "gitarre": "#ffcc66",
-        "deutsch": "#66cc66"
+
+# ========================================
+# ДОПОЛНИТЕЛЬНЫЕ УТИЛИТЫ ДЛЯ ЦВЕТОВ
+# ========================================
+
+def validate_color(color):
+    """
+    Проверяет валидность цвета.
+    
+    Args:
+        color (str): Цвет для проверки
+        
+    Returns:
+        bool: True если цвет валиден
+    """
+    return ColorService.validate_hex_color(color)
+
+
+def get_color_palette(groups):
+    """
+    Генерирует палитру цветов для списка групп.
+    
+    Args:
+        groups (list): Список названий групп
+        
+    Returns:
+        dict: Словарь {группа: цвет}
+    """
+    return ColorService.get_color_palette_for_groups(groups)
+
+
+# ========================================
+# ФУНКЦИИ ДЛЯ РАБОТЫ С ФАЙЛАМИ И ПУТЯМИ
+# ========================================
+
+def ensure_directory_exists(directory_path):
+    """
+    Убеждается что директория существует, создает если нет.
+    
+    Args:
+        directory_path (str): Путь к директории
+        
+    Returns:
+        bool: True если директория существует или была создана
+    """
+    try:
+        os.makedirs(directory_path, exist_ok=True)
+        return True
+    except Exception as e:
+        logger.error(f"Не удалось создать директорию {directory_path}: {e}")
+        return False
+
+
+def get_file_extension(filename):
+    """
+    Возвращает расширение файла.
+    
+    Args:
+        filename (str): Имя файла
+        
+    Returns:
+        str: Расширение файла (с точкой)
+    """
+    return os.path.splitext(filename)[1].lower()
+
+
+def is_excel_file(filename):
+    """
+    Проверяет является ли файл Excel файлом.
+    
+    Args:
+        filename (str): Имя файла
+        
+    Returns:
+        bool: True если это Excel файл
+    """
+    excel_extensions = ['.xlsx', '.xls', '.xlsm']
+    return get_file_extension(filename) in excel_extensions
+
+
+# ========================================
+# ИНФОРМАЦИОННЫЕ ФУНКЦИИ
+# ========================================
+
+def get_utils_info():
+    """
+    Возвращает информацию о модуле utils.
+    
+    Returns:
+        dict: Словарь с метаинформацией
+    """
+    return {
+        'version': '2.0.0',  # Увеличена версия после рефакторинга
+        'color_service_version': ColorService.get_service_info()['version'],
+        'modules': [
+            'time_functions',
+            'room_functions', 
+            'color_functions',
+            'file_functions'
+        ],
+        'refactored': True,
+        'color_service_integration': True
     }
-    for keyword, base_color in special_categories.items():
-        if keyword in group_lower:
-            hash_val = int(hashlib.md5(str(group).encode()).hexdigest(), 16)
-            offset = (hash_val % 41) - 20  # смещение от -20 до +20
-            base = base_color.lstrip('#')
-            r = max(0, min(255, int(base[0:2], 16) + offset))
-            g = max(0, min(255, int(base[2:4], 16) + offset))
-            b = max(0, min(255, int(base[4:6], 16) + offset))
-            return '#{:02x}{:02x}{:02x}'.format(r, g, b)
 
-    # Шаблон для поиска аббревиатур
-    pattern = r'\b((?:\d{1,2}[abcdeg])|(?:[34]j[abc])|(?:4-5j)|(?:5-6j))\b'
-    # Извлекаем все совпадения
-    matches = re.findall(pattern, group_lower)
-    # Приводим к уникальному набору
-    matches = list(set(matches))
+
+# ========================================
+# DEPRECATED ФУНКЦИИ (для обратной совместимости)
+# ========================================
+
+# Глобальный словарь для сопоставления групп (DEPRECATED - используйте ColorService.COMPOUND_MAPPING)
+COMPOUND_MAPPING = ColorService.COMPOUND_MAPPING.copy()
+
+# Предупреждение об использовании deprecated констант
+def _warn_deprecated_usage(item_name, new_location):
+    """Показывает предупреждение об использовании устаревших элементов."""
+    logger.warning(f"DEPRECATED: {item_name} устарел, используйте {new_location}")
+
+# Функция для доступа к deprecated константам с предупреждением
+def get_compound_mapping():
+    """
+    DEPRECATED: Используйте ColorService.COMPOUND_MAPPING
     
-    if matches:
-        # Если в названии явно присутствует '+', или найдено >1 совпадение,
-        # формируем составной ключ как объединение всех аббревиатур.
-        if '+' in group or len(matches) > 1:
-            canonical_key = '+'.join(sorted(matches))
-        else:
-            canonical_key = matches[0]
-            # Если для найденной аббревиатуры определён объединённый ключ – использовать его.
-            if canonical_key in COMPOUND_MAPPING:
-                canonical_key = COMPOUND_MAPPING[canonical_key]
-    else:
-        canonical_key = str(group)
+    Returns:
+        dict: Словарь маппингов групп
+    """
+    _warn_deprecated_usage("get_compound_mapping()", "ColorService.COMPOUND_MAPPING")
+    return ColorService.COMPOUND_MAPPING.copy()
 
-    # Генерация цвета на основе MD5-хэша канонического ключа
-    hash_str = hashlib.md5(canonical_key.encode()).hexdigest()
-    return '#' + hash_str[:6]
+
+# ========================================
+# ТЕСТОВЫЕ ФУНКЦИИ (для отладки)
+# ========================================
+
+def test_color_generation():
+    """
+    Тестирует генерацию цветов для различных групп.
+    Полезно для отладки и проверки работоспособности.
+    """
+    test_groups = [
+        "2a", "4c", "2a+4c", "Schach 2a", "Tanz 4c", 
+        "Deutsch 3b", "Gitarre", "10А", "empty_group", ""
+    ]
+    
+    print("=== Тест генерации цветов ===")
+    for group in test_groups:
+        color = get_color(group)
+        is_light = ColorService.is_light_color(color)
+        contrast = ColorService.get_contrast_text_color(color)
+        print(f"Группа: '{group}' → Цвет: {color} (Светлый: {is_light}, Текст: {contrast})")
+    
+    print(f"\nИнформация о ColorService: {ColorService.get_service_info()}")
+    print(f"Информация о Utils: {get_utils_info()}")
+
+
+if __name__ == "__main__":
+    # Запуск тестов при прямом выполнении модуля
+    test_color_generation()

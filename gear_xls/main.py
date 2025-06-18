@@ -12,18 +12,18 @@ import os
 import threading
 import webbrowser
 
-# Импортируем модули нашей программы
-from excel_parser import parse_schedule
-from schedule_structure import build_schedule_structure
-from html_generator import generate_html_schedule
-from pdf_generator import generate_pdf_schedule
+# Импортируем новый сервис пайплайна
+from services.schedule_pipeline import SchedulePipeline, SchedulePipelineError
 from utils import create_output_directories
 
 # Глобальная переменная для выбранного файла
 selected_file = None
-TIME_INTERVAL = 5  # Новый интервал времени в минутах (вместо 15)
+
+# Константы конфигурации (вынесены в начало для лучшей видимости)
+TIME_INTERVAL = 5  # Интервал времени в минутах
 BORDER_WIDTH = 0.5   # Толщина границы ячейки в пикселях
 SERVER_PORT = 5000   # Порт для Flask-сервера
+
 
 def choose_file():
     """Открывает диалог выбора файла и сохраняет путь к выбранному файлу."""
@@ -33,13 +33,19 @@ def choose_file():
         filetypes=[("Excel файлы", "*.xlsx"), ("Все файлы", "*.*")]
     )
     if selected_file:
-        file_button.config(text=f"Выбран: {selected_file}")
+        file_button.config(text=f"Выбран: {os.path.basename(selected_file)}")
     else:
         file_button.config(text="Выберите Excel-файл с расписанием")
 
+
 def run_script():
-    """Запускает обработку выбранного файла и генерацию расписаний."""
+    """
+    Запускает обработку выбранного файла и генерацию расписаний.
+    Использует SchedulePipeline для инкапсуляции основной логики.
+    """
     global selected_file
+    
+    # Проверяем что файл выбран
     if not selected_file:
         messagebox.showerror("Ошибка", "Пожалуйста, сначала выберите Excel файл!")
         return
@@ -47,23 +53,22 @@ def run_script():
     # Создаем директории для выходных файлов
     output_dirs = create_output_directories()
     
+    # Создаем экземпляр пайплайна с настройками
+    pipeline = SchedulePipeline(
+        time_interval=TIME_INTERVAL, 
+        border_width=BORDER_WIDTH
+    )
+    
     try:
-        # Выполняем обработку: парсинг Excel, генерация веб-страниц и PDF
-        activities = parse_schedule(selected_file)
-        if not activities:
-            messagebox.showerror("Ошибка", "Не удалось извлечь данные о занятиях из Excel файла.")
-            return
-            
-        buildings = build_schedule_structure(activities, time_interval=TIME_INTERVAL)
-        if not buildings:
-            messagebox.showerror("Ошибка", "Не удалось создать структуру расписания.")
-            return
-            
-        html_file = os.path.join(output_dirs["html"], "schedule.html")
-        generate_html_schedule(buildings, output_html=html_file, time_interval=TIME_INTERVAL, 
-                              borderWidth=BORDER_WIDTH)
+        # Выполняем основную обработку через пайплайн
+        result = pipeline.process_excel_to_outputs(selected_file, output_dirs)
         
-        generate_pdf_schedule(buildings, output_dir=output_dirs["pdf"], time_interval=TIME_INTERVAL)
+        # Логируем результат
+        print(f"Обработка завершена:")
+        print(f"  - Занятий обработано: {result['activities_count']}")
+        print(f"  - Зданий создано: {result['buildings_count']}")
+        print(f"  - HTML файл: {result['html_file']}")
+        print(f"  - PDF файлов: {len(result['pdf_files'])}")
         
         # Создаем директорию для экспорта Excel-файлов, если её нет
         excel_export_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "excel_exports")
@@ -74,26 +79,36 @@ def run_script():
         threading.Thread(target=start_flask_server, daemon=True).start()
         
         # Автоматически открываем веб-браузер с HTML-расписанием
-        # webbrowser.open(f'file://{os.path.abspath(html_file)}')
+        # webbrowser.open(f'file://{os.path.abspath(result["html_file"])}')
         
-        #messagebox.showinfo("Готово!", 
-        #                  f"Веб-версия и PDF файлы успешно созданы.\n"
-        #                  f"HTML: {os.path.abspath(output_dirs['html'])}\n"
-        #                  f"PDF: {os.path.abspath(output_dirs['pdf'])}\n\n"
-        #                  f"Расписание открыто в браузере.\n"
-        #                  f"Для экспорта в Excel используйте кнопку 'Экспорт в Excel' в веб-интерфейсе."
-        #                  f"Функция экспорта будет работать до тех пор пока запущен"
-        #                  f"Flask-сервер.")
+        # Показываем сообщение об успешном завершении
+        messagebox.showinfo(
+            "Готово!", 
+            f"Веб-версия и PDF файлы успешно созданы.\n\n"
+            f"Обработано занятий: {result['activities_count']}\n"
+            f"Создано зданий: {result['buildings_count']}\n"
+            f"HTML: {os.path.abspath(os.path.dirname(result['html_file']))}\n"
+            f"PDF: {len(result['pdf_files'])} файл(ов)\n\n"
+            f"Расписание готово к использованию.\n"
+            f"Для экспорта в Excel используйте кнопку 'Экспорт в Excel' в веб-интерфейсе."
+        )
+        
+    except SchedulePipelineError as e:
+        # Обрабатываем ошибки пайплайна
+        messagebox.showerror("Ошибка обработки", str(e))
+        print(f"Ошибка пайплайна: {e}")
         
     except Exception as e:
-        messagebox.showerror("Ошибка", f"Произошла ошибка: {e}")
+        # Обрабатываем неожиданные ошибки
+        messagebox.showerror("Неожиданная ошибка", f"Произошла неожиданная ошибка: {e}")
+        print(f"Неожиданная ошибка: {e}")
         import traceback
         traceback.print_exc()
+
 
 def start_flask_server():
     """Запускает Flask-сервер в отдельном потоке."""
     try:
-        # Импортируем Flask-приложение здесь, чтобы избежать циклических импортов
         import subprocess
         import os
         import sys
@@ -133,16 +148,46 @@ def start_flask_server():
         import traceback
         traceback.print_exc()
 
+
+def validate_selected_file():
+    """
+    Проверяет валидность выбранного файла без полной обработки.
+    Обновляет интерфейс в зависимости от результата.
+    """
+    global selected_file
+    
+    if not selected_file:
+        return
+    
+    # Создаем временный экземпляр пайплайна для валидации
+    pipeline = SchedulePipeline()
+    
+    if pipeline.validate_excel_file(selected_file):
+        file_button.config(bg="#d4edda")  # Зеленоватый фон для валидного файла
+        run_button.config(state=tk.NORMAL)
+    else:
+        file_button.config(bg="#f8d7da")  # Красноватый фон для невалидного файла  
+        run_button.config(state=tk.DISABLED)
+        messagebox.showwarning(
+            "Предупреждение", 
+            f"Выбранный файл может содержать ошибки или не соответствует ожидаемому формату.\n\n"
+            f"Убедитесь что:\n"
+            f"- Файл содержит лист 'Schedule'\n"
+            f"- Первая строка содержит заголовки\n"
+            f"- Есть данные о занятиях"
+        )
+
+
 def main():
     """Основная функция, создающая и запускающая GUI приложение."""
-    global file_button
+    global file_button, run_button
     
     # Создаем главное окно
     root = tk.Tk()
     root.title("Генератор расписания из Excel")
 
     # Параметры окна
-    root.geometry("550x250")
+    root.geometry("600x280")
     root.resizable(False, False)
 
     # Создаем фрейм для размещения кнопок с отступами
@@ -161,34 +206,49 @@ def main():
     file_button = tk.Button(
         frame, 
         text="Выберите Excel-файл с расписанием", 
-        command=choose_file, 
+        command=lambda: [choose_file(), validate_selected_file()],  # Валидация после выбора
         width=50,
         height=2
     )
     file_button.pack(pady=10)
 
-    # Кнопка для запуска обработки (генерации веб-версии и PDF)
+    # Кнопка для запуска обработки (изначально неактивна)
     run_button = tk.Button(
         frame, 
         text="Создать веб-приложение для редактирования расписания", 
         command=run_script, 
         width=50,
         height=2,
-        bg="#90ee90"  # Нежно-зеленый фон для кнопки запуска
+        bg="#90ee90",  # Нежно-зеленый фон для кнопки запуска
+        state=tk.DISABLED  # Изначально неактивна
     )
     run_button.pack(pady=10)
     
     # Информационная метка о функции экспорта
     info_label = tk.Label(
         frame,
-        text="Примечание: В веб-версии расписания будет доступна кнопка\n'Экспорт в Excel' для обратного преобразования",
+        text="Примечание: В веб-версии расписания будет доступна кнопка\n"
+             "'Экспорт в Excel' для обратного преобразования",
         font=("Arial", 9),
         fg="#555555"
     )
     info_label.pack(pady=5)
+    
+    # Метка с информацией о версии и настройках
+    pipeline_info = SchedulePipeline().get_pipeline_info()
+    version_label = tk.Label(
+        frame,
+        text=f"Настройки: интервал {pipeline_info['time_interval']}мин, "
+             f"границы {pipeline_info['border_width']}px | v{pipeline_info['version']}",
+        font=("Arial", 8),
+        fg="#888888"
+    )
+    version_label.pack(pady=(10, 0))
 
     # Запуск главного цикла обработки событий
     root.mainloop()
 
+
 if __name__ == "__main__":
     main()
+    
