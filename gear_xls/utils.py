@@ -2,15 +2,12 @@
 # -*- coding: utf-8 -*-
 """
 Вспомогательный модуль с набором утилитарных функций, используемых в разных частях программы.
-ОБНОВЛЕН: Логика работы с цветами вынесена в ColorService.
+ИСПРАВЛЕН: Устранена циклическая зависимость импортов.
 """
 
 import re
 import os
 import logging
-
-# Импортируем новый сервис цветов
-from services.color_service import ColorService
 
 # Настройка логирования
 logging.basicConfig(
@@ -40,58 +37,37 @@ def create_output_directories():
 
 # ========================================
 # ФУНКЦИИ ДЛЯ РАБОТЫ СО ВРЕМЕНЕМ
+# Импортируются из отдельного модуля для избежания циклических зависимостей
 # ========================================
 
-def time_to_minutes(time_str):
-    """
-    Преобразует время в формате 'HH:MM' в количество минут с начала суток.
+# Импортируем функции времени из отдельного модуля
+try:
+    from time_utils import time_to_minutes, minutes_to_time, add_minutes
+    logger.debug("Функции времени импортированы из time_utils")
+except ImportError as e:
+    logger.warning(f"Не удалось импортировать из time_utils: {e}")
     
-    Args:
-        time_str (str): Время в формате 'HH:MM'
-        
-    Returns:
-        int: Количество минут с начала суток
-    """
-    if not time_str or not isinstance(time_str, str):
-        logger.warning(f"Некорректное время: {time_str}, возвращаем 0")
-        return 0
-        
-    try:
-        hours, minutes = map(int, time_str.split(':'))
-        return hours * 60 + minutes
-    except (ValueError, AttributeError) as e:
-        logger.warning(f"Невозможно преобразовать время '{time_str}' в минуты: {e}. Возвращаем 0.")
-        return 0
+    # Fallback реализация
+    def time_to_minutes(time_str):
+        """Fallback функция преобразования времени в минуты."""
+        if not time_str or not isinstance(time_str, str):
+            return 0
+        try:
+            hours, minutes = map(int, time_str.split(':'))
+            return hours * 60 + minutes
+        except (ValueError, AttributeError):
+            return 0
 
+    def minutes_to_time(m):
+        """Fallback функция преобразования минут во время."""
+        if m is None:
+            return "00:00"
+        return f"{m // 60:02d}:{m % 60:02d}"
 
-def minutes_to_time(m):
-    """
-    Преобразует количество минут в строку формата 'HH:MM'.
-    
-    Args:
-        m (int): Количество минут с начала суток
-        
-    Returns:
-        str: Время в формате 'HH:MM'
-    """
-    if m is None:
-        return "00:00"
-    return f"{m // 60:02d}:{m % 60:02d}"
-
-
-def add_minutes(t, mins):
-    """
-    Прибавляет к времени в формате 'HH:MM' заданное число минут.
-    
-    Args:
-        t (str): Исходное время в формате 'HH:MM'
-        mins (int): Добавляемое количество минут
-        
-    Returns:
-        str: Результирующее время в формате 'HH:MM'
-    """
-    total = time_to_minutes(t) + mins
-    return minutes_to_time(total)
+    def add_minutes(t, mins):
+        """Fallback функция добавления минут."""
+        total = time_to_minutes(t) + mins
+        return minutes_to_time(total)
 
 
 # ========================================
@@ -148,14 +124,12 @@ def room_sort_key(room_name):
 
 # ========================================
 # ФУНКЦИИ ДЛЯ РАБОТЫ С ЦВЕТАМИ
-# ОБНОВЛЕНО: Теперь используют ColorService
+# Импорт ColorService отложен для избежания циклических зависимостей
 # ========================================
 
 def get_color(group):
     """
     Возвращает цвет в формате '#RRGGBB' для заданной группы.
-    
-    Это функция обратной совместимости, которая использует новый ColorService.
     
     Args:
         group (str): Название группы
@@ -164,10 +138,15 @@ def get_color(group):
         str: Цвет в формате '#RRGGBB'
     """
     try:
+        # Отложенный импорт для избежания циклических зависимостей
+        from services.color_service import ColorService
         return ColorService.get_color_for_group(group)
+    except ImportError as e:
+        logger.error(f"Не удалось импортировать ColorService: {e}")
+        return "#CCCCCC"  # Серый цвет по умолчанию при ошибке
     except Exception as e:
         logger.error(f"Ошибка при генерации цвета для группы '{group}': {e}")
-        return "#CCCCCC"  # Серый цвет по умолчанию при ошибке
+        return "#CCCCCC"
 
 
 # ========================================
@@ -184,7 +163,15 @@ def validate_color(color):
     Returns:
         bool: True если цвет валиден
     """
-    return ColorService.validate_hex_color(color)
+    try:
+        from services.color_service import ColorService
+        return ColorService.validate_hex_color(color)
+    except ImportError:
+        # Простая fallback проверка
+        import re
+        if not color or not isinstance(color, str):
+            return False
+        return bool(re.match(r'^#[0-9a-f]{6}$', color.lower()))
 
 
 def get_color_palette(groups):
@@ -197,7 +184,15 @@ def get_color_palette(groups):
     Returns:
         dict: Словарь {группа: цвет}
     """
-    return ColorService.get_color_palette_for_groups(groups)
+    try:
+        from services.color_service import ColorService
+        return ColorService.get_color_palette_for_groups(groups)
+    except ImportError:
+        # Fallback реализация
+        palette = {}
+        for group in groups:
+            palette[group] = get_color(group)
+        return palette
 
 
 # ========================================
@@ -260,9 +255,15 @@ def get_utils_info():
     Returns:
         dict: Словарь с метаинформацией
     """
+    try:
+        from services.color_service import ColorService
+        color_service_version = ColorService.get_service_info()['version']
+    except ImportError:
+        color_service_version = 'unavailable'
+    
     return {
-        'version': '2.0.0',  # Увеличена версия после рефакторинга
-        'color_service_version': ColorService.get_service_info()['version'],
+        'version': '2.1.0',  # Увеличена версия после исправления импортов
+        'color_service_version': color_service_version,
         'modules': [
             'time_functions',
             'room_functions', 
@@ -270,32 +271,8 @@ def get_utils_info():
             'file_functions'
         ],
         'refactored': True,
-        'color_service_integration': True
+        'import_cycle_fixed': True
     }
-
-
-# ========================================
-# DEPRECATED ФУНКЦИИ (для обратной совместимости)
-# ========================================
-
-# Глобальный словарь для сопоставления групп (DEPRECATED - используйте ColorService.COMPOUND_MAPPING)
-COMPOUND_MAPPING = ColorService.COMPOUND_MAPPING.copy()
-
-# Предупреждение об использовании deprecated констант
-def _warn_deprecated_usage(item_name, new_location):
-    """Показывает предупреждение об использовании устаревших элементов."""
-    logger.warning(f"DEPRECATED: {item_name} устарел, используйте {new_location}")
-
-# Функция для доступа к deprecated константам с предупреждением
-def get_compound_mapping():
-    """
-    DEPRECATED: Используйте ColorService.COMPOUND_MAPPING
-    
-    Returns:
-        dict: Словарь маппингов групп
-    """
-    _warn_deprecated_usage("get_compound_mapping()", "ColorService.COMPOUND_MAPPING")
-    return ColorService.COMPOUND_MAPPING.copy()
 
 
 # ========================================
@@ -315,12 +292,9 @@ def test_color_generation():
     print("=== Тест генерации цветов ===")
     for group in test_groups:
         color = get_color(group)
-        is_light = ColorService.is_light_color(color)
-        contrast = ColorService.get_contrast_text_color(color)
-        print(f"Группа: '{group}' → Цвет: {color} (Светлый: {is_light}, Текст: {contrast})")
+        print(f"Группа: '{group}' → Цвет: {color}")
     
-    print(f"\nИнформация о ColorService: {ColorService.get_service_info()}")
-    print(f"Информация о Utils: {get_utils_info()}")
+    print(f"\nИнформация о Utils: {get_utils_info()}")
 
 
 if __name__ == "__main__":

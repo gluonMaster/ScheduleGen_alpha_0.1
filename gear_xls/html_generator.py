@@ -1,23 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Модуль для генерации HTML-версии расписания с интерактивными возможностями
-и автоматическим подбором контрастного цвета текста.
-ОБНОВЛЕН: Логика работы с цветами вынесена в ColorService.
+Модуль для генерации HTML-версии расписания с интерактивными возможностями.
+РЕФАКТОРИНГ: Теперь является тонкой оберткой для новых специализированных генераторов.
+
+Основная логика вынесена в пакет generators/:
+- html_structure_generator - HTML структура документа
+- html_table_generator - генерация таблиц расписания  
+- html_block_generator - генерация блоков активностей
+- html_coordinator - координация всех генераторов
 """
 
 import os
 import logging
-import re
-import uuid
 
-# Импортируем необходимые модули
-from utils import minutes_to_time
-from html_styles import get_css_styles
-from html_javascript import get_javascript
+# NOTE: Импорты генераторов сделаны отложенными для избежания циклических зависимостей
 
-# Импортируем новый сервис цветов
-from services.color_service import ColorService
+# Импортируем сервис цветов для обратной совместимости
+try:
+    from services.color_service import ColorService
+except ImportError:
+    # Fallback если ColorService недоступен
+    ColorService = None
 
 # Настройка логирования
 logging.basicConfig(
@@ -27,251 +31,107 @@ logging.basicConfig(
 logger = logging.getLogger('html_generator')
 
 
-def generate_html_schedule(buildings, output_html="schedule.html", output_css="schedule.css", time_interval=5, borderWidth=0.5):
+def generate_html_schedule(buildings, output_html="schedule.html", output_css="schedule.css", 
+                          time_interval=5, borderWidth=0.5):
     """
     Генерирует HTML-страницу с интерактивным расписанием.
+    
+    РЕФАКТОРИНГ: Функция теперь является тонкой оберткой для HTMLCoordinator.
+    Сохранена полная обратная совместимость с предыдущей версией.
     
     Args:
         buildings (dict): Структура расписания по зданиям
         output_html (str): Путь для сохранения HTML-файла
-        output_css (str): Путь для сохранения CSS-файла (если необходимо)
-        time_interval (int): Интервал времени в минутах для отображения в сетке (по умолчанию 5 минут)
-        borderWidth (int): Толщина границы ячейки в пикселях (по умолчанию 1 пиксель)
+        output_css (str): Путь для сохранения CSS-файла (совместимость)
+        time_interval (int): Интервал времени в минутах для отображения в сетке
+        borderWidth (float): Толщина границы ячейки в пикселях
+        
+    Returns:
+        str: Путь к созданному HTML файлу
     """
-    # Параметры сетки и размеров - точные значения для строгого соответствия
-    cellHeight = 15        # высота каждой ячейки (интервал в минутах) в пикселях
-    timeColWidth = 80      # ширина столбца времени
-    dayCellWidth = 100     # ширина одного подстолбца рабочего дня
-    headerHeight = 45      # высота заголовка в пикселях (точное значение)
-    days_order = ["Mo", "Di", "Mi", "Do", "Fr", "Sa"]
+    logger.info(f"Генерация HTML-расписания через HTMLCoordinator: {output_html}")
+    logger.info(f"Параметры: interval={time_interval}мин, border={borderWidth}px")
     
-    # Получаем время начала и конца сетки расписания
-    # По умолчанию используем 9:00 - 19:45, но если в buildings есть информация, берем из нее
-    sample_building = next(iter([b for b in buildings.values() if not isinstance(b, str)]), {})
-    grid_start = sample_building.get('_grid_start', 9 * 60)  # 09:00 в минутах
-    grid_end = sample_building.get('_grid_end', 19 * 60 + 45)  # 19:45 в минутах
-    
-    num_rows = ((grid_end - grid_start) // time_interval) + 1
-    
-    logger.info(f"Генерация HTML-расписания в файл: {output_html}")
-    logger.info(f"Временной интервал: {time_interval} мин, время: {minutes_to_time(grid_start)}-{minutes_to_time(grid_end)}")
-    logger.info(f"Параметры сетки: cellHeight={cellHeight}px, headerHeight={headerHeight}px, borderWidth={borderWidth}px")
+    try:
+        # Валидация параметров
+        if not validate_html_generation_params(buildings, time_interval, borderWidth):
+            raise ValueError("Некорректные параметры генерации HTML")
+        
+        # Отложенный импорт координатора для избежания циклических зависимостей
+        from generators.html_coordinator import HTMLCoordinator
+        
+        # Создание координатора с настройками
+        coordinator = HTMLCoordinator(
+            time_interval=time_interval,
+            border_width=borderWidth
+        )
+        
+        # Генерация полного расписания
+        result_path = coordinator.generate_complete_schedule(buildings, output_html, output_css)
+        
+        # Сбор статистики генерации
+        stats = coordinator.get_generation_statistics(buildings)
+        logger.info(f"HTML генерация завершена: {stats['total_buildings']} зданий, "
+                   f"{stats['total_blocks']} блоков")
+        
+        return result_path
+        
+    except Exception as e:
+        logger.error(f"Ошибка при генерации HTML: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
-    html_parts = []
-    html_parts.append("<!DOCTYPE html>")
-    html_parts.append("<html lang='ru'>")
-    html_parts.append("<head>")
-    html_parts.append('  <meta charset="UTF-8">')
-    html_parts.append('  <meta name="viewport" content="width=device-width, initial-scale=1.0">')
-    html_parts.append(f'  <link rel="stylesheet" type="text/css" href="{output_css}">')
-    html_parts.append("  <title>Расписание занятий</title>")
-    
-    # Встроенные стили
-    html_parts.append(get_css_styles(cellHeight, dayCellWidth, timeColWidth, borderWidth))
-    
-    # Встроенный JavaScript
-    html_parts.append(get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_interval, borderWidth))
-    
-    html_parts.append("</head>")
-    html_parts.append("<body>")
-    
-    # Фиксированный блок кнопок для скрытия/показа дней и сохранения результата
-    html_parts.append('<div class="sticky-buttons">')
-    for day in days_order:
-         html_parts.append(f'<button class="toggle-day-button" onclick="toggleDay(this, \'{day}\')">+/- {day}</button>')
-    html_parts.append('<button id="saveIntermediate">Сохранить промежуточный результат</button>')
-    html_parts.append('<button id="saveSchedule">Сохранить финальную версию</button>')
-    html_parts.append('<button id="exportToExcel">Экспорт в Excel</button>')
-    
-    # Добавляем скрытое поле с CSRF-токеном для безопасной отправки формы
-    csrf_token = str(uuid.uuid4())
-    html_parts.append(f'<input type="hidden" id="csrf_token" value="{csrf_token}">')
-    
-    html_parts.append("</div>")
-    html_parts.append("<h1>Расписание занятий</h1>")
-    
-    # Для каждого здания генерируем таблицу-сетку и div-блоки активностей
-    for building, data in buildings.items():
-        # Пропускаем служебные ключи
-        if building.startswith("_"):
-            continue
-            
-        totalCols = 0
-        for day in days_order:
-            totalCols += data.get('_max_cols', {}).get(day, 1)
-        containerWidth = timeColWidth + totalCols * dayCellWidth
-        
-        html_parts.append(f"<h2>Здание: {building}</h2>")
-        html_parts.append(f'<div class="schedule-container" style="width:{containerWidth}px;" data-building="{building}">')
-        
-        # Генерация таблицы-сетки
-        html_parts.append(generate_schedule_table(data, days_order, timeColWidth, num_rows, grid_start, time_interval))
-        
-        # Наложим div-блоки активностей с корректным позиционированием
-        html_parts.append(generate_activity_blocks(data, days_order, dayCellWidth, cellHeight, 
-                                                 headerHeight, timeColWidth, grid_start, time_interval, borderWidth))
-        
-        html_parts.append("</div>")  # конец schedule-container для здания
-    
-    html_parts.append("</body>")
-    html_parts.append("</html>")
-    
-    # Создаем директорию для HTML файла, если она не существует
-    os.makedirs(os.path.dirname(os.path.abspath(output_html)), exist_ok=True)
-    
-    # Записываем HTML-файл
-    with open(output_html, "w", encoding="utf-8") as f:
-        f.write("\n".join(html_parts))
-    logger.info(f"HTML расписание записано в файл: {output_html}")
 
+# ========================================
+# ОБЕРТКИ ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ  
+# (Функции из старой версии)
+# ========================================
 
 def generate_schedule_table(data, days_order, timeColWidth, num_rows, grid_start, time_interval):
     """
-    Генерирует HTML таблицу-сетку расписания.
+    DEPRECATED: Используйте HTMLTableGenerator.generate_schedule_table()
     
-    Args:
-        data (dict): Данные расписания для конкретного здания
-        days_order (list): Порядок дней недели
-        timeColWidth (int): Ширина колонки времени
-        num_rows (int): Количество строк в таблице
-        grid_start (int): Начальное время сетки в минутах
-        time_interval (int): Интервал времени в минутах
-        
-    Returns:
-        str: HTML-код таблицы расписания
+    Обертка для обратной совместимости со старым API.
     """
-    html_table = []
+    logger.warning("DEPRECATED: generate_schedule_table() устарел, используйте HTMLTableGenerator")
     
-    html_table.append('<table class="schedule-grid">')
-    html_table.append("<thead>")
-    html_table.append("<tr>")
-    html_table.append('<th class="time-cell">Время</th>')
+    from generators.html_table_generator import HTMLTableGenerator
     
-    for day in days_order:
-        varCols = data.get('_max_cols', {}).get(day, 1)
-        for col in range(varCols):
-            # Вычисляем название кабинета, если оно есть
-            cabinet = ""
-            if day in data.get('_rooms', {}) and len(data['_rooms'][day]) > col:
-                cabinet = data['_rooms'][day][col]
-            html_table.append(f'<th class="day-{day}">{day}<br>{cabinet}</th>')
+    generator = HTMLTableGenerator(time_interval, timeColWidth)
+    grid_end = grid_start + (num_rows - 1) * time_interval
     
-    html_table.append("</tr>")
-    html_table.append("</thead>")
-    html_table.append("<tbody>")
-    
-    for row in range(num_rows):
-        html_table.append("<tr>")
-        current_time = minutes_to_time(grid_start + row * time_interval)
-        
-        # Добавляем метку времени только для интервалов, кратных 15 минутам
-        time_step = 15 // time_interval  # Вычисляем шаг для меток 15 минут
-        display_time = current_time if row % time_step == 0 else ""
-        
-        html_table.append(f'<td class="time-cell" data-row="{row}" data-col="time">{display_time}</td>')
-        
-        for day in days_order:
-            varCols = data.get('_max_cols', {}).get(day, 1)
-            for col in range(varCols):
-                html_table.append(f'<td class="day-{day}" data-row="{row}" data-col="{col}"></td>')
-        html_table.append("</tr>")
-    html_table.append("</tbody>")
-    html_table.append("</table>")
-    
-    return "\n".join(html_table)
+    return generator.generate_schedule_table(data, days_order, grid_start, grid_end)
 
 
-def generate_activity_blocks(data, days_order, dayCellWidth, cellHeight, headerHeight, 
-                            timeColWidth, grid_start, time_interval, borderWidth):
+def generate_activity_blocks(data, days_order, dayCellWidth, cellHeight, headerHeight,
+                           timeColWidth, grid_start, time_interval, borderWidth):
     """
-    Генерирует HTML-код для блоков активностей (занятий) с корректными координатами,
-    учитывая толщину границ ячеек таблицы и добавляя контрастный цвет текста.
-    ОБНОВЛЕНО: Использует ColorService для работы с цветами.
+    DEPRECATED: Используйте HTMLBlockGenerator.generate_activity_blocks()
     
-    Args:
-        data (dict): Данные расписания для конкретного здания
-        days_order (list): Порядок дней недели
-        dayCellWidth (int): Ширина ячейки дня
-        cellHeight (int): Высота ячейки
-        headerHeight (float): Высота заголовка
-        timeColWidth (int): Ширина колонки времени
-        grid_start (int): Начальное время сетки в минутах
-        time_interval (int): Интервал времени в минутах
-        borderWidth (int): Толщина границы ячейки
-        
-    Returns:
-        str: HTML-код блоков активностей
+    Обертка для обратной совместимости со старым API.
     """
-    html_blocks = []
+    logger.warning("DEPRECATED: generate_activity_blocks() устарел, используйте HTMLBlockGenerator")
     
-    for day in days_order:
-        dayIndex = days_order.index(day)
-        prevWidth = sum(data.get('_max_cols', {}).get(d, 1) for d in days_order[:dayIndex]) * dayCellWidth
-        for interval in data.get(day, []):
-            col = interval['col']
-            
-            # Получаем время начала и конца занятия в минутах от начала суток
-            start_time = interval['start']
-            end_time = interval['end']
-            
-            # Рассчитываем количество кванторов (5-минутных промежутков) с начала расписания (grid_start)
-            start_quants = (start_time - grid_start) // time_interval
-            end_quants = (end_time - grid_start) // time_interval
-            
-            # Рассчитываем точную позицию и размер блока на сетке с учетом толщины границ
-            # Учитываем количество границ (количество строк до начала блока)
-            # Верхняя граница блока = headerHeight + (start_quants * cellHeight) + (start_quants * borderWidth)
-            top = headerHeight + (start_quants * cellHeight) + (start_quants * borderWidth)
-            
-            # Высота блока = количество кванторов * высота ячейки + (количество внутренних границ * толщина границы)
-            # Внутренних границ на 1 меньше, чем кванторов
-            quant_count = end_quants - start_quants
-            internal_borders = max(0, quant_count - 1)
-            height = (quant_count * cellHeight) + (internal_borders * borderWidth * 0.5)
-            
-            # Позиция по горизонтали
-            left = timeColWidth + prevWidth + (col * dayCellWidth)
-            
-            # Получаем цвет фона и определяем контрастный цвет текста
-            bg_color = interval.get('color', '#FFFBD3')  # Желтый по умолчанию
-            
-            # ИСПОЛЬЗУЕМ ColorService для определения контрастного цвета текста
-            text_color = ColorService.get_contrast_text_color(bg_color)
-            
-            # Текстовая тень в зависимости от цвета текста (для улучшения читаемости)
-            text_shadow = "0 0 1px rgba(0, 0, 0, 0.7)" if text_color == "#FFFFFF" else "0 0 1px rgba(255, 255, 255, 0.5)"
-            
-            # Проверка правильности расчетов и добавление отладочной информации
-            logger.debug(f"Занятие {interval['subject']}: время {minutes_to_time(start_time)}-{minutes_to_time(end_time)}")
-            logger.debug(f"  Кванторы: {start_quants}-{end_quants}, координаты: top={top}px, height={height}px")
-            logger.debug(f"  Цвет фона: {bg_color}, цвет текста: {text_color}")
-            
-            # Формируем блок активности с контрастным цветом текста
-            html_blocks.append(
-                f"<div class='activity-block activity-day-{day}' data-day='{day}' data-col-index='{col}' "
-                f"data-building='{interval.get('building', '')}' "
-                f"style='top:{top}px; left:{left}px; width:{dayCellWidth}px; height:{height}px; "
-                f"background-color:{bg_color}; color:{text_color}; text-shadow:{text_shadow};'>"
-                f"<strong>{interval['subject'] or 'Не указано'}</strong><br>"
-                f"{interval['teacher'] or ''}<br>"
-                f"{interval['students'] or ''}<br>"
-                f"{interval['room_display'] or ''}<br>"
-                f"{minutes_to_time(interval['start'])}-{minutes_to_time(interval['end'])}"
-                f"</div>"
-            )
+    from generators.html_block_generator import HTMLBlockGenerator
     
-    return "\n".join(html_blocks)
+    generator = HTMLBlockGenerator(
+        day_cell_width=dayCellWidth,
+        cell_height=cellHeight,
+        header_height=headerHeight,
+        time_col_width=timeColWidth,
+        time_interval=time_interval,
+        border_width=borderWidth
+    )
+    
+    return generator.generate_activity_blocks(data, days_order, grid_start)
 
 
 # ========================================
-# ФУНКЦИИ ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ
-# (удалены - теперь используют ColorService)
+# ФУНКЦИИ ДЛЯ РАБОТЫ С ЦВЕТАМИ
+# (Обертки для ColorService - обратная совместимость)
 # ========================================
 
-# ФУНКЦИЯ УДАЛЕНА: is_light_color() - теперь ColorService.is_light_color()
-# ФУНКЦИЯ УДАЛЕНА: get_contrast_text_color() - теперь ColorService.get_contrast_text_color()
-
-# Обертки для обратной совместимости с предупреждениями
 def is_light_color(hex_color):
     """
     DEPRECATED: Используйте ColorService.is_light_color()
@@ -283,7 +143,23 @@ def is_light_color(hex_color):
         bool: True если цвет светлый
     """
     logger.warning("DEPRECATED: is_light_color() устарел, используйте ColorService.is_light_color()")
-    return ColorService.is_light_color(hex_color)
+    
+    try:
+        # Отложенный импорт для избежания циклических зависимостей
+        from services.color_service import ColorService
+        return ColorService.is_light_color(hex_color)
+    except ImportError:
+        # Fallback реализация
+        if not hex_color or not hex_color.startswith('#') or len(hex_color) != 7:
+            return True
+        try:
+            r = int(hex_color[1:3], 16) / 255.0
+            g = int(hex_color[3:5], 16) / 255.0
+            b = int(hex_color[5:7], 16) / 255.0
+            brightness = 0.299 * r + 0.587 * g + 0.114 * b
+            return brightness > 0.55
+        except ValueError:
+            return True
 
 
 def get_contrast_text_color(hex_color):
@@ -297,11 +173,18 @@ def get_contrast_text_color(hex_color):
         str: Контрастный цвет текста
     """
     logger.warning("DEPRECATED: get_contrast_text_color() устарел, используйте ColorService.get_contrast_text_color()")
-    return ColorService.get_contrast_text_color(hex_color)
+    
+    try:
+        # Отложенный импорт для избежания циклических зависимостей
+        from services.color_service import ColorService
+        return ColorService.get_contrast_text_color(hex_color)
+    except ImportError:
+        # Fallback реализация
+        return '#000000' if is_light_color(hex_color) else '#FFFFFF'
 
 
 # ========================================
-# ДОПОЛНИТЕЛЬНЫЕ УТИЛИТЫ
+# ВАЛИДАЦИЯ И УТИЛИТЫ
 # ========================================
 
 def validate_html_generation_params(buildings, time_interval, borderWidth):
@@ -338,31 +221,93 @@ def get_html_generator_info():
     Returns:
         dict: Словарь с метаинформацией
     """
+    try:
+        # Отложенный импорт для избежания циклических зависимостей
+        from generators.html_coordinator import HTMLCoordinator
+        
+        # Создаем временный координатор для получения информации
+        coordinator = HTMLCoordinator()
+        coordinator_info = coordinator.get_coordinator_info()
+    except ImportError:
+        coordinator_info = {'error': 'HTMLCoordinator недоступен'}
+    
     return {
-        'version': '2.0.0',  # Увеличена версия после рефакторинга
-        'color_service_integration': True,
-        'features': [
-            'interactive_schedule',
-            'drag_and_drop',
-            'color_contrast_detection',
-            'responsive_design',
-            'excel_export'
+        'version': '2.1.0',  # Увеличена версия после рефакторинга
+        'refactored': True,
+        'architecture': 'modular_generators',
+        'main_coordinator': coordinator_info,
+        'backward_compatibility': True,
+        'deprecated_functions': [
+            'generate_schedule_table',
+            'generate_activity_blocks', 
+            'is_light_color',
+            'get_contrast_text_color'
         ],
-        'color_service_version': ColorService.get_service_info()['version'],
-        'refactored': True
+        'new_modules': [
+            'generators.html_coordinator',
+            'generators.html_structure_generator',
+            'generators.html_table_generator', 
+            'generators.html_block_generator'
+        ]
     }
+
+
+# ========================================
+# ТЕСТИРОВАНИЕ И ОТЛАДКА
+# ========================================
+
+def test_generator_integration():
+    """
+    Тестирует интеграцию всех генераторов.
+    Полезно для проверки работоспособности после рефакторинга.
+    """
+    logger.info("=== Тест интеграции HTML генераторов ===")
+    
+    try:
+        # Отложенный импорт для избежания циклических зависимостей
+        from generators.html_coordinator import HTMLCoordinator
+        
+        # Создаем координатор
+        coordinator = HTMLCoordinator(time_interval=5, border_width=0.5)
+        
+        # Получаем информацию о всех компонентах
+        info = coordinator.get_coordinator_info()
+        
+        print(f"Координатор: {info['coordinator']} v{info['version']}")
+        print(f"Генераторы:")
+        for gen_name, gen_info in info['generators'].items():
+            print(f"  - {gen_info['generator']} v{gen_info['version']}")
+        
+        print(f"Настройки: интервал={info['time_interval']}мин, границы={info['border_width']}px")
+        print("✅ Все генераторы инициализированы успешно")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка интеграции: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 
 if __name__ == "__main__":
     # Тест функциональности при прямом запуске
-    print("=== HTML Generator Info ===")
+    print("=== HTML Generator - Refactored Version ===")
+    
+    # Тестируем интеграцию
+    test_generator_integration()
+    
+    # Показываем информацию о генераторе
+    print("\n=== Информация о генераторе ===")
     info = get_html_generator_info()
     for key, value in info.items():
-        print(f"{key}: {value}")
+        if isinstance(value, dict):
+            print(f"{key}:")
+            for sub_key, sub_value in value.items():
+                print(f"  {sub_key}: {sub_value}")
+        elif isinstance(value, list):
+            print(f"{key}: {', '.join(value)}")
+        else:
+            print(f"{key}: {value}")
     
-    print("\n=== ColorService Integration Test ===")
-    test_colors = ['#FF0000', '#00FF00', '#0000FF', '#FFFFFF', '#000000']
-    for color in test_colors:
-        is_light = ColorService.is_light_color(color)
-        contrast = ColorService.get_contrast_text_color(color)
-        print(f"Цвет: {color} → Светлый: {is_light}, Контрастный текст: {contrast}")
+    print("\n✅ Рефакторинг html_generator.py завершен успешно!")

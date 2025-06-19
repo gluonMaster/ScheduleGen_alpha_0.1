@@ -89,7 +89,10 @@ def build_schedule_structure(activities, time_interval=5):
                 "students": details['students'],  # имя группы
                 "room": details['room'],
                 "room_display": details['room_display'],  # Очищенное название кабинета
-                "color": get_color(details.get('students', 'default'))
+                "color": get_color(details.get('students', 'default')),
+                # ИСПРАВЛЕНИЕ: Добавляем поля day и building для JavaScript
+                "day": day,
+                "building": building
             }
             buildings[building][day].append(interval)
 
