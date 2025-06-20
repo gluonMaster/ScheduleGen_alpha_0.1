@@ -49,19 +49,20 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
         window.compensationFactor = 0.4;
         window.compensationExponent = 1.02;
         window.previousCompensationFactor = 0.4;
-        window.previousCompensationExponent = 1.02;
-
-        // Храним измеренную ширину колонки времени
+        window.previousCompensationExponent = 1.02;        // Храним измеренную ширину колонки времени
         var measuredTimeColWidth = 0;
     """
     
     # Список названий модулей для загрузки (обновленный порядок)
-    # ВАЖНО: services/building_service должен загружаться первым, так как используется другими модулями
+    # ВАЖНО: services должны загружаться первыми, так как используются другими модулями
     base_module_names = [
-        'services/building_service',  # НОВЫЙ СЕРВИС - загружается первым
+        'services/building_service',      # НОВЫЙ СЕРВИС - загружается первым
+        'services/drag_drop_service',     # НОВЫЙ СЕРВИС для drag&drop функциональности
+        'services/grid_snap_service',     # НОВЫЙ СЕРВИС для привязки к сетке
+        'services/block_drop_service',    # НОВЫЙ СЕРВИС для обработки завершения перетаскивания
         'core',
         'position',
-        'drag_drop',
+        'drag_drop_refactored',           # Обновленный модуль drag_drop
         'settings_panel',
         'save_export',
         'column_helpers',  # Модуль для работы с колонками в разных зданиях
@@ -120,16 +121,21 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
     <script>
         document.addEventListener('DOMContentLoaded', function() {{
             {js_variables}
-            
-            // === НОВЫЙ СЕРВИС ДЛЯ РАБОТЫ СО ЗДАНИЯМИ ===
+              // === НОВЫЕ СЕРВИСЫ ДЛЯ DRAG&DROP ФУНКЦИОНАЛЬНОСТИ ===
             {js_modules.get('services/building_service', '')}
+            
+            {js_modules.get('services/drag_drop_service', '')}
+            
+            {js_modules.get('services/grid_snap_service', '')}
+            
+            {js_modules.get('services/block_drop_service', '')}
             
             // Подключение основных модулей
             {js_modules.get('core', '')}
             
             {js_modules.get('position', '')}
             
-            {js_modules.get('drag_drop', '')}
+            {js_modules.get('drag_drop_refactored', '')}
             
             {js_modules.get('column_helpers', '')}
             
@@ -164,10 +170,19 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
             // Подключение модулей для удаления блоков
             {js_modules.get('delete_blocks', '')}
             
-            {js_modules.get('delete_blocks_observer', '')}
-
-            // Инициализация элементов только если страница не является финальной
+            {js_modules.get('delete_blocks_observer', '')}            // Инициализация элементов только если страница не является финальной
             if (!document.body.classList.contains('static-schedule')) {{
+                // Инициализация новых сервисов
+                if (typeof DragDropService !== 'undefined') {{
+                    console.log('Initializing DragDropService...');
+                }}
+                if (typeof GridSnapService !== 'undefined') {{
+                    console.log('GridSnapService loaded successfully');
+                }}
+                if (typeof BlockDropService !== 'undefined') {{
+                    console.log('BlockDropService loaded successfully');
+                }}
+                
                 initDragAndDrop();
                 initBlockEditing();
                 initCompensationSettings();
@@ -181,13 +196,31 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
             
             // Первоначальное позиционирование
             updateActivityPositions();
-            
-            // Инициализация BuildingService (новый сервис)
+              // Инициализация всех сервисов
             if (typeof BuildingService !== 'undefined') {{
                 console.log('BuildingService initialized successfully');
                 console.log('Available buildings:', BuildingService.getAvailableBuildings());
             }} else {{
                 console.error('BuildingService failed to load');
+            }}
+            
+            // Проверяем инициализацию новых drag&drop сервисов
+            if (typeof DragDropService !== 'undefined') {{
+                console.log('DragDropService initialized successfully');
+            }} else {{
+                console.warn('DragDropService not available, using legacy implementation');
+            }}
+            
+            if (typeof GridSnapService !== 'undefined') {{
+                console.log('GridSnapService initialized successfully');  
+            }} else {{
+                console.warn('GridSnapService not available, using legacy implementation');
+            }}
+            
+            if (typeof BlockDropService !== 'undefined') {{
+                console.log('BlockDropService initialized successfully');
+            }} else {{
+                console.warn('BlockDropService not available, using legacy implementation');
             }}
         }});
         
