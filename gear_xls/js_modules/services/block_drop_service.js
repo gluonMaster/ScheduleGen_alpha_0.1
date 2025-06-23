@@ -44,15 +44,17 @@ var BlockDropService = (function() {
         var headerHeight = table.querySelector('thead').getBoundingClientRect().height;
         var currentTop = parseFloat(block.style.top);
         
-        // Определяем номер строки для текущей позиции
-        var rowIndex = Math.floor((currentTop - headerHeight) / (gridCellHeight + borderWidth));
+        // ВОЗВРАЩАЕМ ПРОСТУЮ ЛОГИКУ СТАРОГО КОДА:
+        // Определяем номер строки напрямую по текущей позиции блока
+        var rowIndex = Math.round((currentTop - headerHeight) / (gridCellHeight + borderWidth));
+        rowIndex = Math.max(0, rowIndex); // не может быть отрицательным
         
-        // Вычисляем текущую компенсацию, которая была применена
+        // Вычисляем компенсацию для найденной строки (как в старом коде)
         var factor = window.compensationFactor || 0.4;
         var exponent = window.compensationExponent || 1.02;
         var compensation = Math.pow(rowIndex, exponent) * factor;
         
-        // Определяем истинное положение без компенсации для новой позиции
+        // ПРАВИЛЬНО восстанавливаем исходную позицию (как в старом коде)
         var originalTopForNewPosition = currentTop + compensation;
         
         // Обновляем атрибуты блока
@@ -131,8 +133,7 @@ var BlockDropService = (function() {
         
         return newColIndex;
     }
-    
-    function fallbackProcessBlockDrop(block) {
+      function fallbackProcessBlockDrop(block) {
         var container = block.parentElement;
         var table = container.querySelector('.schedule-grid');
         
@@ -147,7 +148,7 @@ var BlockDropService = (function() {
         
         var newColIndex = calculateColumnIndexFromPosition(offsetWithinContainer, chosenDay, table);
         
-        // Обновляем данные блока
+        // ИСПРАВЛЕНИЕ: Используем исправленную функцию обновления данных блока
         updateBlockPositionData(block, chosenDay.day, newColIndex, table);
         
         // Обновляем позиции всех блоков

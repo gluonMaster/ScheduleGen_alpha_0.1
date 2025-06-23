@@ -406,29 +406,26 @@ function legacyProcessBlockDrop(block) {
 
 // Вспомогательная функция для обновления атрибутов блока
 function updateBlockDropAttributes(block, day, colIndex, table) {
-    block.setAttribute('data-col-index', colIndex);
-    block.setAttribute('data-day', day);
-    
-    // КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: сохраняем новое исходное положение блока
-    // после перетаскивания (но без учета компенсации)
     var headerHeight = table.querySelector('thead').getBoundingClientRect().height;
     var currentTop = parseFloat(block.style.top);
     
-    // Определяем номер строки для текущей позиции
-    var rowIndex = Math.floor((currentTop - headerHeight) / (gridCellHeight + borderWidth));
+    // ВОЗВРАЩАЕМ ПРОСТУЮ ЛОГИКУ СТАРОГО КОДА:
+    // Определяем номер строки напрямую по текущей позиции блока
+    var rowIndex = Math.round((currentTop - headerHeight) / (gridCellHeight + borderWidth));
+    rowIndex = Math.max(0, rowIndex); // не может быть отрицательным
     
-    // Вычисляем текущую компенсацию, которая была применена
+    // Вычисляем компенсацию для найденной строки (как в старом коде)
     var factor = window.compensationFactor || 0.4;
     var exponent = window.compensationExponent || 1.02;
     var compensation = Math.pow(rowIndex, exponent) * factor;
     
-    // Определяем истинное положение без компенсации для новой позиции
+    // ПРАВИЛЬНО восстанавливаем исходную позицию (как в старом коде)
     var originalTopForNewPosition = currentTop + compensation;
     
-    // Обновляем data-original-top с новым значением
+    // Обновляем атрибуты блока
+    block.setAttribute('data-col-index', colIndex);
+    block.setAttribute('data-day', day);
     block.setAttribute('data-original-top', originalTopForNewPosition);
-    
-    // Помечаем блок как требующий новой компенсации
     block.setAttribute('data-compensated', 'false');
     
     // Обновляем класс для соответствия дню

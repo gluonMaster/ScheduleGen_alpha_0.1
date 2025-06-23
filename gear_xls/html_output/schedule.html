@@ -657,7 +657,7 @@ var GridSnapService = (function() {
         
         return closestCell;
     }
-    
+
     function snapToClosestCell(closestCell, container, block) {
         var table = container.querySelector('.schedule-grid');
         var containerRect = container.getBoundingClientRect();
@@ -685,15 +685,15 @@ var GridSnapService = (function() {
         
         // Устанавливаем точное позиционирование
         var snappedLeft = headerLeftPosition;
+        // Вычисляем позицию для привязки к ячейке во время перетаскивания
         var snappedTop = headerHeight + padTop + (rowIndex * (gridCellHeight + borderWidth));
         
-        // Обновляем data-аттрибуты блока
+        // Обновляем день и колонку для текущего перетаскивания
         block.setAttribute('data-day', day);
         block.setAttribute('data-col-index', colIndex);
-        block.setAttribute('data-compensated', 'false');
         
-        // Сохраняем исходное положение блока без компенсации
-        block.setAttribute('data-original-top', snappedTop);
+        // НЕ устанавливаем data-original-top и data-compensated здесь!
+        // Это будет сделано правильно в BlockDropService на основе фактической позиции
         
         // Обновляем класс для соответствия новому дню
         block.className = block.className.replace(/activity-day-\w+/, 'activity-day-' + day);
@@ -725,10 +725,15 @@ var GridSnapService = (function() {
         
         // Вычисляем индекс столбца в рамках выбранного дня
         var newColIndex = calculateColumnIndex(offsetWithinContainer, chosenDay, table);
-        
-        // Рассчитываем позиции
+          // Рассчитываем позиции
         var snappedLeft = calculateLeftPosition(timeCellWidth, padLeft, chosenDay, newColIndex, table);
+        
+        // ИСПРАВЛЕНИЕ: Правильно вычисляем вертикальную позицию
+        // Определяем к какой строке должен привязаться блок
         var rowIndex = Math.round((top - headerHeight - padTop) / (gridCellHeight + borderWidth));
+        rowIndex = Math.max(0, rowIndex); // не может быть отрицательным
+        
+        // Вычисляем точную позицию строки БЕЗ компенсации
         var snappedTop = headerHeight + padTop + (rowIndex * (gridCellHeight + borderWidth));
         
         // Обновляем атрибуты блока
@@ -822,12 +827,12 @@ var GridSnapService = (function() {
         
         return leftOffset;
     }
-    
-    function updateBlockAttributes(block, day, colIndex, snappedTop) {
+      function updateBlockAttributes(block, day, colIndex, snappedTop) {
         block.setAttribute('data-day', day);
         block.setAttribute('data-col-index', colIndex);
-        block.setAttribute('data-compensated', 'false');
-        block.setAttribute('data-original-top', snappedTop);
+        
+        // НЕ устанавливаем data-original-top и data-compensated здесь!
+        // Это будет сделано правильно в BlockDropService на основе фактической позиции
         
         // Обновляем класс дня
         block.className = block.className.replace(/activity-day-\w+/, 'activity-day-' + day);
@@ -909,15 +914,17 @@ var BlockDropService = (function() {
         var headerHeight = table.querySelector('thead').getBoundingClientRect().height;
         var currentTop = parseFloat(block.style.top);
         
-        // Определяем номер строки для текущей позиции
-        var rowIndex = Math.floor((currentTop - headerHeight) / (gridCellHeight + borderWidth));
+        // ВОЗВРАЩАЕМ ПРОСТУЮ ЛОГИКУ СТАРОГО КОДА:
+        // Определяем номер строки напрямую по текущей позиции блока
+        var rowIndex = Math.round((currentTop - headerHeight) / (gridCellHeight + borderWidth));
+        rowIndex = Math.max(0, rowIndex); // не может быть отрицательным
         
-        // Вычисляем текущую компенсацию, которая была применена
+        // Вычисляем компенсацию для найденной строки (как в старом коде)
         var factor = window.compensationFactor || 0.4;
         var exponent = window.compensationExponent || 1.02;
         var compensation = Math.pow(rowIndex, exponent) * factor;
         
-        // Определяем истинное положение без компенсации для новой позиции
+        // ПРАВИЛЬНО восстанавливаем исходную позицию (как в старом коде)
         var originalTopForNewPosition = currentTop + compensation;
         
         // Обновляем атрибуты блока
@@ -996,8 +1003,7 @@ var BlockDropService = (function() {
         
         return newColIndex;
     }
-    
-    function fallbackProcessBlockDrop(block) {
+      function fallbackProcessBlockDrop(block) {
         var container = block.parentElement;
         var table = container.querySelector('.schedule-grid');
         
@@ -1012,7 +1018,7 @@ var BlockDropService = (function() {
         
         var newColIndex = calculateColumnIndexFromPosition(offsetWithinContainer, chosenDay, table);
         
-        // Обновляем данные блока
+        // ИСПРАВЛЕНИЕ: Используем исправленную функцию обновления данных блока
         updateBlockPositionData(block, chosenDay.day, newColIndex, table);
         
         // Обновляем позиции всех блоков
@@ -1724,29 +1730,26 @@ function legacyProcessBlockDrop(block) {
 
 // Вспомогательная функция для обновления атрибутов блока
 function updateBlockDropAttributes(block, day, colIndex, table) {
-    block.setAttribute('data-col-index', colIndex);
-    block.setAttribute('data-day', day);
-    
-    // КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: сохраняем новое исходное положение блока
-    // после перетаскивания (но без учета компенсации)
     var headerHeight = table.querySelector('thead').getBoundingClientRect().height;
     var currentTop = parseFloat(block.style.top);
     
-    // Определяем номер строки для текущей позиции
-    var rowIndex = Math.floor((currentTop - headerHeight) / (gridCellHeight + borderWidth));
+    // ВОЗВРАЩАЕМ ПРОСТУЮ ЛОГИКУ СТАРОГО КОДА:
+    // Определяем номер строки напрямую по текущей позиции блока
+    var rowIndex = Math.round((currentTop - headerHeight) / (gridCellHeight + borderWidth));
+    rowIndex = Math.max(0, rowIndex); // не может быть отрицательным
     
-    // Вычисляем текущую компенсацию, которая была применена
+    // Вычисляем компенсацию для найденной строки (как в старом коде)
     var factor = window.compensationFactor || 0.4;
     var exponent = window.compensationExponent || 1.02;
     var compensation = Math.pow(rowIndex, exponent) * factor;
     
-    // Определяем истинное положение без компенсации для новой позиции
+    // ПРАВИЛЬНО восстанавливаем исходную позицию (как в старом коде)
     var originalTopForNewPosition = currentTop + compensation;
     
-    // Обновляем data-original-top с новым значением
+    // Обновляем атрибуты блока
+    block.setAttribute('data-col-index', colIndex);
+    block.setAttribute('data-day', day);
     block.setAttribute('data-original-top', originalTopForNewPosition);
-    
-    // Помечаем блок как требующий новой компенсации
     block.setAttribute('data-compensated', 'false');
     
     // Обновляем класс для соответствия дню
@@ -4812,7 +4815,7 @@ window.initDeleteBlocksObserver = initDeleteBlocksObserver;            // Ини
 <button id="saveIntermediate">Сохранить промежуточный результат</button>
 <button id="saveSchedule">Сохранить финальную версию</button>
 <button id="exportToExcel">Экспорт в Excel</button>
-<input type="hidden" id="csrf_token" value="2596169c-b717-419d-a146-662e6daacce3">
+<input type="hidden" id="csrf_token" value="87446c2b-0acf-49f1-af29-580dd280a53e">
 </div>
 <h1>Расписание занятий</h1>
 <h2>Здание: Villa</h2>

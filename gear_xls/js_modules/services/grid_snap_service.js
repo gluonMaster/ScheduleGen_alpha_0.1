@@ -55,7 +55,7 @@ var GridSnapService = (function() {
         
         return closestCell;
     }
-    
+
     function snapToClosestCell(closestCell, container, block) {
         var table = container.querySelector('.schedule-grid');
         var containerRect = container.getBoundingClientRect();
@@ -83,15 +83,15 @@ var GridSnapService = (function() {
         
         // Устанавливаем точное позиционирование
         var snappedLeft = headerLeftPosition;
+        // Вычисляем позицию для привязки к ячейке во время перетаскивания
         var snappedTop = headerHeight + padTop + (rowIndex * (gridCellHeight + borderWidth));
         
-        // Обновляем data-аттрибуты блока
+        // Обновляем день и колонку для текущего перетаскивания
         block.setAttribute('data-day', day);
         block.setAttribute('data-col-index', colIndex);
-        block.setAttribute('data-compensated', 'false');
         
-        // Сохраняем исходное положение блока без компенсации
-        block.setAttribute('data-original-top', snappedTop);
+        // НЕ устанавливаем data-original-top и data-compensated здесь!
+        // Это будет сделано правильно в BlockDropService на основе фактической позиции
         
         // Обновляем класс для соответствия новому дню
         block.className = block.className.replace(/activity-day-\w+/, 'activity-day-' + day);
@@ -123,10 +123,15 @@ var GridSnapService = (function() {
         
         // Вычисляем индекс столбца в рамках выбранного дня
         var newColIndex = calculateColumnIndex(offsetWithinContainer, chosenDay, table);
-        
-        // Рассчитываем позиции
+          // Рассчитываем позиции
         var snappedLeft = calculateLeftPosition(timeCellWidth, padLeft, chosenDay, newColIndex, table);
+        
+        // ИСПРАВЛЕНИЕ: Правильно вычисляем вертикальную позицию
+        // Определяем к какой строке должен привязаться блок
         var rowIndex = Math.round((top - headerHeight - padTop) / (gridCellHeight + borderWidth));
+        rowIndex = Math.max(0, rowIndex); // не может быть отрицательным
+        
+        // Вычисляем точную позицию строки БЕЗ компенсации
         var snappedTop = headerHeight + padTop + (rowIndex * (gridCellHeight + borderWidth));
         
         // Обновляем атрибуты блока
@@ -220,12 +225,12 @@ var GridSnapService = (function() {
         
         return leftOffset;
     }
-    
-    function updateBlockAttributes(block, day, colIndex, snappedTop) {
+      function updateBlockAttributes(block, day, colIndex, snappedTop) {
         block.setAttribute('data-day', day);
         block.setAttribute('data-col-index', colIndex);
-        block.setAttribute('data-compensated', 'false');
-        block.setAttribute('data-original-top', snappedTop);
+        
+        // НЕ устанавливаем data-original-top и data-compensated здесь!
+        // Это будет сделано правильно в BlockDropService на основе фактической позиции
         
         // Обновляем класс дня
         block.className = block.className.replace(/activity-day-\w+/, 'activity-day-' + day);
