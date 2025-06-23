@@ -9,74 +9,88 @@ function initDeleteBlocks() {
 
 // Функция для добавления кнопки удаления блоков в интерфейс
 function addDeleteBlockButton() {
-    // Создаем кнопку для включения режима удаления
-    var deleteButton = document.createElement('button');
-    deleteButton.id = 'delete-block-button';
-    deleteButton.innerHTML = '🗑️';
-    deleteButton.className = 'delete-block-button';
-    deleteButton.title = 'Режим удаления блоков';
+    var deleteButton = document.getElementById('delete-block-button');
     
-    // Находим блок с липкими кнопками
-    var stickyButtons = document.querySelector('.sticky-buttons');
-    if (stickyButtons) {
-        // Добавляем кнопку в блок sticky-buttons
-        stickyButtons.appendChild(deleteButton);
-    } else {
-        console.warn('Не найден блок .sticky-buttons для добавления кнопки удаления');
-        return;
+    // Если кнопка не существует, создаем её
+    if (!deleteButton) {
+        // Создаем кнопку для включения режима удаления
+        deleteButton = document.createElement('button');
+        deleteButton.id = 'delete-block-button';
+        deleteButton.innerHTML = '🗑️';
+        deleteButton.className = 'delete-block-button';
+        deleteButton.title = 'Режим удаления блоков';
+        
+        // Находим блок с липкими кнопками
+        var stickyButtons = document.querySelector('.sticky-buttons');
+        if (stickyButtons) {
+            // Добавляем кнопку в блок sticky-buttons
+            stickyButtons.appendChild(deleteButton);
+        } else {
+            console.warn('Не найден блок .sticky-buttons для добавления кнопки удаления');
+            return;
+        }
+        
+        // Добавляем стили для кнопки удаления и режима удаления (только при создании кнопки)
+        var style = document.createElement('style');
+        style.textContent = `
+            .delete-block-button {
+                padding: 8px 16px;
+                background-color: #f44336;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: bold;
+                margin: 5px;
+                transition: background-color 0.3s;
+            }
+            .delete-block-button:hover {
+                background-color: #d32f2f;
+            }
+            .delete-block-button.active {
+                background-color: #d32f2f;
+                box-shadow: 0 0 8px rgba(255, 0, 0, 0.5);
+            }
+            .delete-mode .activity-block {
+                cursor: pointer;
+                opacity: 0.8;
+                transition: all 0.3s ease;
+            }
+            .delete-mode .activity-block:hover {
+                box-shadow: 0 0 10px rgba(255, 0, 0, 0.7);
+                opacity: 1;
+            }
+            .delete-mode-indicator {
+                position: fixed;
+                top: 50px;
+                left: 50%;
+                transform: translateX(-50%);
+                background-color: rgba(255, 0, 0, 0.8);
+                color: white;
+                padding: 10px 20px;
+                border-radius: 4px;
+                font-weight: bold;
+                z-index: 9999;
+                display: none;
+            }
+        `;
+        document.head.appendChild(style);
     }
     
-    // Добавляем стили для кнопки удаления и режима удаления
-    var style = document.createElement('style');
-    style.textContent = `
-        .delete-block-button {
-            padding: 8px 16px;
-            background-color: #f44336;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            margin: 5px;
-            transition: background-color 0.3s;
-        }
-        .delete-block-button:hover {
-            background-color: #d32f2f;
-        }
-        .delete-block-button.active {
-            background-color: #d32f2f;
-            box-shadow: 0 0 8px rgba(255, 0, 0, 0.5);
-        }
-        .delete-mode .activity-block {
-            cursor: pointer;
-            opacity: 0.8;
-            transition: all 0.3s ease;
-        }
-        .delete-mode .activity-block:hover {
-            box-shadow: 0 0 10px rgba(255, 0, 0, 0.7);
-            opacity: 1;
-        }
-        .delete-mode-indicator {
-            position: fixed;
-            top: 50px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: rgba(255, 0, 0, 0.8);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 4px;
-            font-weight: bold;
-            z-index: 9999;
-            display: none;
-        }
-    `;
-    document.head.appendChild(style);
+    // Проверяем, есть ли уже индикатор режима удаления
+    var deleteIndicator = document.querySelector('.delete-mode-indicator');
+    if (!deleteIndicator) {
+        // Создаем индикатор режима удаления
+        deleteIndicator = document.createElement('div');
+        deleteIndicator.className = 'delete-mode-indicator';
+        deleteIndicator.textContent = 'РЕЖИМ УДАЛЕНИЯ АКТИВЕН';
+        document.body.appendChild(deleteIndicator);
+    }
     
-    // Создаем индикатор режима удаления
-    var deleteIndicator = document.createElement('div');
-    deleteIndicator.className = 'delete-mode-indicator';
-    deleteIndicator.textContent = 'РЕЖИМ УДАЛЕНИЯ АКТИВЕН';
-    document.body.appendChild(deleteIndicator);
+    // Очищаем старые обработчики событий (если есть)
+    var oldDeleteButton = deleteButton.cloneNode(true);
+    deleteButton.parentNode.replaceChild(oldDeleteButton, deleteButton);
+    deleteButton = oldDeleteButton;
     
     // Переменная для отслеживания состояния режима удаления
     var deleteMode = false;

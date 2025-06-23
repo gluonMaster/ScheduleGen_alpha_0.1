@@ -1949,88 +1949,91 @@ function initCompensationSettings() {
     window.previousCompensationFactor = settings.compensationFactor;
     window.previousCompensationExponent = settings.compensationExponent;
     
-    // Создаем HTML панели настроек
-    var settingsHTML = `
-        <div class="settings-panel">
-            <div class="settings-toggle">⚙️</div>
-            <div class="settings-content">
-                <h3>Настройки отображения</h3>
-                <div class="setting-row">
-                    <label for="comp-factor">Коэффициент компенсации: <span id="comp-factor-value">${settings.compensationFactor}</span></label>
-                    <input type="range" id="comp-factor" min="0" max="1" step="0.05" value="${settings.compensationFactor}">
-                </div>
-                <div class="setting-row">
-                    <label for="comp-exponent">Показатель нелинейности: <span id="comp-exponent-value">${settings.compensationExponent}</span></label>
-                    <input type="range" id="comp-exponent" min="0.8" max="1.5" step="0.01" value="${settings.compensationExponent}">
-                </div>
-                <div class="setting-buttons">
-                    <button id="apply-settings">Применить</button>
-                    <button id="reset-settings">Сбросить</button>
-                </div>
-                <div class="settings-info">
-                    Настройки помогают корректно отображать блоки в вашем браузере.
-                    <br>Изменяйте значения и нажимайте "Применить" для проверки.
+    // Проверяем, существует ли уже панель настроек
+    var existingPanel = document.querySelector('.settings-panel');
+    
+    if (!existingPanel) {
+        // Создаем HTML панели настроек только если её нет
+        var settingsHTML = `
+            <div class="settings-panel">
+                <div class="settings-toggle">⚙️</div>
+                <div class="settings-content">
+                    <h3>Настройки отображения</h3>
+                    <div class="setting-row">
+                        <label for="comp-factor">Коэффициент компенсации: <span id="comp-factor-value">${settings.compensationFactor}</span></label>
+                        <input type="range" id="comp-factor" min="0" max="1" step="0.05" value="${settings.compensationFactor}">
+                    </div>
+                    <div class="setting-row">
+                        <label for="comp-exponent">Показатель нелинейности: <span id="comp-exponent-value">${settings.compensationExponent}</span></label>
+                        <input type="range" id="comp-exponent" min="0.8" max="1.5" step="0.01" value="${settings.compensationExponent}">
+                    </div>
+                    <div class="setting-buttons">
+                        <button id="apply-settings">Применить</button>
+                        <button id="reset-settings">Сбросить</button>
+                    </div>
+                    <div class="settings-info">
+                        Настройки помогают корректно отображать блоки в вашем браузере.
+                        <br>Изменяйте значения и нажимайте "Применить" для проверки.
+                    </div>
                 </div>
             </div>
-        </div>
-    `;
-    
-    // Создаем и добавляем стили
-    var styleElement = document.createElement('style');
-    styleElement.textContent = `
-        .settings-panel {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 999;
-            font-family: Arial, sans-serif;
-        }
-        .settings-toggle {
-            width: 40px;
-            height: 40px;
-            background-color: white;
-            border-radius: 50%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            cursor: pointer;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            font-size: 20px;
-        }
-        .settings-content {
-            position: absolute;
-            bottom: 50px;
-            right: 0;
-            width: 300px;
-            background-color: white;
-            border-radius: 8px;
-            padding: 15px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            display: none;
-        }
-        .settings-content h3 {
-            margin-top: 0;
-            margin-bottom: 15px;
-            font-size: 16px;
-            color: #333;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 8px;
-        }
-        .setting-row {
-            margin-bottom: 15px;
-        }
-        .setting-row label {
-            display: block;
-            margin-bottom: 5px;
-            font-size: 14px;
-        }
-        .setting-row input {
-            width: 100%;
-        }
-        .setting-buttons {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 15px;
+        `;
+        
+        // Создаем и добавляем стили (только при создании новой панели)
+        var styleElement = document.createElement('style');
+        styleElement.textContent = `
+            .settings-panel {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                z-index: 999;
+                font-family: Arial, sans-serif;
+            }
+            .settings-toggle {
+                width: 40px;
+                height: 40px;
+                background-color: white;
+                border-radius: 50%;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                cursor: pointer;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+                font-size: 20px;
+            }
+            .settings-content {
+                position: absolute;
+                bottom: 50px;
+                right: 0;
+                width: 300px;
+                background-color: white;
+                border-radius: 8px;
+                padding: 15px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+                display: none;
+            }
+            .settings-content h3 {
+                margin-top: 0;
+                margin-bottom: 15px;
+                font-size: 16px;
+                color: #333;
+                border-bottom: 1px solid #eee;
+                padding-bottom: 8px;
+            }
+            .setting-row {
+                margin-bottom: 15px;
+            }
+            .setting-row label {
+                display: block;
+                margin-bottom: 5px;
+                font-size: 14px;
+            }
+            .setting-row input {
+                width: 100%;
+            }
+            .setting-buttons {
+                display: flex;
+                margin-top: 15px;
         }
         .setting-buttons button {
             padding: 8px 12px;
@@ -2058,15 +2061,16 @@ function initCompensationSettings() {
         .settings-open .settings-content {
             display: block;
         }
-    `;
-    document.head.appendChild(styleElement);
+        `;
+        document.head.appendChild(styleElement);
+        
+        // Создаем панель настроек (только если её нет)
+        var settingsElement = document.createElement('div');
+        settingsElement.innerHTML = settingsHTML;
+        document.body.appendChild(settingsElement);
+    }
     
-    // Создаем панель настроек
-    var settingsElement = document.createElement('div');
-    settingsElement.innerHTML = settingsHTML;
-    document.body.appendChild(settingsElement);
-    
-    // Получаем элементы
+    // Получаем элементы (независимо от того, создали мы их или они уже существовали)
     var settingsPanel = document.querySelector('.settings-panel');
     var settingsToggle = document.querySelector('.settings-toggle');
     var compFactorInput = document.getElementById('comp-factor');
@@ -2076,46 +2080,93 @@ function initCompensationSettings() {
     var applyButton = document.getElementById('apply-settings');
     var resetButton = document.getElementById('reset-settings');
     
-    // Обработчики событий
-    settingsToggle.addEventListener('click', function() {
-        settingsPanel.classList.toggle('settings-open');
-    });
+    // Обновляем значения в уже существующих элементах
+    if (compFactorInput) compFactorInput.value = settings.compensationFactor;
+    if (compExponentInput) compExponentInput.value = settings.compensationExponent;
+    if (compFactorValue) compFactorValue.textContent = settings.compensationFactor;
+    if (compExponentValue) compExponentValue.textContent = settings.compensationExponent;
     
-    compFactorInput.addEventListener('input', function() {
-        compFactorValue.textContent = this.value;
-    });
+    // Очищаем старые обработчики событий путем клонирования элементов
+    if (settingsToggle) {
+        var newSettingsToggle = settingsToggle.cloneNode(true);
+        settingsToggle.parentNode.replaceChild(newSettingsToggle, settingsToggle);
+        settingsToggle = newSettingsToggle;
+    }
     
-    compExponentInput.addEventListener('input', function() {
-        compExponentValue.textContent = this.value;
-    });
+    if (applyButton) {
+        var newApplyButton = applyButton.cloneNode(true);
+        applyButton.parentNode.replaceChild(newApplyButton, applyButton);
+        applyButton = newApplyButton;
+    }
     
-    applyButton.addEventListener('click', applyCompensationSettings);
+    if (resetButton) {
+        var newResetButton = resetButton.cloneNode(true);
+        resetButton.parentNode.replaceChild(newResetButton, resetButton);
+        resetButton = newResetButton;
+    }
     
-    resetButton.addEventListener('click', function() {
-        // Сбрасываем к значениям по умолчанию
-        compFactorInput.value = defaultSettings.compensationFactor;
-        compExponentInput.value = defaultSettings.compensationExponent;
-        compFactorValue.textContent = defaultSettings.compensationFactor;
-        compExponentValue.textContent = defaultSettings.compensationExponent;
-        
-        // Сохраняем предыдущие значения перед обновлением
-        window.previousCompensationFactor = window.compensationFactor;
-        window.previousCompensationExponent = window.compensationExponent;
-        
-        // Применяем значения по умолчанию
-        window.compensationFactor = defaultSettings.compensationFactor;
-        window.compensationExponent = defaultSettings.compensationExponent;
-        
-        // Сохраняем настройки по умолчанию
-        saveSettings(defaultSettings);
-        
-        // Обновляем позиции всех блоков
-        resetCompensation();
-        updateActivityPositions();
-        
-        // Уведомляем пользователя
-        alert('Настройки сброшены к значениям по умолчанию!');
-    });
+    if (compFactorInput) {
+        var newCompFactorInput = compFactorInput.cloneNode(true);
+        compFactorInput.parentNode.replaceChild(newCompFactorInput, compFactorInput);
+        compFactorInput = newCompFactorInput;
+    }
+    
+    if (compExponentInput) {
+        var newCompExponentInput = compExponentInput.cloneNode(true);
+        compExponentInput.parentNode.replaceChild(newCompExponentInput, compExponentInput);
+        compExponentInput = newCompExponentInput;
+    }
+    
+    // Привязываем обработчики событий заново
+    if (settingsToggle && settingsPanel) {
+        settingsToggle.addEventListener('click', function() {
+            settingsPanel.classList.toggle('settings-open');
+        });
+    }
+    
+    if (compFactorInput && compFactorValue) {
+        compFactorInput.addEventListener('input', function() {
+            compFactorValue.textContent = this.value;
+        });
+    }
+    
+    if (compExponentInput && compExponentValue) {
+        compExponentInput.addEventListener('input', function() {
+            compExponentValue.textContent = this.value;
+        });
+    }
+    
+    if (applyButton) {
+        applyButton.addEventListener('click', applyCompensationSettings);
+    }
+    
+    if (resetButton) {
+        resetButton.addEventListener('click', function() {
+            // Сбрасываем к значениям по умолчанию
+            if (compFactorInput) compFactorInput.value = defaultSettings.compensationFactor;
+            if (compExponentInput) compExponentInput.value = defaultSettings.compensationExponent;
+            if (compFactorValue) compFactorValue.textContent = defaultSettings.compensationFactor;
+            if (compExponentValue) compExponentValue.textContent = defaultSettings.compensationExponent;
+            
+            // Сохраняем предыдущие значения перед обновлением
+            window.previousCompensationFactor = window.compensationFactor;
+            window.previousCompensationExponent = window.compensationExponent;
+            
+            // Применяем значения по умолчанию
+            window.compensationFactor = defaultSettings.compensationFactor;
+            window.compensationExponent = defaultSettings.compensationExponent;
+            
+            // Сохраняем настройки по умолчанию
+            saveSettings(defaultSettings);
+            
+            // Обновляем позиции всех блоков
+            resetCompensation();
+            updateActivityPositions();
+            
+            // Уведомляем пользователя
+            alert('Настройки сброшены к значениям по умолчанию!');
+        });
+    }
 }
             
             // Модуль для сохранения и экспорта расписания
@@ -3866,87 +3917,111 @@ function initAddBlocks() {
 
 // Функция для добавления кнопки создания нового блока
 function addCreateBlockButton() {
-    // Создаем кнопки
-    var createButton = document.createElement('button');
-    createButton.id = 'create-block-button';
-    createButton.innerHTML = '+';
-    createButton.className = 'create-block-button';
+    var createButton = document.getElementById('create-block-button');
+    var toggleModeButton = document.getElementById('toggle-add-mode');
     
-    var toggleModeButton = document.createElement('button');
-    toggleModeButton.id = 'toggle-add-mode';
-    toggleModeButton.innerHTML = '🔧';  // Символ гаечного ключа
-    toggleModeButton.className = 'toggle-add-mode-button';
-    
-    // Находим блок с липкими кнопками
-    var stickyButtons = document.querySelector('.sticky-buttons');
-    if (stickyButtons) {
-        // Добавляем кнопки в блок sticky-buttons
-        stickyButtons.appendChild(createButton);
-        stickyButtons.appendChild(toggleModeButton);
-    } else {
-        // Если не нашли блок sticky-buttons, создаем его
-        stickyButtons = document.createElement('div');
-        stickyButtons.className = 'sticky-buttons';
-        stickyButtons.appendChild(createButton);
-        stickyButtons.appendChild(toggleModeButton);
-        
-        // Добавляем перед первым контейнером расписания
-        var firstContainer = document.querySelector('.schedule-container');
-        if (firstContainer) {
-            firstContainer.parentNode.insertBefore(stickyButtons, firstContainer);
-        } else {
-            document.body.insertBefore(stickyButtons, document.body.firstChild);
+    // Если кнопки не существуют, создаем их
+    if (!createButton || !toggleModeButton) {
+        // Создаем кнопки только если их нет
+        if (!createButton) {
+            createButton = document.createElement('button');
+            createButton.id = 'create-block-button';
+            createButton.innerHTML = '+';
+            createButton.className = 'create-block-button';
         }
+        
+        if (!toggleModeButton) {
+            toggleModeButton = document.createElement('button');
+            toggleModeButton.id = 'toggle-add-mode';
+            toggleModeButton.innerHTML = '🔧';  // Символ гаечного ключа
+            toggleModeButton.className = 'toggle-add-mode-button';
+        }
+        
+        // Находим блок с липкими кнопками
+        var stickyButtons = document.querySelector('.sticky-buttons');
+        if (stickyButtons) {
+            // Добавляем кнопки в блок sticky-buttons только если их там нет
+            if (!createButton.parentNode) {
+                stickyButtons.appendChild(createButton);
+            }
+            if (!toggleModeButton.parentNode) {
+                stickyButtons.appendChild(toggleModeButton);
+            }
+        } else {
+            // Если не нашли блок sticky-buttons, создаем его
+            stickyButtons = document.createElement('div');
+            stickyButtons.className = 'sticky-buttons';
+            stickyButtons.appendChild(createButton);
+            stickyButtons.appendChild(toggleModeButton);
+            
+            // Добавляем перед первым контейнером расписания
+            var firstContainer = document.querySelector('.schedule-container');
+            if (firstContainer) {
+                firstContainer.parentNode.insertBefore(stickyButtons, firstContainer);
+            } else {
+                document.body.insertBefore(stickyButtons, document.body.firstChild);
+            }
+        }
+        
+        // Стили для кнопок (добавляем только при создании кнопок)
+        var style = document.createElement('style');
+        style.textContent = `
+            .create-block-button {
+                padding: 8px 16px;
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: bold;
+                margin: 5px;
+                transition: background-color 0.3s;
+            }
+            .create-block-button:hover {
+                background-color: #45a049;
+            }
+            .toggle-add-mode-button {
+                padding: 8px 16px;
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: bold;
+                margin: 5px;
+                transition: background-color 0.3s;
+            }
+            .toggle-add-mode-button.active {
+                background-color: #FF5722;
+            }
+            .toggle-add-mode-button:hover {
+                opacity: 0.9;
+            }
+            .cell-highlight {
+                background-color: rgba(76, 175, 80, 0.2) !important;
+                cursor: pointer !important;
+            }
+            .cell-highlight:hover {
+                background-color: rgba(76, 175, 80, 0.4) !important;
+            }
+        `;
+        document.head.appendChild(style);
     }
     
-    // Стили для кнопок
-    var style = document.createElement('style');
-    style.textContent = `
-        .create-block-button {
-            padding: 8px 16px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            margin: 5px;
-            transition: background-color 0.3s;
-        }
-        .create-block-button:hover {
-            background-color: #45a049;
-        }
-        .toggle-add-mode-button {
-            padding: 8px 16px;
-            background-color: #2196F3;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            margin: 5px;
-            transition: background-color 0.3s;
-        }
-        .toggle-add-mode-button.active {
-            background-color: #FF5722;
-        }
-        .toggle-add-mode-button:hover {
-            opacity: 0.9;
-        }
-        .cell-highlight {
-            background-color: rgba(76, 175, 80, 0.2) !important;
-            cursor: pointer !important;
-        }
-        .cell-highlight:hover {
-            background-color: rgba(76, 175, 80, 0.4) !important;
-        }
-    `;
-    document.head.appendChild(style);
+    // Очищаем старые обработчики событий
+    var newCreateButton = createButton.cloneNode(true);
+    var newToggleModeButton = toggleModeButton.cloneNode(true);
     
-    // Обработчик события для кнопки создания
+    createButton.parentNode.replaceChild(newCreateButton, createButton);
+    toggleModeButton.parentNode.replaceChild(newToggleModeButton, toggleModeButton);
+    
+    createButton = newCreateButton;
+    toggleModeButton = newToggleModeButton;
+    
+    // Обработчик события для кнопки создания (всегда привязываем заново)
     createButton.addEventListener('click', openCreateBlockDialog);
     
-    // Обработчик для режима добавления
+    // Обработчик для режима добавления (всегда привязываем заново)
     initQuickAddByClick(toggleModeButton);
     
     // Удаляем блок schedule-controls, если он существует
@@ -4309,74 +4384,88 @@ function initDeleteBlocks() {
 
 // Функция для добавления кнопки удаления блоков в интерфейс
 function addDeleteBlockButton() {
-    // Создаем кнопку для включения режима удаления
-    var deleteButton = document.createElement('button');
-    deleteButton.id = 'delete-block-button';
-    deleteButton.innerHTML = '🗑️';
-    deleteButton.className = 'delete-block-button';
-    deleteButton.title = 'Режим удаления блоков';
+    var deleteButton = document.getElementById('delete-block-button');
     
-    // Находим блок с липкими кнопками
-    var stickyButtons = document.querySelector('.sticky-buttons');
-    if (stickyButtons) {
-        // Добавляем кнопку в блок sticky-buttons
-        stickyButtons.appendChild(deleteButton);
-    } else {
-        console.warn('Не найден блок .sticky-buttons для добавления кнопки удаления');
-        return;
+    // Если кнопка не существует, создаем её
+    if (!deleteButton) {
+        // Создаем кнопку для включения режима удаления
+        deleteButton = document.createElement('button');
+        deleteButton.id = 'delete-block-button';
+        deleteButton.innerHTML = '🗑️';
+        deleteButton.className = 'delete-block-button';
+        deleteButton.title = 'Режим удаления блоков';
+        
+        // Находим блок с липкими кнопками
+        var stickyButtons = document.querySelector('.sticky-buttons');
+        if (stickyButtons) {
+            // Добавляем кнопку в блок sticky-buttons
+            stickyButtons.appendChild(deleteButton);
+        } else {
+            console.warn('Не найден блок .sticky-buttons для добавления кнопки удаления');
+            return;
+        }
+        
+        // Добавляем стили для кнопки удаления и режима удаления (только при создании кнопки)
+        var style = document.createElement('style');
+        style.textContent = `
+            .delete-block-button {
+                padding: 8px 16px;
+                background-color: #f44336;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: bold;
+                margin: 5px;
+                transition: background-color 0.3s;
+            }
+            .delete-block-button:hover {
+                background-color: #d32f2f;
+            }
+            .delete-block-button.active {
+                background-color: #d32f2f;
+                box-shadow: 0 0 8px rgba(255, 0, 0, 0.5);
+            }
+            .delete-mode .activity-block {
+                cursor: pointer;
+                opacity: 0.8;
+                transition: all 0.3s ease;
+            }
+            .delete-mode .activity-block:hover {
+                box-shadow: 0 0 10px rgba(255, 0, 0, 0.7);
+                opacity: 1;
+            }
+            .delete-mode-indicator {
+                position: fixed;
+                top: 50px;
+                left: 50%;
+                transform: translateX(-50%);
+                background-color: rgba(255, 0, 0, 0.8);
+                color: white;
+                padding: 10px 20px;
+                border-radius: 4px;
+                font-weight: bold;
+                z-index: 9999;
+                display: none;
+            }
+        `;
+        document.head.appendChild(style);
     }
     
-    // Добавляем стили для кнопки удаления и режима удаления
-    var style = document.createElement('style');
-    style.textContent = `
-        .delete-block-button {
-            padding: 8px 16px;
-            background-color: #f44336;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            margin: 5px;
-            transition: background-color 0.3s;
-        }
-        .delete-block-button:hover {
-            background-color: #d32f2f;
-        }
-        .delete-block-button.active {
-            background-color: #d32f2f;
-            box-shadow: 0 0 8px rgba(255, 0, 0, 0.5);
-        }
-        .delete-mode .activity-block {
-            cursor: pointer;
-            opacity: 0.8;
-            transition: all 0.3s ease;
-        }
-        .delete-mode .activity-block:hover {
-            box-shadow: 0 0 10px rgba(255, 0, 0, 0.7);
-            opacity: 1;
-        }
-        .delete-mode-indicator {
-            position: fixed;
-            top: 50px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: rgba(255, 0, 0, 0.8);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 4px;
-            font-weight: bold;
-            z-index: 9999;
-            display: none;
-        }
-    `;
-    document.head.appendChild(style);
+    // Проверяем, есть ли уже индикатор режима удаления
+    var deleteIndicator = document.querySelector('.delete-mode-indicator');
+    if (!deleteIndicator) {
+        // Создаем индикатор режима удаления
+        deleteIndicator = document.createElement('div');
+        deleteIndicator.className = 'delete-mode-indicator';
+        deleteIndicator.textContent = 'РЕЖИМ УДАЛЕНИЯ АКТИВЕН';
+        document.body.appendChild(deleteIndicator);
+    }
     
-    // Создаем индикатор режима удаления
-    var deleteIndicator = document.createElement('div');
-    deleteIndicator.className = 'delete-mode-indicator';
-    deleteIndicator.textContent = 'РЕЖИМ УДАЛЕНИЯ АКТИВЕН';
-    document.body.appendChild(deleteIndicator);
+    // Очищаем старые обработчики событий (если есть)
+    var oldDeleteButton = deleteButton.cloneNode(true);
+    deleteButton.parentNode.replaceChild(oldDeleteButton, deleteButton);
+    deleteButton = oldDeleteButton;
     
     // Переменная для отслеживания состояния режима удаления
     var deleteMode = false;
@@ -4815,7 +4904,7 @@ window.initDeleteBlocksObserver = initDeleteBlocksObserver;            // Ини
 <button id="saveIntermediate">Сохранить промежуточный результат</button>
 <button id="saveSchedule">Сохранить финальную версию</button>
 <button id="exportToExcel">Экспорт в Excel</button>
-<input type="hidden" id="csrf_token" value="87446c2b-0acf-49f1-af29-580dd280a53e">
+<input type="hidden" id="csrf_token" value="5b74dccf-143d-4401-b846-d1fb19250e81">
 </div>
 <h1>Расписание занятий</h1>
 <h2>Здание: Villa</h2>
