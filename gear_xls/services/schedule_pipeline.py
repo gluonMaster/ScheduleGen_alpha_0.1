@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Сервис для обработки пайплайна создания расписания.
-Инкапсулирует общую логику преобразования Excel → HTML + PDF.
+Инкапсулирует общую логику преобразования Excel → HTML.
 """
 
 import os
@@ -13,7 +13,7 @@ from typing import Dict, Any, Optional
 from excel_parser import parse_schedule
 from schedule_structure import build_schedule_structure
 from html_generator import generate_html_schedule
-from pdf_generator import generate_pdf_schedule
+
 
 # Настройка логирования
 logging.basicConfig(
@@ -32,7 +32,7 @@ class SchedulePipeline:
     """
     Сервис для координации процесса создания расписания из Excel файла.
     
-    Инкапсулирует весь пайплайн: парсинг → структурирование → генерация HTML и PDF
+    Инкапсулирует весь пайплайн: парсинг → структурирование → генерация HTML
     """
     
     def __init__(self, time_interval: int = 5, border_width: float = 0.5):
@@ -47,21 +47,20 @@ class SchedulePipeline:
         self.border_width = border_width
         logger.info(f"Инициализирован SchedulePipeline: interval={time_interval}мин, border={border_width}px")
     
-    def process_excel_to_outputs(self, excel_file_path: str, output_dirs: Dict[str, str]) -> Dict[str, Any]:
+    def process_excel_to_outputs(self, excel_file_path: str,        output_dirs: Dict[str, str]) -> Dict[str, Any]:
         """
-        Обрабатывает Excel файл и создает HTML и PDF выходные файлы.
+        Обрабатывает Excel файл и создает HTML выходной файл.
         
         Args:
             excel_file_path (str): Путь к исходному Excel файлу
             output_dirs (Dict[str, str]): Словарь с путями к директориям вывода
-                                        (должен содержать ключи 'html' и 'pdf')
+                                        (должен содержать ключ 'html')
         
         Returns:
             Dict[str, Any]: Словарь с результатами обработки:
                 - html_file: путь к созданному HTML файлу
                 - buildings: структура расписания по зданиям
                 - activities_count: количество обработанных занятий
-                - pdf_files: список созданных PDF файлов
         
         Raises:
             SchedulePipelineError: При ошибках на любом этапе обработки
@@ -71,9 +70,8 @@ class SchedulePipeline:
         # Проверяем существование входного файла
         if not os.path.exists(excel_file_path):
             raise SchedulePipelineError(f"Excel файл не найден: {excel_file_path}")
-        
-        # Проверяем наличие выходных директорий
-        required_dirs = ['html', 'pdf']
+          # Проверяем наличие выходных директорий
+        required_dirs = ['html']
         for dir_key in required_dirs:
             if dir_key not in output_dirs:
                 raise SchedulePipelineError(f"Не указана директория для {dir_key}")
@@ -111,39 +109,19 @@ class SchedulePipeline:
             )
             
             if not os.path.exists(html_file):
-                raise SchedulePipelineError(f"HTML файл не был создан: {html_file}")
-            
+                raise SchedulePipelineError(f"HTML файл не был создан: {html_file}")            
             logger.info(f"HTML файл создан: {html_file}")
-            
-            # Этап 4: Генерация PDF
-            logger.info("Этап 4: Генерация PDF файлов...")
-            generate_pdf_schedule(
-                buildings, 
-                output_dir=output_dirs["pdf"], 
-                time_interval=self.time_interval
-            )
-            
-            # Проверяем созданные PDF файлы
-            pdf_files = []
-            for building in buildings.keys():
-                if not building.startswith('_'):
-                    pdf_file = os.path.join(output_dirs["pdf"], f"{building}.pdf")
-                    if os.path.exists(pdf_file):
-                        pdf_files.append(pdf_file)
-            
-            logger.info(f"Создано {len(pdf_files)} PDF файлов")
             
             # Формируем результат
             result = {
                 'html_file': html_file,
                 'buildings': buildings,
                 'activities_count': activities_count,
-                'pdf_files': pdf_files,
                 'buildings_count': buildings_count
             }
             
             logger.info(f"Обработка завершена успешно. Обработано {activities_count} занятий, "
-                       f"создано {buildings_count} зданий, {len(pdf_files)} PDF файлов")
+                       f"создано {buildings_count} зданий")
             
             return result
             

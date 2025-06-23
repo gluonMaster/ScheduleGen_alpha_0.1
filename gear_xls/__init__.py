@@ -8,7 +8,6 @@
 - html_generator - модуль для создания HTML-версии расписания
 - html_styles - модуль с CSS-стилями для HTML-версии
 - html_javascript - модуль с JavaScript-кодом для HTML-версии
-- pdf_generator - модуль для генерации PDF-файлов
 - utils - вспомогательные функции
 """
 

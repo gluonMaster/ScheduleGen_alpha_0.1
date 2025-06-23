@@ -41,11 +41,9 @@ def setup_environment():
     try:
         # Определяем текущую директорию
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        # Создаем директории для выходных файлов
+          # Создаем директории для выходных файлов
         output_dirs = [
             os.path.join(current_dir, "html_output"),
-            os.path.join(current_dir, "pdfs"),
             os.path.join(current_dir, "excel_exports"),
             os.path.join(current_dir, "js_modules")
         ]
@@ -113,14 +111,13 @@ def start_flask_server_subprocess():
         return None
 
 
-def run_full_pipeline(excel_file_path: str, 
-                     time_interval: int = DEFAULT_TIME_INTERVAL,
+def run_full_pipeline(excel_file_path: str,                     time_interval: int = DEFAULT_TIME_INTERVAL,
                      border_width: float = DEFAULT_BORDER_WIDTH,
                      open_browser: bool = True,
                      start_server: bool = True) -> bool:
     """
     Запускает полный процесс обработки Excel-файла:
-    1. Парсинг Excel и генерация HTML/PDF
+    1. Парсинг Excel и генерация HTML
     2. Запуск Flask-сервера для обработки запросов экспорта (опционально)
     3. Открытие HTML-версии в браузере (опционально)
     
@@ -161,17 +158,12 @@ def run_full_pipeline(excel_file_path: str,
         # Выполняем основную обработку
         logger.info("Запуск обработки через SchedulePipeline...")
         result = pipeline.process_excel_to_outputs(excel_file_path, output_dirs)
-        
-        # Логируем подробные результаты
+          # Логируем подробные результаты
         logger.info("Обработка завершена успешно:")
         logger.info(f"  - Входной файл: {excel_file_path}")
         logger.info(f"  - Занятий обработано: {result['activities_count']}")
         logger.info(f"  - Зданий создано: {result['buildings_count']}")
         logger.info(f"  - HTML файл: {result['html_file']}")
-        logger.info(f"  - PDF файлов создано: {len(result['pdf_files'])}")
-        
-        for pdf_file in result['pdf_files']:
-            logger.info(f"    • {pdf_file}")
         
         # Запускаем Flask-сервер для обработки запросов экспорта (если требуется)
         server_process = None

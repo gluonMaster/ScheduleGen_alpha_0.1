@@ -62,13 +62,11 @@ def run_script():
     try:
         # Выполняем основную обработку через пайплайн
         result = pipeline.process_excel_to_outputs(selected_file, output_dirs)
-        
-        # Логируем результат
+          # Логируем результат
         print(f"Обработка завершена:")
         print(f"  - Занятий обработано: {result['activities_count']}")
         print(f"  - Зданий создано: {result['buildings_count']}")
         print(f"  - HTML файл: {result['html_file']}")
-        print(f"  - PDF файлов: {len(result['pdf_files'])}")
         
         # Создаем директорию для экспорта Excel-файлов, если её нет
         excel_export_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "excel_exports")
@@ -80,15 +78,13 @@ def run_script():
         
         # Автоматически открываем веб-браузер с HTML-расписанием
         # webbrowser.open(f'file://{os.path.abspath(result["html_file"])}')
-        
-        # Показываем сообщение об успешном завершении
+          # Показываем сообщение об успешном завершении
         messagebox.showinfo(
             "Готово!", 
-            f"Веб-версия и PDF файлы успешно созданы.\n\n"
+            f"Веб-версия успешно создана.\n\n"
             f"Обработано занятий: {result['activities_count']}\n"
             f"Создано зданий: {result['buildings_count']}\n"
-            f"HTML: {os.path.abspath(os.path.dirname(result['html_file']))}\n"
-            f"PDF: {len(result['pdf_files'])} файл(ов)\n\n"
+            f"HTML: {os.path.abspath(os.path.dirname(result['html_file']))}\n\n"
             f"Расписание готово к использованию.\n"
             f"Для экспорта в Excel используйте кнопку 'Экспорт в Excel' в веб-интерфейсе."
         )

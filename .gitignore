@@ -1,0 +1,6 @@
+gear_xls/__pycache__/excel_exporter.cpython-313.pyc
+*.pyc
+__pycache__/
+**/__pycache__/
+**/*.py[cod]
+*$py.class

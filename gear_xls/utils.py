@@ -25,8 +25,7 @@ def create_output_directories():
         dict: Словарь с путями к директориям
     """
     output_dirs = {
-        "html": "html_output",
-        "pdf": "pdfs"
+        "html": "html_output"
     }
     
     for dir_name, dir_path in output_dirs.items():
