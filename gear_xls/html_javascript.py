@@ -81,7 +81,8 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
         'block_utils',
         'editing_update',  # Обновленный модуль редактирования с поддержкой зданий
         'delete_blocks',     # Модуль для удаления блоков
-        'delete_blocks_observer'  # Наблюдатель за новыми блоками для режима удаления
+        'delete_blocks_observer',  # Наблюдатель за новыми блоками для режима удаления
+        'app_initialization'  # Модуль инициализации приложения
     ]
     
     # Загружаем содержимое модулей
@@ -170,78 +171,14 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
             // Подключение модулей для удаления блоков
             {js_modules.get('delete_blocks', '')}
             
-            {js_modules.get('delete_blocks_observer', '')}            // Инициализация элементов только если страница не является финальной
-            if (!document.body.classList.contains('static-schedule')) {{
-                // Инициализация новых сервисов
-                if (typeof DragDropService !== 'undefined') {{
-                    console.log('Initializing DragDropService...');
-                }}
-                if (typeof GridSnapService !== 'undefined') {{
-                    console.log('GridSnapService loaded successfully');
-                }}
-                if (typeof BlockDropService !== 'undefined') {{
-                    console.log('BlockDropService loaded successfully');
-                }}
-                
-                initDragAndDrop();
-                initBlockEditing();
-                initCompensationSettings();
-                initSaveExport();
-                initAddBlocks();  // Инициализация нового модуля
-                initDeleteBlocks(); // Инициализация модуля удаления блоков
-                initDeleteBlocksObserver(); // Инициализация наблюдателя за блоками
-                initAdaptiveTextColor(); // Инициализация адаптивного цвета текста
-                initExcelExport(); // Инициализация функции экспорта в Excel
-            }}
+            {js_modules.get('delete_blocks_observer', '')}
             
-            // Первоначальное позиционирование
-            updateActivityPositions();
-              // Инициализация всех сервисов
-            if (typeof BuildingService !== 'undefined') {{
-                console.log('BuildingService initialized successfully');
-                console.log('Available buildings:', BuildingService.getAvailableBuildings());
-            }} else {{
-                console.error('BuildingService failed to load');
-            }}
+            // Подключение модуля инициализации приложения
+            {js_modules.get('app_initialization', '')}
             
-            // Проверяем инициализацию новых drag&drop сервисов
-            if (typeof DragDropService !== 'undefined') {{
-                console.log('DragDropService initialized successfully');
-            }} else {{
-                console.warn('DragDropService not available, using legacy implementation');
-            }}
-            
-            if (typeof GridSnapService !== 'undefined') {{
-                console.log('GridSnapService initialized successfully');  
-            }} else {{
-                console.warn('GridSnapService not available, using legacy implementation');
-            }}
-            
-            if (typeof BlockDropService !== 'undefined') {{
-                console.log('BlockDropService initialized successfully');
-            }} else {{
-                console.warn('BlockDropService not available, using legacy implementation');
-            }}
+            // Инициализация приложения
+            initializeApplication();
         }});
-        
-        // Функции для сохранения и загрузки настроек
-        function saveSettings(settings) {{
-            try {{
-                localStorage.setItem('scheduleCompensationSettings', JSON.stringify(settings));
-            }} catch (e) {{
-                console.error('Не удалось сохранить настройки:', e);
-            }}
-        }}
-        
-        function loadSettings() {{
-            try {{
-                var settings = localStorage.getItem('scheduleCompensationSettings');
-                return settings ? JSON.parse(settings) : null;
-            }} catch (e) {{
-                console.error('Не удалось загрузить настройки:', e);
-                return null;
-            }}
-        }}
     </script>"""
     
     return full_js

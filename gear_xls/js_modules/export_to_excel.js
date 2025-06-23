@@ -312,7 +312,12 @@ function initExcelExport() {
     // Находим кнопку экспорта
     var exportButton = document.getElementById('exportToExcel');
     if (exportButton) {
-        // Добавляем обработчик клика на существующую кнопку
+        // Очищаем старые обработчики событий путем клонирования элемента
+        var newExportButton = exportButton.cloneNode(true);
+        exportButton.parentNode.replaceChild(newExportButton, exportButton);
+        exportButton = newExportButton;
+        
+        // Добавляем обработчик клика на кнопку
         exportButton.addEventListener('click', function() {
             // Показываем диалог подтверждения
             showExportConfirmation(function(confirmed) {
