@@ -45,8 +45,8 @@ class UIBuilder:
         dir_label = ttk.Label(info_frame, text="Рабочий каталог: не выбран")
         dir_label.pack(anchor=tk.W, padx=10, pady=5)
         
-        file_label = ttk.Label(info_frame, text="Выбранный файл: не выбран")
-        file_label.pack(anchor=tk.W, padx=10, pady=5)
+        # Убираем метку для файла, так как выбор файла больше не используется
+        file_label = None
         
         return dir_label, file_label
     

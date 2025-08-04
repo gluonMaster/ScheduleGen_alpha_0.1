@@ -18,9 +18,13 @@ class ApplicationInterface:
         # Заголовок
         UIBuilder.create_title_label(main_frame)
         
+        # Инициализация сервисов (без logger пока)
+        self.process_manager = ProcessManager()
+        self.app_actions = AppActions(self.process_manager)  # Без log_callback
+        
         # Информационная панель
         info_frame = UIBuilder.create_info_frame(main_frame)
-        self.dir_label, self.file_label = UIBuilder.create_info_labels(info_frame)
+        self.dir_label, _ = UIBuilder.create_info_labels(info_frame)  # file_label больше не используется
         
         # Контейнер для кнопок
         buttons_frame = UIBuilder.create_buttons_frame(main_frame)
@@ -32,23 +36,27 @@ class ApplicationInterface:
         # Статус бар  
         status_bar = UIBuilder.create_status_bar(root)
         
-        # Инициализация сервисов
-        self.process_manager = ProcessManager()
+        # Теперь инициализируем logger и устанавливаем его в app_actions
         self.logger = Logger(log_text, status_bar, root)
-        self.app_actions = AppActions(self.process_manager, self.logger.log_action)
+        self.app_actions.set_log_callback(self.logger.log_action)
+        
+        # Обновляем информацию о каталоге
+        if self.app_actions.get_program_directory():
+            directory = self.app_actions.get_program_directory()
+            # Показываем только имя каталога, если путь слишком длинный
+            if len(directory) > 60:
+                display_dir = "..." + directory[-57:]
+            else:
+                display_dir = directory
+            self.dir_label.config(text=f"Рабочий каталог: {display_dir}")
+        else:
+            self.dir_label.config(text="⚠ Рабочий каталог: не определен автоматически")
         
         # Создание кнопок интерфейса
         self._create_buttons(buttons_frame)
     
     def _create_buttons(self, buttons_frame):
         """Создание всех кнопок интерфейса"""
-        
-        # Кнопка 1: Выбор рабочего каталога
-        UIBuilder.create_single_button(
-            buttons_frame, 
-            "1. Выбрать рабочий каталог", 
-            self._handle_select_directory
-        )
         
         # Кнопки 2: Оптимизация
         UIBuilder.create_double_button_row(
@@ -73,40 +81,12 @@ class ApplicationInterface:
             "4.2. Открыть HTML-визуализацию", self.app_actions.open_html_visualization
         )
         
-        # Кнопка 5: Выбор файла
-        UIBuilder.create_single_button(
-            buttons_frame, 
-            "5. Выбрать .xlsx файл", 
-            self._handle_select_xlsx_file
-        )
-        
-        # Кнопки 6: Конвертация
-        UIBuilder.create_double_button_row(
-            buttons_frame,
-            "6. Конвертировать в .xlsm", self.app_actions.convert_to_xlsm,
-            "6.1. Открыть .xlsm файл", self.app_actions.open_xlsm_file
-        )
-        
         # Кнопки 7: Работа с новыми предпочтениями
         UIBuilder.create_double_button_row(
             buttons_frame,
-            "7.0. Открыть новые предпочтения", self.app_actions.open_newpref,
+            "7.0. Создать и открыть новые предпочтения", self.app_actions.open_newpref,
             "7. Учесть изменения", self.app_actions.run_scheduler_newpref
         )
-    
-    def _handle_select_directory(self):
-        """Обработчик выбора рабочего каталога с обновлением интерфейса"""
-        directory = self.app_actions.select_directory()
-        if directory:
-            self.app_actions.set_program_directory(directory)
-            self.dir_label.config(text=f"Рабочий каталог: {directory}")
-    
-    def _handle_select_xlsx_file(self):
-        """Обработчик выбора xlsx файла с обновлением интерфейса"""
-        filename = self.app_actions.select_xlsx_file()
-        if filename:
-            self.file_label.config(text=f"Выбранный файл: {filename}")
-
 
 if __name__ == "__main__":
     # Создаем экземпляр Tk

@@ -4,3 +4,9 @@ __pycache__/
 **/__pycache__/
 **/*.py[cod]
 *$py.class
+*.pdf
+*.xlsx
+*.xlsm
+**/*.pdf
+**/*.xlsx
+*.spec
