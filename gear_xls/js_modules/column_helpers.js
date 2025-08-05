@@ -69,6 +69,175 @@ function updateBlockColumnForBuilding(block, room, building, day) {
     return colIndex;
 }
 
+// Helper функция для форматирования заголовка день-кабинет
+function formatDayRoomHeader(day, room, building) {
+    // Находим контейнер расписания для указанного здания
+    var container = BuildingService.findScheduleContainerForBuilding(building);
+    if (!container) {
+        console.warn(`Не найден контейнер расписания для здания ${building}, используем формат без пробела`);
+        return day + room;
+    }
+    
+    // Ищем первый существующий заголовок для этого дня
+    var firstDayHeader = container.querySelector(`.schedule-grid th.day-${day}`);
+    if (!firstDayHeader) {
+        console.warn(`Не найдены заголовки для дня ${day} в здании ${building}, используем формат без пробела`);
+        return day + room;
+    }
+    
+    var headerText = firstDayHeader.textContent.trim();
+    console.log(`Анализ формата заголовка: "${headerText}"`);
+    
+    // Определяем, есть ли пробел между днем и кабинетом
+    // Заголовок содержит <br>, поэтому анализируем часть после <br>
+    var headerParts = firstDayHeader.innerHTML.split('<br>');
+    if (headerParts.length >= 2) {
+        var roomPart = headerParts[1].trim();
+        var dayPart = headerParts[0].trim();
+        
+        // Если в исходном тексте есть пробел после дня, добавляем его
+        if (headerText.includes(dayPart + ' ')) {
+            console.log(`Обнаружен формат с пробелом: "${day} ${room}"`);
+            return day + ' ' + room;
+        }
+    }
+    
+    console.log(`Обнаружен формат без пробела: "${day}${room}"`);
+    return day + room;
+}
+
+// Функция для создания новой колонки, если она отсутствует
+function addColumnIfMissing(day, room, building) {
+    console.log(`Попытка добавления колонки: день=${day}, кабинет=${room}, здание=${building}`);
+    
+    // Находим контейнер расписания для указанного здания
+    var container = BuildingService.findScheduleContainerForBuilding(building);
+    if (!container) {
+        console.error(`Не найден контейнер расписания для здания ${building}`);
+        return -1;
+    }
+    
+    var table = container.querySelector('.schedule-grid');
+    if (!table) {
+        console.error(`Не найдена таблица расписания в здании ${building}`);
+        return -1;
+    }
+    
+    // Собираем заголовки для указанного дня
+    var dayHeaders = Array.from(table.querySelectorAll(`thead th.day-${day}`));
+    console.log(`Найдено ${dayHeaders.length} заголовков для дня ${day}`);
+    
+    // Проверяем, существует ли уже колонка с этим кабинетом
+    for (var i = 0; i < dayHeaders.length; i++) {
+        var headerText = dayHeaders[i].textContent.trim();
+        if (headerText.includes(room)) {
+            console.log(`Колонка для кабинета ${room} уже существует в позиции ${i}`);
+            return i;
+        }
+    }
+    
+    // Кабинет не найден, нужно создать новую колонку
+    console.log(`Создание новой колонки для кабинета ${room}`);
+    
+    // Определяем позицию для вставки (в конце группы дня)
+    var insertionIndex = dayHeaders.length;
+    
+    // Форматируем заголовок новой колонки
+    var newHeaderText = formatDayRoomHeader(day, room, building);
+    
+    // Создаем новый заголовок
+    var newHeader = document.createElement('th');
+    newHeader.className = 'day-' + day;
+    newHeader.innerHTML = day + '<br>' + room;
+    
+    // Находим позицию для вставки в thead
+    var thead = table.querySelector('thead tr');
+    var insertPosition = findInsertPositionInHeader(thead, day, insertionIndex);
+    
+    if (insertPosition < thead.children.length) {
+        thead.insertBefore(newHeader, thead.children[insertPosition]);
+    } else {
+        thead.appendChild(newHeader);
+    }
+    
+    // Добавляем соответствующие ячейки в каждую строку tbody
+    var tbody = table.querySelector('tbody');
+    var rows = tbody.querySelectorAll('tr');
+    
+    for (var r = 0; r < rows.length; r++) {
+        var newCell = document.createElement('td');
+        newCell.className = 'day-' + day;
+        newCell.setAttribute('data-row', r);
+        newCell.setAttribute('data-col', insertionIndex);
+        
+        if (insertPosition < rows[r].children.length) {
+            rows[r].insertBefore(newCell, rows[r].children[insertPosition]);
+        } else {
+            rows[r].appendChild(newCell);
+        }
+    }
+    
+    // Обновляем data-col-index для существующих блоков того же дня и здания
+    updateExistingBlocksColIndex(building, day, insertionIndex);
+    
+    // Вызываем перерасчет позиций
+    if (typeof updateActivityPositions === 'function') {
+        updateActivityPositions();
+    }
+    
+    console.log(`Новая колонка создана для кабинета ${room} в позиции ${insertionIndex}`);
+    return insertionIndex;
+}
+
+// Вспомогательная функция для определения позиции вставки в заголовке
+function findInsertPositionInHeader(headerRow, day, insertionIndex) {
+    var position = 1; // Начинаем после колонки времени
+    
+    // Проверяем, что daysOrder определен
+    if (typeof daysOrder === 'undefined') {
+        console.warn('daysOrder не определен, используем стандартный порядок дней');
+        var daysOrder = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+    }
+    
+    // Проходим все дни в порядке daysOrder до нашего дня
+    for (var d = 0; d < daysOrder.length; d++) {
+        if (daysOrder[d] === day) {
+            // Добавляем количество существующих колонок для этого дня
+            var existingCols = headerRow.querySelectorAll('.day-' + day).length;
+            position += existingCols;
+            break;
+        } else {
+            // Добавляем количество колонок для предыдущих дней
+            var dayColCount = headerRow.querySelectorAll('.day-' + daysOrder[d]).length;
+            position += dayColCount;
+        }
+    }
+    
+    return position;
+}
+
+// Функция для обновления data-col-index у существующих блоков
+function updateExistingBlocksColIndex(building, day, insertionIndex) {
+    var container = BuildingService.findScheduleContainerForBuilding(building);
+    if (!container) return;
+    
+    var blocks = container.querySelectorAll(`.activity-block[data-day="${day}"][data-building="${building}"]`);
+    
+    for (var i = 0; i < blocks.length; i++) {
+        var block = blocks[i];
+        var currentColIndex = parseInt(block.getAttribute('data-col-index'));
+        
+        // Если колонка блока >= позиции вставки, увеличиваем на 1
+        if (currentColIndex >= insertionIndex) {
+            var newColIndex = currentColIndex + 1;
+            block.setAttribute('data-col-index', newColIndex);
+            console.log(`Обновлен data-col-index блока с ${currentColIndex} на ${newColIndex}`);
+        }
+    }
+}
+
 // Экспортируем функции
 window.findMatchingColumnInBuilding = findMatchingColumnInBuilding;
 window.updateBlockColumnForBuilding = updateBlockColumnForBuilding;
+window.addColumnIfMissing = addColumnIfMissing;
+window.formatDayRoomHeader = formatDayRoomHeader;

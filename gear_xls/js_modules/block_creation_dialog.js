@@ -373,6 +373,24 @@ function openCreateBlockDialog(e, preselectedDay, preselectedCol, preselectedRow
             var timeRange = document.getElementById('new-time').value;
             var backgroundColor = document.getElementById('color-value').value;
             
+            // Автоматическое создание колонки для нового кабинета, если она не существует
+            var finalColIndex = colIndex;
+            if (room && room.trim() !== '' && typeof addColumnIfMissing === 'function') {
+                console.log(`Проверка необходимости создания колонки для кабинета ${room}`);
+                var newColIndex = addColumnIfMissing(day, room.trim(), building);
+                
+                if (newColIndex !== -1) {
+                    finalColIndex = newColIndex;
+                    console.log(`Используется колонка в позиции ${finalColIndex} для кабинета ${room}`);
+                } else {
+                    console.warn(`Не удалось создать или найти колонку для кабинета ${room}`);
+                }
+            } else if (!room || room.trim() === '') {
+                console.warn('Кабинет не указан, используется выбранная колонка');
+            } else {
+                console.warn('Функция addColumnIfMissing не найдена');
+            }
+            
             // Проверяем формат времени
             var timeRegex = /^([0-9]{2}):([0-9]{2})-([0-9]{2}):([0-9]{2})$/;
             var timeMatch = timeRange.match(timeRegex);
@@ -399,7 +417,7 @@ function openCreateBlockDialog(e, preselectedDay, preselectedCol, preselectedRow
             closeDialog();
             
             // Создаем новый блок с учетом здания
-            createNewBlock(building, day, colIndex, subject, teacher, students, room, timeRange, backgroundColor);
+            createNewBlock(building, day, finalColIndex, subject, teacher, students, room, timeRange, backgroundColor);
             
             return false;
         });
