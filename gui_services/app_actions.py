@@ -3,6 +3,8 @@ import sys
 import glob
 import threading
 import time
+import json
+import shutil
 import win32com.client
 import pythoncom
 from tkinter import messagebox
@@ -272,6 +274,87 @@ class AppActions:
             self.log_action(f"Ошибка при запуске макроса: {e}")
             return False
 
+    def _load_config(self):
+        """Загружает конфигурацию из config.json"""
+        try:
+            config_path = os.path.join(self.program_directory, "config.json")
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            else:
+                # Создаем конфиг по умолчанию, если файл не существует
+                default_config = {
+                    "copy_destination_path": "C:\\Alla\\Datenbank\\Stundenplan\\2025-2026\\",
+                    "auto_copy_enabled": True
+                }
+                self._save_config(default_config)
+                return default_config
+        except Exception as e:
+            self.log_action(f"Ошибка при загрузке конфигурации: {e}")
+            return {
+                "copy_destination_path": "C:\\Alla\\Datenbank\\Stundenplan\\2025-2026\\",
+                "auto_copy_enabled": True
+            }
+    
+    def _save_config(self, config):
+        """Сохраняет конфигурацию в config.json"""
+        try:
+            config_path = os.path.join(self.program_directory, "config.json")
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            self.log_action(f"Ошибка при сохранении конфигурации: {e}")
+    
+    def _copy_visualization_files(self):
+        """Копирует файлы визуализации в указанный каталог из конфигурации"""
+        try:
+            config = self._load_config()
+            
+            if not config.get("auto_copy_enabled", True):
+                self.log_action("Автоматическое копирование отключено в конфигурации")
+                return
+            
+            destination_path = config.get("copy_destination_path", "")
+            
+            if not destination_path:
+                self.log_action("Путь для копирования не задан в конфигурации")
+                return
+            
+            # Проверяем, существует ли каталог назначения
+            if not os.path.exists(destination_path):
+                self.log_action(f"Каталог назначения не существует: {destination_path}")
+                return
+            
+            # Определяем исходные файлы для копирования
+            visualiser_dir = FileManager.get_file_path(self.program_directory, "visualiser")
+            files_to_copy = [
+                ("enhanced_schedule_visualization.html", "enhanced_schedule_visualization.html"),
+                ("enhanced_schedule_visualization.pdf", "enhanced_schedule_visualization.pdf")
+            ]
+            
+            copied_files = []
+            for source_file, dest_file in files_to_copy:
+                source_path = os.path.join(visualiser_dir, source_file)
+                dest_path = os.path.join(destination_path, dest_file)
+                
+                if os.path.exists(source_path):
+                    try:
+                        shutil.copy2(source_path, dest_path)
+                        copied_files.append(dest_file)
+                        self.log_action(f"Файл скопирован: {dest_file}")
+                    except Exception as e:
+                        self.log_action(f"Ошибка при копировании файла {source_file}: {e}")
+                else:
+                    self.log_action(f"Исходный файл не найден: {source_path}")
+            
+            if copied_files:
+                self.log_action(f"Успешно скопировано файлов: {len(copied_files)} в {destination_path}")
+            else:
+                self.log_action("Не удалось скопировать ни одного файла")
+                
+        except Exception as e:
+            self.log_action(f"Ошибка при копировании файлов визуализации: {e}")
+
     def get_program_directory(self):
         """Возвращает текущий рабочий каталог"""
         return self.program_directory
@@ -362,6 +445,13 @@ class AppActions:
         html_path = FileManager.get_file_path(self.program_directory, "gear_xls", "html_output", "schedule.html")
         if FileManager.open_web_file(html_path, "веб-приложение"):
             self.log_action(f"Открыто веб-приложение: {html_path}")
+            
+            # Проверяем, запущен ли уже Flask-сервер
+            if not self.process_manager.is_process_running(self.process_manager.flask_process):
+                self.log_action("Flask-сервер не запущен. Запускаем автоматически...")
+                self.run_flask_server()
+            else:
+                self.log_action("Flask-сервер уже запущен")
     
     def run_visualiser(self):
         """Обработчик для кнопки 4: Запуск визуализатора"""
@@ -497,19 +587,53 @@ class AppActions:
                 if not newpref_path:
                     return  # Ошибка уже отображена в _create_newpref_from_latest_excel
                 
-                # Шаг 5: Запускаем планировщик с newpref.xlsx
+                # Шаг 4: Запускаем планировщик с newpref.xlsx
                 self.log_action("Шаг 4: Запуск планировщика с newpref.xlsx...")
                 
                 commands = [
                     "python main_sch.py xlsx_initial/newpref.xlsx --time-limit 300 --verbose --time-interval 5"
                 ]
                 
-                # Запускаем планировщик в отдельном процессе
-                self.process_manager.terminal_process = self.process_manager.execute_in_terminal(
-                    commands, self.program_directory)
+                # Запускаем планировщик и ждем его завершения
+                scheduler_process = self.process_manager.execute_command_and_wait(commands, self.program_directory)
                 
-                self.log_action("Процесс успешно завершен! Планировщик запущен с новым newpref.xlsx.")
-                messagebox.showinfo("Успех", "Файл newpref.xlsx создан и планировщик запущен!")
+                # Ждем завершения планировщика
+                self.log_action("Ожидание завершения планировщика...")
+                if scheduler_process:
+                    scheduler_process.wait()
+                
+                self.log_action("Планировщик завершен. Запускаем дополнительные действия...")
+                
+                # Дополнительные действия после завершения планировщика
+                
+                # Шаг 5: Запуск визуализатора
+                self.log_action("Шаг 5: Запуск визуализатора...")
+                visualiser_commands = ["python example_usage_enhanced.py"]
+                visualiser_dir = FileManager.get_file_path(self.program_directory, "visualiser")
+                visualiser_process = self.process_manager.execute_command_and_wait(visualiser_commands, visualiser_dir)
+                
+                # Ждем завершения визуализатора
+                if visualiser_process:
+                    visualiser_process.wait()
+                    self.log_action("Визуализатор завершен")
+                
+                # Шаг 6: Создание веб-приложения
+                self.log_action("Шаг 6: Создание веб-приложения...")
+                gear_commands = ["python main.py"]
+                gear_dir = FileManager.get_file_path(self.program_directory, "gear_xls")
+                gear_process = self.process_manager.execute_command_and_wait(gear_commands, gear_dir)
+                
+                # Ждем завершения создания веб-приложения
+                if gear_process:
+                    gear_process.wait()
+                    self.log_action("Создание веб-приложения завершено")
+                
+                # Шаг 7: Копирование файлов визуализации
+                self.log_action("Шаг 7: Копирование файлов визуализации...")
+                self._copy_visualization_files()
+                
+                self.log_action("Весь процесс успешно завершен!")
+                messagebox.showinfo("Успех", "Файл newpref.xlsx создан, планировщик выполнен, визуализация и веб-приложение созданы!")
                     
             except Exception as e:
                 self.log_action(f"Ошибка в процессе создания newpref.xlsx и запуска планировщика: {e}")

@@ -12,6 +12,29 @@ class ProcessManager:
         self.terminal_process = None
         self.flask_process = None
     
+    def execute_command_and_wait(self, commands, directory=None):
+        """Выполняет команды и ждет их завершения (без интерактивного терминала)"""
+        if not directory:
+            return None
+        
+        system = platform.system()
+        
+        try:
+            if system == "Windows":
+                # Для Windows объединяем команды с помощью &
+                full_command = " & ".join(commands)
+                cmd = f"cd /d {directory} & {full_command}"
+                return subprocess.Popen(cmd, shell=True, cwd=directory)
+            
+            else:  # Unix-подобные системы
+                # Создаем команду для выполнения
+                full_command = " && ".join([f"cd '{directory}'"] + commands)
+                return subprocess.Popen(full_command, shell=True, cwd=directory)
+                
+        except Exception as e:
+            print(f"Ошибка при выполнении команды: {e}")
+            return None
+
     def is_process_running(self, process):
         """Проверяет, активен ли процесс"""
         if not process:
