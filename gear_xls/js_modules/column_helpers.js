@@ -1,5 +1,10 @@
 // Модуль с вспомогательными функциями для работы с колонками в разных зданиях
 
+// Глобальная переменная с порядком дней недели (если ещё не определена)
+if (typeof window.daysOrder === 'undefined') {
+    window.daysOrder = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+}
+
 // Функция для поиска подходящей колонки в заданном здании
 function findMatchingColumnInBuilding(day, room, building) {
     // Находим контейнер расписания для указанного здания
@@ -43,10 +48,9 @@ function findMatchingColumnInBuilding(day, room, building) {
         }
     }
     
-    // Если вообще не нашли подходящей колонки, используем первую
-    if (bestColIndex === -1 && dayHeaders.length > 0) {
-        console.log(`Не найдено совпадений, использую первую колонку`);
-        bestColIndex = 0;
+    // Возвращаем -1 если колонка не найдена (для последующего создания новой)
+    if (bestColIndex === -1) {
+        console.log(`Колонка для кабинета ${room} не найдена в дне ${day} здания ${building}`);
     }
     
     return bestColIndex;
@@ -130,6 +134,7 @@ function addColumnIfMissing(day, room, building) {
     // Проверяем, существует ли уже колонка с этим кабинетом
     for (var i = 0; i < dayHeaders.length; i++) {
         var headerText = dayHeaders[i].textContent.trim();
+        console.log(`Проверка существующего заголовка ${i}: "${headerText}"`);
         if (headerText.includes(room)) {
             console.log(`Колонка для кабинета ${room} уже существует в позиции ${i}`);
             return i;
@@ -154,15 +159,21 @@ function addColumnIfMissing(day, room, building) {
     var thead = table.querySelector('thead tr');
     var insertPosition = findInsertPositionInHeader(thead, day, insertionIndex);
     
+    console.log(`Позиция для вставки в thead: ${insertPosition} (из ${thead.children.length} колонок)`);
+    
     if (insertPosition < thead.children.length) {
         thead.insertBefore(newHeader, thead.children[insertPosition]);
+        console.log(`Заголовок вставлен ПЕРЕД элементом в позиции ${insertPosition}`);
     } else {
         thead.appendChild(newHeader);
+        console.log(`Заголовок добавлен В КОНЕЦ thead`);
     }
     
     // Добавляем соответствующие ячейки в каждую строку tbody
     var tbody = table.querySelector('tbody');
     var rows = tbody.querySelectorAll('tr');
+    
+    console.log(`Добавление ячеек в ${rows.length} строк tbody в позицию ${insertPosition}`);
     
     for (var r = 0; r < rows.length; r++) {
         var newCell = document.createElement('td');
@@ -177,13 +188,16 @@ function addColumnIfMissing(day, room, building) {
         }
     }
     
+    console.log(`Ячейки tbody добавлены успешно`);
+    
     // Обновляем data-col-index для существующих блоков того же дня и здания
+    console.log(`Обновление data-col-index для существующих блоков дня ${day} в здании ${building}`);
     updateExistingBlocksColIndex(building, day, insertionIndex);
     
-    // Вызываем перерасчет позиций
-    if (typeof updateActivityPositions === 'function') {
-        updateActivityPositions();
-    }
+    // НЕ вызываем updateActivityPositions здесь - это будет сделано в вызывающем коде
+    // if (typeof updateActivityPositions === 'function') {
+    //     updateActivityPositions();
+    // }
     
     console.log(`Новая колонка создана для кабинета ${room} в позиции ${insertionIndex}`);
     return insertionIndex;
@@ -193,11 +207,8 @@ function addColumnIfMissing(day, room, building) {
 function findInsertPositionInHeader(headerRow, day, insertionIndex) {
     var position = 1; // Начинаем после колонки времени
     
-    // Проверяем, что daysOrder определен
-    if (typeof daysOrder === 'undefined') {
-        console.warn('daysOrder не определен, используем стандартный порядок дней');
-        var daysOrder = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
-    }
+    // Используем глобальную переменную daysOrder
+    var daysOrder = window.daysOrder || ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
     
     // Проходим все дни в порядке daysOrder до нашего дня
     for (var d = 0; d < daysOrder.length; d++) {

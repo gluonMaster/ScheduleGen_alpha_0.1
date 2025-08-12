@@ -1,5 +1,10 @@
 // Модуль для позиционирования элементов расписания
 
+// Убеждаемся, что daysOrder определена
+if (typeof window.daysOrder === 'undefined') {
+    window.daysOrder = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+}
+
 // Модифицированная функция обновления позиций activity-block
 function updateActivityPositions() {
     document.querySelectorAll('.schedule-container').forEach(function(container) {
@@ -24,6 +29,7 @@ function updateActivityPositions() {
             var leftOffset = timeCellWidthMeasured;
 
             // Прибавляем ширину всех предыдущих дней
+            var daysOrder = window.daysOrder || ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
             for (var i = 0; i < daysOrder.length; i++) {
                 var d = daysOrder[i];
                 if (d === day) break;

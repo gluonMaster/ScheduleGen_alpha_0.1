@@ -252,42 +252,84 @@ function openEditDialog(block, origLeft, origTop, building) {
             // Закрываем диалог до обновления блока
             closeDialog();
 
-            // Проверяем, изменилось ли здание
-            var buildingChanged = (newBuilding !== currentBuilding);
+            // Получаем необходимые данные для определения изменений
+            var day = block.getAttribute('data-day');
+            var oldBuilding = block.getAttribute('data-building') || BuildingService.determineBuildingForBlock(block);
+            var buildingChanged = (newBuilding !== oldBuilding);
+            var roomChanged = (newRoom.trim() !== room.trim());
+            var targetBuilding = buildingChanged ? newBuilding : oldBuilding;
+            var targetRoom = newRoom.trim();
             
-            // Проверяем, изменился ли номер кабинета
-            var roomChanged = (newRoom !== room);
+            console.log("Анализ изменений:", {
+                day: day,
+                oldBuilding: oldBuilding,
+                targetBuilding: targetBuilding,
+                oldRoom: room,
+                targetRoom: targetRoom,
+                buildingChanged: buildingChanged,
+                roomChanged: roomChanged
+            });
             
             // Обновляем содержимое блока
             block.innerHTML = `<strong>${newSubject}</strong><br>${newTeacher}<br>${newStudents}<br>${newRoom}<br>${newTime}`;
-            
-            // Устанавливаем атрибут здания
-            block.setAttribute('data-building', newBuilding);
             
             // Обновляем отображение блока, если изменилось время
             if (newTime !== timeRange) {
                 console.log("Обновление позиции блока из-за изменения времени");
                 updateBlockPosition(block, newTime);
             }
-    
-            // Если изменился кабинет, перемещаем блок в соответствующую колонку
-            if (roomChanged) {
-                console.log("Обновление колонки блока из-за изменения кабинета");
-                updateBlockColumn(block, newRoom);
+            
+            // Если изменилось здание, сначала перемещаем блок в новое здание
+            if (buildingChanged) {
+                console.log("Перемещение блока в другое здание:", targetBuilding);
+                var moveSuccess = BuildingService.moveBlockToBuilding(block, targetBuilding);
+                if (!moveSuccess) {
+                    console.error("Не удалось переместить блок в здание:", targetBuilding);
+                    alert(`Ошибка: не удалось переместить блок в здание ${targetBuilding}`);
+                    return false;
+                }
+            } else {
+                // Обновляем атрибут здания, даже если здание не изменилось
+                block.setAttribute('data-building', targetBuilding);
             }
             
-            // Если изменилось здание, перемещаем блок в соответствующий контейнер
-            if (buildingChanged) {
-                console.log("Перемещение блока в другое здание:", newBuilding);
-                // ИСПОЛЬЗУЕМ BuildingService для перемещения блока
-                var moveSuccess = BuildingService.moveBlockToBuilding(block, newBuilding);
-                if (!moveSuccess) {
-                    console.error("Не удалось переместить блок в здание:", newBuilding);
-                    alert(`Ошибка: не удалось переместить блок в здание ${newBuilding}`);
+            // Если изменился кабинет или здание, обрабатываем колонки
+            if (roomChanged || buildingChanged) {
+                if (targetRoom === '') {
+                    console.warn("Пустое название кабинета, пропускаем обработку колонок");
+                } else {
+                    console.log("Поиск/создание колонки для кабинета:", targetRoom, "в здании:", targetBuilding, "в день:", day);
+                    
+                    // Ищем существующую колонку в целевом здании
+                    var colIndex = findMatchingColumnInBuilding(day, targetRoom, targetBuilding);
+                    console.log("Результат поиска колонки:", colIndex);
+                    
+                    // Если колонка не найдена, создаем новую
+                    if (colIndex === -1) {
+                        console.log("Колонка не найдена, создаем новую");
+                        colIndex = addColumnIfMissing(day, targetRoom, targetBuilding);
+                        console.log("Результат создания колонки:", colIndex);
+                        
+                        if (colIndex === -1) {
+                            console.error("Не удалось создать колонку для кабинета:", targetRoom);
+                            alert(`Ошибка: не удалось создать колонку для кабинета ${targetRoom}`);
+                            return false;
+                        }
+                    } else {
+                        console.log("Найдена существующая колонка с индексом:", colIndex);
+                    }
+                    
+                    // Устанавливаем индекс колонки для блока
+                    console.log("Установка индекса колонки:", colIndex, "для блока");
+                    block.setAttribute('data-col-index', colIndex);
+                    
+                    // Проверяем, что атрибут установился
+                    var setColIndex = block.getAttribute('data-col-index');
+                    console.log("Проверка установленного data-col-index:", setColIndex);
                 }
             }
             
-            // В любом случае вызываем updateActivityPositions для согласованности
+            // Единственный вызов updateActivityPositions в конце
             updateActivityPositions();
             
             return false; // Дополнительное предотвращение отправки формы
