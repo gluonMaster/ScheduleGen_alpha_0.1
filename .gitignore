@@ -1,0 +1,53 @@
+# Prompt drafts and local assistant context
+PROMPTS/
+Prompt-*.md
+.claude/
+
+# Local/private configuration and secrets
+config.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local schedule data and exports
+xlsx_initial/
+excel_exports/
+gear_xls/excel_exports/
+*.pdf
+*.xlsx
+*.xlsm
+*.xls
+
+# Logs and runtime files
+*.log
+*.pid
+*.tmp
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.venv/
+venv/
+env/
+pip-wheel-metadata/
+
+# Build and packaging artifacts
+dist/
+build/
+*.egg-info/
+
+# IDE and OS metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
