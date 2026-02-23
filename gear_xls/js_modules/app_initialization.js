@@ -28,7 +28,6 @@ function initializeApplication() {
         
         initDragAndDrop();
         initBlockEditing();
-        initCompensationSettings();
         initSaveExport();
         initAddBlocks();  // Инициализация нового модуля
         initDeleteBlocks(); // Инициализация модуля удаления блоков
@@ -68,25 +67,6 @@ function initializeApplication() {
         console.log('BlockDropService initialized successfully');
     } else {
         console.warn('BlockDropService not available, using legacy implementation');
-    }
-}
-
-// Функции для сохранения и загрузки настроек
-function saveSettings(settings) {
-    try {
-        localStorage.setItem('scheduleCompensationSettings', JSON.stringify(settings));
-    } catch (e) {
-        console.error('Не удалось сохранить настройки:', e);
-    }
-}
-
-function loadSettings() {
-    try {
-        var settings = localStorage.getItem('scheduleCompensationSettings');
-        return settings ? JSON.parse(settings) : null;
-    } catch (e) {
-        console.error('Не удалось загрузить настройки:', e);
-        return null;
     }
 }
 

@@ -75,7 +75,7 @@ class HTMLCoordinator:
         html_parts = []
         
         # 1. Генерация структуры документа
-        html_parts.extend(self.structure_generator.generate_document_head(output_css))
+        html_parts.extend(self.structure_generator.generate_document_head(output_css, grid_start))
         html_parts.append("<body>")
         
         # 2. Генерация панели управления

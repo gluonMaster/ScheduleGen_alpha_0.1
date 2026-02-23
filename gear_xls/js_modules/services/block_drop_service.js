@@ -4,6 +4,35 @@ var BlockDropService = (function() {
     'use strict';
     
     // Приватные методы
+    function findClosestRowByTop(block, day, colIndex, table) {
+        // The block already has data-start-row set by snapToClosestCell/snapToGridFallback during drag
+        // Prefer reading it directly
+        var existingRow = block.getAttribute('data-start-row');
+        if (existingRow !== null && existingRow !== '') {
+            return parseInt(existingRow);
+        }
+        // Fallback: find the cell whose top is closest to block's current top
+        var blockTop = parseFloat(block.style.top) || 0;
+        var container = block.parentElement;
+        var containerRect = container.getBoundingClientRect();
+        var borderTop = parseFloat(window.getComputedStyle(container).borderTopWidth) || 0;
+        // blockTop is container-relative; convert to viewport
+        var blockTopViewport = blockTop + containerRect.top + borderTop - container.scrollTop;
+
+        var cells = Array.from(table.querySelectorAll('td.day-' + day + '[data-col="' + colIndex + '"]'));
+        var closestRow = 0;
+        var minDist = Infinity;
+        cells.forEach(function(cell) {
+            var cellRect = cell.getBoundingClientRect();
+            var dist = Math.abs(cellRect.top - blockTopViewport);
+            if (dist < minDist) {
+                minDist = dist;
+                closestRow = parseInt(cell.getAttribute('data-row')) || 0;
+            }
+        });
+        return closestRow;
+    }
+
     function findClosestHeaderByPosition(block, day, table) {
         // Находим все заголовки для этого дня
         var dayHeaders = Array.from(table.querySelectorAll('th.day-' + day));
@@ -41,29 +70,20 @@ var BlockDropService = (function() {
     }
     
     function updateBlockPositionData(block, day, colIndex, table) {
-        var headerHeight = table.querySelector('thead').getBoundingClientRect().height;
-        var currentTop = parseFloat(block.style.top);
-        
-        // ВОЗВРАЩАЕМ ПРОСТУЮ ЛОГИКУ СТАРОГО КОДА:
-        // Определяем номер строки напрямую по текущей позиции блока
-        var rowIndex = Math.round((currentTop - headerHeight) / (gridCellHeight + borderWidth));
-        rowIndex = Math.max(0, rowIndex); // не может быть отрицательным
-        
-        // Вычисляем компенсацию для найденной строки (как в старом коде)
-        var factor = window.compensationFactor || 0.4;
-        var exponent = window.compensationExponent || 1.02;
-        var compensation = Math.pow(rowIndex, exponent) * factor;
-        
-        // ПРАВИЛЬНО восстанавливаем исходную позицию (как в старом коде)
-        var originalTopForNewPosition = currentTop + compensation;
-        
-        // Обновляем атрибуты блока
+        // Determine the start row for the dropped block
+        var closestRow = findClosestRowByTop(block, day, colIndex, table);
+
+        // Update semantic coordinates
         block.setAttribute('data-col-index', colIndex);
         block.setAttribute('data-day', day);
-        block.setAttribute('data-original-top', originalTopForNewPosition);
-        block.setAttribute('data-compensated', 'false');
-        
-        // Обновляем класс для соответствия дню
+        block.setAttribute('data-start-row', closestRow);
+        // data-row-span is unchanged — block duration does not change on drop
+
+        // Remove stale drag attributes
+        block.removeAttribute('data-original-top');
+        block.removeAttribute('data-compensated');
+
+        // Update CSS class
         block.className = block.className.replace(/activity-day-\w+/, 'activity-day-' + day);
     }
     

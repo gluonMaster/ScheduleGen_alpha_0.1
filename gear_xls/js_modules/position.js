@@ -5,85 +5,118 @@ if (typeof window.daysOrder === 'undefined') {
     window.daysOrder = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 }
 
+// Returns start row derived from time text in block content, or null on failure.
+// Uses the LAST match to avoid false positives from subject/teacher text that looks like a time.
+function deriveStartRowFromBlock(block, table) {
+    var text = block.textContent || '';
+    var all = text.match(/\d{1,2}:\d{2}\s*[-\u2013]\s*\d{1,2}:\d{2}/g);
+    if (!all) { console.warn('deriveStartRowFromBlock: no time found in block text'); return null; }
+    var last = all[all.length - 1].match(/^(\d{1,2}):(\d{2})/);
+    if (!last) { return null; }
+    var startMinutes = parseInt(last[1], 10) * 60 + parseInt(last[2], 10);
+    var gStart = (typeof gridStart !== 'undefined') ? gridStart : 9 * 60;
+    var tInterval = (typeof timeInterval !== 'undefined') ? timeInterval : 5;
+    var row = Math.floor((startMinutes - gStart) / tInterval);
+    if (isNaN(row) || row < 0) { console.warn('deriveStartRowFromBlock: invalid row', row); return null; }
+    return String(row);
+}
+
+// Returns row span derived from time text in block content, or null on failure.
+// Uses the LAST match to avoid false positives from subject/teacher text that looks like a time.
+function deriveRowSpanFromBlock(block) {
+    var text = block.textContent || '';
+    var all = text.match(/(\d{1,2}):(\d{2})\s*[-\u2013]\s*(\d{1,2}):(\d{2})/g);
+    if (!all) { console.warn('deriveRowSpanFromBlock: no time range found in block text'); return null; }
+    var m = all[all.length - 1].match(/^(\d{1,2}):(\d{2})\s*[-\u2013]\s*(\d{1,2}):(\d{2})$/);
+    if (!m) { return null; }
+    var startMin = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    var endMin   = parseInt(m[3], 10) * 60 + parseInt(m[4], 10);
+    var tInterval = (typeof timeInterval !== 'undefined') ? timeInterval : 5;
+    var span = Math.floor((endMin - startMin) / tInterval);
+    if (isNaN(span) || span <= 0) { console.warn('deriveRowSpanFromBlock: invalid span', span); return null; }
+    return String(span);
+}
+
 // Модифицированная функция обновления позиций activity-block
 function updateActivityPositions() {
     document.querySelectorAll('.schedule-container').forEach(function(container) {
-        var containerStyle = window.getComputedStyle(container);
-        var containerLeftPadding = parseFloat(containerStyle.paddingLeft) || 0;
-
         var table = container.querySelector('.schedule-grid');
-        var timeCell = table.querySelector('th.time-cell');
-        var timeCellWidthMeasured = timeCell
-            ? timeCell.getBoundingClientRect().width
-            : 0; // fallback
+        if (!table) return;
 
-        // Запоминаем измеренную ширину колонки времени
-        measuredTimeColWidth = timeCellWidthMeasured;
+        var containerRect = container.getBoundingClientRect();
+        var containerStyle = window.getComputedStyle(container);
+        var borderLeft = parseFloat(containerStyle.borderLeftWidth) || 0;
+        var borderTop = parseFloat(containerStyle.borderTopWidth) || 0;
 
-        // Позиционируем каждый блок
+        // Find the maximum data-row value present in this table (for boundary clamping)
+        var allDataCells = table.querySelectorAll('td[data-row]');
+        var maxRow = 0;
+        allDataCells.forEach(function(cell) {
+            var r = parseInt(cell.getAttribute('data-row'), 10);
+            if (!isNaN(r) && r > maxRow) maxRow = r;
+        });
+
         container.querySelectorAll('.activity-block').forEach(function(block) {
             var day = block.getAttribute('data-day');
-            var colIndex = parseInt(block.getAttribute('data-col-index'));
+            var col = block.getAttribute('data-col-index');
+            var startRow = block.getAttribute('data-start-row');
+            var rowSpan = block.getAttribute('data-row-span');
 
-            // Стартуем с реальной ширины колонки времени
-            var leftOffset = timeCellWidthMeasured;
-
-            // Прибавляем ширину всех предыдущих дней
-            var daysOrder = window.daysOrder || ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
-            for (var i = 0; i < daysOrder.length; i++) {
-                var d = daysOrder[i];
-                if (d === day) break;
-                var headers = table.querySelectorAll('th.day-' + d);
-                headers.forEach(function(h) {
-                    if (window.getComputedStyle(h).display !== 'none') {
-                        leftOffset += h.getBoundingClientRect().width;
-                    }
-                });
+            // Backward-compat fallback: if data-start-row is missing, derive from time text
+            if (startRow === null || startRow === '') {
+                startRow = deriveStartRowFromBlock(block, table);
+                if (startRow === null) return; // cannot position
+                block.setAttribute('data-start-row', startRow);
+            }
+            if (rowSpan === null || rowSpan === '') {
+                rowSpan = deriveRowSpanFromBlock(block);
+                if (rowSpan === null) return;
+                block.setAttribute('data-row-span', rowSpan);
             }
 
-            // Прибавляем ширину нужного количества столбцов текущего дня
-            var currentDayHeaders = table.querySelectorAll('th.day-' + day);
-            for (var j = 0; j < colIndex; j++) {
-                if (currentDayHeaders[j] && window.getComputedStyle(currentDayHeaders[j]).display !== 'none') {
-                    leftOffset += currentDayHeaders[j].getBoundingClientRect().width;
-                }
+            startRow = parseInt(startRow, 10);
+            rowSpan = parseInt(rowSpan, 10);
+            col = parseInt(col, 10);
+
+            // Find anchor cell
+            var startCell = table.querySelector(
+                'td.day-' + day + '[data-col="' + col + '"][data-row="' + startRow + '"]'
+            );
+            if (!startCell) {
+                console.warn('updateActivityPositions: anchor cell not found for block', day, col, startRow);
+                return;
             }
 
-            // Учитываем padding контейнера
-            leftOffset = leftOffset + containerLeftPadding;
-            block.style.left = leftOffset + 'px';
+            var startCellRect = startCell.getBoundingClientRect();
 
-            // НАЧАЛО ЛОГИКИ КОМПЕНСАЦИИ
-            
-            // Получаем исходную позицию (если есть) или текущую позицию
-            var originalTop;
-            if (block.hasAttribute('data-original-top')) {
-                originalTop = parseFloat(block.getAttribute('data-original-top'));
+            // Find end boundary cell (the cell AT startRow + rowSpan)
+            var endRow = startRow + rowSpan;
+            var endCell = table.querySelector(
+                'td.day-' + day + '[data-col="' + col + '"][data-row="' + endRow + '"]'
+            );
+            var endCellTop;
+            if (endCell) {
+                endCellTop = endCell.getBoundingClientRect().top;
             } else {
-                // Если нет атрибута, используем текущую позицию как исходную
-                originalTop = parseFloat(block.style.top);
-                block.setAttribute('data-original-top', originalTop);
+                // Block extends to or past the last row - use bottom of last available cell
+                var lastCell = table.querySelector(
+                    'td.day-' + day + '[data-col="' + col + '"][data-row="' + maxRow + '"]'
+                );
+                endCellTop = lastCell
+                    ? lastCell.getBoundingClientRect().bottom
+                    : startCellRect.bottom;
             }
-            
-            var headerHeight = parseFloat(table.querySelector('thead').getBoundingClientRect().height);
-            
-            // Определяем номер строки от начала таблицы используя исходную позицию
-            var rowIndex = Math.floor((originalTop - headerHeight) / (gridCellHeight + borderWidth));
-            
-            // Используем текущие настройки компенсации
-            var factor = window.compensationFactor !== undefined ? window.compensationFactor : 0.4;
-            var exponent = window.compensationExponent !== undefined ? window.compensationExponent : 1.02;
-            
-            // Рассчитываем компенсацию
-            var compensation = Math.pow(rowIndex, exponent) * factor;
-            
-            // Применяем компенсацию к исходному положению
-            block.style.top = (originalTop - compensation) + 'px';
-            
-            // Помечаем блок как имеющий компенсацию
-            block.setAttribute('data-compensated', 'true');
-            
-            // КОНЕЦ ЛОГИКИ КОМПЕНСАЦИИ
+
+            // Convert viewport-relative coordinates to container-relative (position:absolute origin)
+            var left = startCellRect.left - containerRect.left - borderLeft + container.scrollLeft;
+            var top = startCellRect.top - containerRect.top - borderTop + container.scrollTop;
+            var width = startCellRect.width;
+            var height = endCellTop - startCellRect.top;
+
+            block.style.left = left + 'px';
+            block.style.top = top + 'px';
+            block.style.width = width + 'px';
+            block.style.height = height + 'px';
         });
     });
 }
@@ -93,64 +126,27 @@ window.updateActivityPositions = updateActivityPositions;
 
 // Функция для обновления позиции и размера блока при изменении времени
 function updateBlockPosition(block, newTimeRange) {
-    // Разбираем новое время
     var times = newTimeRange.match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
     if (!times) {
-        console.error('Некорректный формат времени:', newTimeRange);
+        console.error('updateBlockPosition: bad time format:', newTimeRange);
         return;
     }
-    
-    var startHour = parseInt(times[1]);
-    var startMinute = parseInt(times[2]);
-    var endHour = parseInt(times[3]);
-    var endMinute = parseInt(times[4]);
-    
-    // Время в минутах от начала суток
-    var startMinutes = startHour * 60 + startMinute;
-    var endMinutes = endHour * 60 + endMinute;
-    
-    // Определяем начало сетки (по умолчанию 9:00)
-    var gridStart = 9 * 60; // 09:00 в минутах
-    
-    // Рассчитываем количество интервалов с начала сетки
-    var timeInterval = 5; // 5-минутные интервалы
-    var startQuants = (startMinutes - gridStart) / timeInterval;
-    var endQuants = (endMinutes - gridStart) / timeInterval;
-    
-    // Получаем текущую высоту заголовка и ячейки
-    var container = block.parentElement;
-    var table = container.querySelector('.schedule-grid');
-    var headerHeight = table.querySelector('thead').getBoundingClientRect().height;
-    var cellHeight = window.gridCellHeight || 15;
-    var borderWidth = window.borderWidth || 0.5;
-    
-    // Рассчитываем новую позицию без компенсации
-    var newOriginalTop = headerHeight + (startQuants * cellHeight) + (startQuants * borderWidth);
-    
-    var quantCount = endQuants - startQuants;
-    var internalBorders = Math.max(0, quantCount - 1);
-    var height = (quantCount * cellHeight) + (internalBorders * borderWidth * 0.5);
-    
-    // Отладочная информация
-    console.log('Обновление позиции блока:', {
-        newTime: newTimeRange,
-        startMinutes: startMinutes,
-        endMinutes: endMinutes,
-        startQuants: startQuants,
-        endQuants: endQuants,
-        newOriginalTop: newOriginalTop,
-        height: height
-    });
-    
-    // Сохраняем исходную позицию без компенсации
-    block.setAttribute('data-original-top', newOriginalTop);
-    
-    // Устанавливаем высоту блока
-    block.style.height = height + 'px';
-    
-    // Сбрасываем флаг компенсации, чтобы новая компенсация была применена при updateActivityPositions
-    block.setAttribute('data-compensated', 'false');
+    var startMinutes = parseInt(times[1], 10) * 60 + parseInt(times[2], 10);
+    var endMinutes = parseInt(times[3], 10) * 60 + parseInt(times[4], 10);
+
+    var gStart = (typeof gridStart !== 'undefined') ? gridStart : 9 * 60;
+    var tInterval = (typeof timeInterval !== 'undefined') ? timeInterval : 5;
+
+    var newStartRow = Math.floor((startMinutes - gStart) / tInterval);
+    var newRowSpan = Math.floor((endMinutes - startMinutes) / tInterval);
+
+    block.setAttribute('data-start-row', newStartRow);
+    block.setAttribute('data-row-span', newRowSpan);
+
+    updateActivityPositions();
 }
+
+window.updateBlockPosition = updateBlockPosition;
 
 // Функция для обновления колонки блока при изменении кабинета
 function updateBlockColumn(block, newRoom) {

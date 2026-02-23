@@ -148,6 +148,8 @@ class HTMLBlockGenerator:
         day = interval.get('day', '')
         col_index = interval.get('col', 0)
         building = interval.get('building', '')
+        start_row = (interval['start'] - grid_start) // self.time_interval
+        row_span = (interval['end'] - interval['start']) // self.time_interval
 
         # Отладочная информация для диагностики
         logger.debug(f"Генерация блока: день='{day}', колонка={col_index}, здание='{building}'")
@@ -164,6 +166,8 @@ class HTMLBlockGenerator:
             f"data-day='{day}' "
             f"data-col-index='{col_index}' "
             f"data-building='{building}' "
+            f"data-start-row='{start_row}' "
+            f"data-row-span='{row_span}' "
             f"style='top:{position['top']}px; left:{position['left']}px; "
             f"width:{position['width']}px; height:{position['height']}px; "
             f"background-color:{bg_color}; color:{text_color}; text-shadow:{text_shadow};'>"

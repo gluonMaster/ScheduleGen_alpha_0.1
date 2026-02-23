@@ -125,10 +125,9 @@ function initLegacyDragAndDrop() {
                 // Обновляем data-аттрибуты блока
                 window.draggedBlock.setAttribute('data-day', day);
                 window.draggedBlock.setAttribute('data-col-index', colIndex);
-                window.draggedBlock.setAttribute('data-compensated', 'false'); // Важно: устанавливаем false!
-                
-                // Сохраняем исходное положение блока без компенсации
-                window.draggedBlock.setAttribute('data-original-top', snappedTop);
+                window.draggedBlock.setAttribute('data-start-row', rowIndex);
+                window.draggedBlock.removeAttribute('data-original-top');
+                window.draggedBlock.removeAttribute('data-compensated');
                 
                 // Обновляем класс для соответствия новому дню
                 window.draggedBlock.className = window.draggedBlock.className.replace(/activity-day-\w+/, 'activity-day-' + day);
@@ -222,10 +221,9 @@ function initLegacyDragAndDrop() {
         // Обновляем атрибуты блока
         window.draggedBlock.setAttribute('data-day', chosenDay.day);
         window.draggedBlock.setAttribute('data-col-index', newColIndex);
-        window.draggedBlock.setAttribute('data-compensated', 'false'); // Устанавливаем false!
-        
-        // Сохраняем оригинальную позицию до компенсации
-        window.draggedBlock.setAttribute('data-original-top', snappedTop);
+        window.draggedBlock.setAttribute('data-start-row', rowIndex);
+        window.draggedBlock.removeAttribute('data-original-top');
+        window.draggedBlock.removeAttribute('data-compensated');
         
         // Обновляем класс дня
         window.draggedBlock.className = window.draggedBlock.className.replace(/activity-day-\w+/, 'activity-day-' + chosenDay.day);
@@ -404,31 +402,44 @@ function legacyProcessBlockDrop(block) {
     }
 }
 
+function findClosestRowByTopInRefactored(block, day, colIndex, table) {
+    var blockTop = parseFloat(block.style.top) || 0;
+    var container = block.parentElement;
+    var containerRect = container.getBoundingClientRect();
+    var borderTop = parseFloat(window.getComputedStyle(container).borderTopWidth) || 0;
+    var blockTopViewport = blockTop + containerRect.top + borderTop - container.scrollTop;
+
+    var cells = Array.from(table.querySelectorAll('td.day-' + day + '[data-col="' + colIndex + '"]'));
+    var closestRow = 0;
+    var minDist = Infinity;
+    cells.forEach(function(cell) {
+        var cellRect = cell.getBoundingClientRect();
+        var dist = Math.abs(cellRect.top - blockTopViewport);
+        if (dist < minDist) {
+            minDist = dist;
+            closestRow = parseInt(cell.getAttribute('data-row')) || 0;
+        }
+    });
+    return closestRow;
+}
+
 // Вспомогательная функция для обновления атрибутов блока
 function updateBlockDropAttributes(block, day, colIndex, table) {
-    var headerHeight = table.querySelector('thead').getBoundingClientRect().height;
-    var currentTop = parseFloat(block.style.top);
-    
-    // ВОЗВРАЩАЕМ ПРОСТУЮ ЛОГИКУ СТАРОГО КОДА:
-    // Определяем номер строки напрямую по текущей позиции блока
-    var rowIndex = Math.round((currentTop - headerHeight) / (gridCellHeight + borderWidth));
-    rowIndex = Math.max(0, rowIndex); // не может быть отрицательным
-    
-    // Вычисляем компенсацию для найденной строки (как в старом коде)
-    var factor = window.compensationFactor || 0.4;
-    var exponent = window.compensationExponent || 1.02;
-    var compensation = Math.pow(rowIndex, exponent) * factor;
-    
-    // ПРАВИЛЬНО восстанавливаем исходную позицию (как в старом коде)
-    var originalTopForNewPosition = currentTop + compensation;
-    
-    // Обновляем атрибуты блока
+    // Determine start row: prefer the value already set by snapToClosestCell during drag
+    var startRow = block.getAttribute('data-start-row');
+    if (startRow === null || startRow === '') {
+        // Fallback: find closest row by vertical proximity (same logic as BlockDropService)
+        startRow = String(findClosestRowByTopInRefactored(block, day, colIndex, table));
+    }
+
     block.setAttribute('data-col-index', colIndex);
     block.setAttribute('data-day', day);
-    block.setAttribute('data-original-top', originalTopForNewPosition);
-    block.setAttribute('data-compensated', 'false');
-    
-    // Обновляем класс для соответствия дню
+    block.setAttribute('data-start-row', startRow);
+    // data-row-span unchanged
+
+    block.removeAttribute('data-original-top');
+    block.removeAttribute('data-compensated');
+
     block.className = block.className.replace(/activity-day-\w+/, 'activity-day-' + day);
 }
 

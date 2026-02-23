@@ -33,9 +33,3 @@ window.toggleDay = function(btn, dayCode) {
     // Принудительно обновляем позиции всех блоков
     updateActivityPositions();
 };
-
-// Функция сброса компенсации
-function resetCompensation() {
-    // Просто обновляем позиции, новая логика автоматически применит корректные значения
-    updateActivityPositions();
-}

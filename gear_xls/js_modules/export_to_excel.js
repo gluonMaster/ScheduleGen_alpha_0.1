@@ -13,8 +13,7 @@ function collectScheduleData() {
         var table = container.querySelector('.schedule-grid');
         var headerHeight = table.querySelector('thead').getBoundingClientRect().height;
         
-        // Получаем начало сетки расписания в минутах (по умолчанию 9:00)
-        var gridStart = 9 * 60; // 09:00 в минутах
+        // Начало сетки берётся из глобала gridStart, эмитируемого html_javascript.py
         
         // Проходим по всем блокам активностей в этом здании
         container.querySelectorAll('.activity-block').forEach(function(block) {
@@ -26,10 +25,6 @@ function collectScheduleData() {
             // Извлекаем данные из блока
             var day = block.getAttribute('data-day');
             var colIndex = parseInt(block.getAttribute('data-col-index'));
-            
-            // Получаем оригинальную позицию (без компенсации)
-            var originalTop = parseFloat(block.getAttribute('data-original-top') || block.style.top);
-            var blockHeight = parseFloat(block.style.height);
             
             // Получаем заголовок колонки для определения кабинета
             var roomName = '';
@@ -84,19 +79,24 @@ function collectScheduleData() {
             
             // Если время не найдено в содержимом блока, используем расчет по позиции (резервный вариант)
             if (!timeMatch) {
-                console.warn('Время не найдено в содержимом блока, используем расчет по позиции для блока: ' + 
-                            (lines[0] || 'неизвестный') + ' в кабинете ' + (roomName || 'неизвестен') + 
-                            ' в день ' + day + ' в здании ' + building);
-                
-                var rowIndex = Math.floor((originalTop - headerHeight) / (gridCellHeight + borderWidth));
-                var startMinutes = gridStart + (rowIndex * timeInterval);
-                
-                var rowSpan = Math.ceil(blockHeight / (gridCellHeight + borderWidth * 0.5));
-                var endMinutes = startMinutes + (rowSpan * timeInterval);
-                
-                startTime = minutesToTime(startMinutes);
-                endTime = minutesToTime(endMinutes);
-                duration = endMinutes - startMinutes;
+                console.warn('Время не найдено в содержимом блока, используем data-start-row/data-row-span');
+
+                var gStart    = (typeof gridStart !== 'undefined') ? gridStart : 9 * 60;
+                var tInterval = (typeof timeInterval !== 'undefined') ? timeInterval : 5;
+
+                var attrStartRow = parseInt(block.getAttribute('data-start-row'));
+                var attrRowSpan  = parseInt(block.getAttribute('data-row-span'));
+
+                if (!isNaN(attrStartRow) && !isNaN(attrRowSpan) && attrRowSpan > 0) {
+                    var startMinutes = gStart + attrStartRow * tInterval;
+                    var endMinutes   = gStart + (attrStartRow + attrRowSpan) * tInterval;
+                    startTime = minutesToTime(startMinutes);
+                    endTime   = minutesToTime(endMinutes);
+                    duration  = endMinutes - startMinutes;
+                } else {
+                    console.error('collectScheduleData: missing data-start-row/data-row-span and no time text found');
+                    // Keep startTime/endTime/duration at their zero-values; the export will contain empty time
+                }
             }
 
             // Извлекаем данные из содержимого блока

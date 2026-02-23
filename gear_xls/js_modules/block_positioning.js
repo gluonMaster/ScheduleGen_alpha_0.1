@@ -22,7 +22,6 @@ function createNewBlock(building, day, colIndex, subject, teacher, students, roo
     newBlock.setAttribute('data-day', day);
     newBlock.setAttribute('data-col-index', colIndex);
     newBlock.setAttribute('data-building', building);
-    newBlock.setAttribute('data-compensated', 'false');
     
     // Применяем выбранный цвет фона
     newBlock.style.backgroundColor = backgroundColor || '#FFFBD3'; // Желтый по умолчанию, если цвет не указан
@@ -50,54 +49,27 @@ function createNewBlock(building, day, colIndex, subject, teacher, students, roo
 
 // Функция для позиционирования нового блока
 function positionNewBlock(block, timeRange) {
-    var container = block.parentElement;
-    var table = container.querySelector('.schedule-grid');
-    
-    // Разбираем время
     var times = timeRange.match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
     if (!times) {
-        console.error('Некорректный формат времени:', timeRange);
+        console.error('positionNewBlock: bad time format:', timeRange);
         return;
     }
-    
-    var startHour = parseInt(times[1]);
-    var startMinute = parseInt(times[2]);
-    var endHour = parseInt(times[3]);
-    var endMinute = parseInt(times[4]);
-    
-    // Время в минутах от начала суток
-    var startMinutes = startHour * 60 + startMinute;
-    var endMinutes = endHour * 60 + endMinute;
-    
-    // Определяем начало сетки (обычно 9:00)
-    var gridStart = 9 * 60; // 09:00 в минутах
-    
-    // Рассчитываем количество интервалов с начала сетки
-    var timeInterval = window.timeInterval || 5; // 5-минутные интервалы по умолчанию
-    var startQuants = (startMinutes - gridStart) / timeInterval;
-    var endQuants = (endMinutes - gridStart) / timeInterval;
-    
-    // Получаем высоту заголовка и ячейки
-    var headerHeight = table.querySelector('thead').getBoundingClientRect().height;
-    var cellHeight = window.gridCellHeight || 15;
-    var borderWidth = window.borderWidth || 0.5;
-    
-    // Рассчитываем позицию top без компенсации
-    var originalTop = headerHeight + (startQuants * cellHeight) + (startQuants * borderWidth);
-    
-    // Рассчитываем высоту блока
-    var quantCount = endQuants - startQuants;
-    var internalBorders = Math.max(0, quantCount - 1);
-    var height = (quantCount * cellHeight) + (internalBorders * borderWidth * 0.5);
-    
-    // Устанавливаем оригинальную позицию без компенсации и высоту
-    block.setAttribute('data-original-top', originalTop);
-    block.style.height = height + 'px';
-    
-    // ВАЖНО: Ширина блока уже установлена в функции createNewBlock
-    // Здесь мы не трогаем параметр width, чтобы сохранить фиксированное значение 100px
-    
-    // Обновляем позиции всех блоков для применения компенсации
+    var startMinutes = parseInt(times[1]) * 60 + parseInt(times[2]);
+    var endMinutes   = parseInt(times[3]) * 60 + parseInt(times[4]);
+
+    var gStart    = (typeof gridStart !== 'undefined') ? gridStart : 9 * 60;
+    var tInterval = (typeof timeInterval !== 'undefined') ? timeInterval : 5;
+
+    var startRow = Math.floor((startMinutes - gStart) / tInterval);
+    var rowSpan  = Math.floor((endMinutes - startMinutes) / tInterval);
+
+    block.setAttribute('data-start-row', startRow);
+    block.setAttribute('data-row-span',  rowSpan);
+
+    // Remove stale legacy attributes if present (e.g. from old HTML files)
+    block.removeAttribute('data-original-top');
+    block.removeAttribute('data-compensated');
+
     updateActivityPositions();
 }
 

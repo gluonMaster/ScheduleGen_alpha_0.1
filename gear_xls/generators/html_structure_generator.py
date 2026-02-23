@@ -43,22 +43,23 @@ class HTMLStructureGenerator:
         self.border_width = border_width
         logger.debug(f"Инициализирован HTMLStructureGenerator: interval={time_interval}, border={border_width}")
     
-    def generate_document_head(self, output_css="schedule.css"):
+    def generate_document_head(self, output_css="schedule.css", grid_start=9*60):
         """
         Генерирует head секцию HTML документа.
-        
+
         Args:
             output_css (str): Путь к CSS файлу
-            
+            grid_start (int): Начало сетки в минутах (передаётся в JS как глобал gridStart)
+
         Returns:
             list: Список строк HTML для head секции
         """
         cellHeight = 15
-        dayCellWidth = 100  
+        dayCellWidth = 100
         timeColWidth = 80
         headerHeight = 45
         days_order = ["Mo", "Di", "Mi", "Do", "Fr", "Sa"]
-        
+
         head_parts = [
             "<!DOCTYPE html>",
             "<html lang='ru'>",
@@ -68,14 +69,14 @@ class HTMLStructureGenerator:
             f'  <link rel="stylesheet" type="text/css" href="{output_css}">',
             "  <title>Расписание занятий</title>"
         ]
-        
+
         # Встроенные стили
         head_parts.append(get_css_styles(cellHeight, dayCellWidth, timeColWidth, self.border_width))
-        
+
         # Встроенный JavaScript
-        head_parts.append(get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, 
-                                       self.time_interval, self.border_width))
-        
+        head_parts.append(get_javascript(cellHeight, dayCellWidth, headerHeight, days_order,
+                                       self.time_interval, self.border_width, grid_start))
+
         head_parts.append("</head>")
         
         logger.debug("Сгенерирована head секция HTML документа")

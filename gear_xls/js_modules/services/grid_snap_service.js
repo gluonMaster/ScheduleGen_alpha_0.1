@@ -57,41 +57,25 @@ var GridSnapService = (function() {
     }
 
     function snapToClosestCell(closestCell, container, block) {
-        var table = container.querySelector('.schedule-grid');
         var containerRect = container.getBoundingClientRect();
-        var containerStyle = window.getComputedStyle(container);
-        var padTop = parseFloat(containerStyle.paddingTop) || 0;
         
         var closestCellRect = closestCell.getBoundingClientRect();
         var day = closestCell.className.match(/day-(\w+)/)[1];
         var colIndex = parseInt(closestCell.getAttribute('data-col')) || 0;
         var rowIndex = parseInt(closestCell.getAttribute('data-row')) || 0;
         
-        // Определяем точные координаты для привязки
-        var dayHeaders = table.querySelectorAll('th.day-' + day);
-        var headerLeftPosition = 0;
-        var headerHeight = table.querySelector('thead').getBoundingClientRect().height;
-        
-        if (dayHeaders.length > 0) {
-            // Если у нас есть заголовки дня, используем их для определения левой позиции
-            var dayHeaderRect = dayHeaders[colIndex].getBoundingClientRect();
-            headerLeftPosition = dayHeaderRect.left - containerRect.left + container.scrollLeft;
-        } else {
-            // Запасной вариант - используем позицию ячейки
-            headerLeftPosition = closestCellRect.left - containerRect.left + container.scrollLeft;
-        }
-        
         // Устанавливаем точное позиционирование
-        var snappedLeft = headerLeftPosition;
-        // Вычисляем позицию для привязки к ячейке во время перетаскивания
-        var snappedTop = headerHeight + padTop + (rowIndex * (gridCellHeight + borderWidth));
+        var snappedLeft = closestCellRect.left - containerRect.left - (parseFloat(window.getComputedStyle(container).borderLeftWidth) || 0) + container.scrollLeft;
+        // Position using the cell rect directly (avoids formula drift)
+        var snappedTop = closestCellRect.top - containerRect.top - (parseFloat(window.getComputedStyle(container).borderTopWidth) || 0) + container.scrollTop;
         
         // Обновляем день и колонку для текущего перетаскивания
         block.setAttribute('data-day', day);
         block.setAttribute('data-col-index', colIndex);
+        block.setAttribute('data-start-row', rowIndex);
+        // Keep data-row-span unchanged during drag — block duration does not change
         
-        // НЕ устанавливаем data-original-top и data-compensated здесь!
-        // Это будет сделано правильно в BlockDropService на основе фактической позиции
+        // Устаревшие drag-атрибуты здесь не выставляются
         
         // Обновляем класс для соответствия новому дню
         block.className = block.className.replace(/activity-day-\w+/, 'activity-day-' + day);
@@ -122,7 +106,8 @@ var GridSnapService = (function() {
         var chosenDay = findDayByOffset(offsetWithinContainer, dayOffsets);
         
         // Вычисляем индекс столбца в рамках выбранного дня
-        var newColIndex = calculateColumnIndex(offsetWithinContainer, chosenDay, table);
+        var colIndex = calculateColumnIndex(offsetWithinContainer, chosenDay, table);
+        var newColIndex = colIndex;
           // Рассчитываем позиции
         var snappedLeft = calculateLeftPosition(timeCellWidth, padLeft, chosenDay, newColIndex, table);
         
@@ -130,12 +115,20 @@ var GridSnapService = (function() {
         // Определяем к какой строке должен привязаться блок
         var rowIndex = Math.round((top - headerHeight - padTop) / (gridCellHeight + borderWidth));
         rowIndex = Math.max(0, rowIndex); // не может быть отрицательным
-        
-        // Вычисляем точную позицию строки БЕЗ компенсации
-        var snappedTop = headerHeight + padTop + (rowIndex * (gridCellHeight + borderWidth));
+
+        // Look up the actual cell for precise top coordinate
+        var snappedTop;
+        // Use the snapped day and col to find the cell
+        var snapCell = table.querySelector('td.day-' + chosenDay.day + '[data-col="' + colIndex + '"][data-row="' + rowIndex + '"]');
+        if (snapCell) {
+            snappedTop = snapCell.getBoundingClientRect().top - containerRect.top - (parseFloat(window.getComputedStyle(container).borderTopWidth) || 0) + container.scrollTop;
+        } else {
+            // Cell not found — fall back to formula (handles edge rows)
+            snappedTop = headerHeight + padTop + (rowIndex * (gridCellHeight + borderWidth));
+        }
         
         // Обновляем атрибуты блока
-        updateBlockAttributes(block, chosenDay.day, newColIndex, snappedTop);
+        updateBlockAttributes(block, chosenDay.day, newColIndex, snappedTop, rowIndex);
         
         return { left: snappedLeft, top: snappedTop };
     }
@@ -225,12 +218,16 @@ var GridSnapService = (function() {
         
         return leftOffset;
     }
-      function updateBlockAttributes(block, day, colIndex, snappedTop) {
+      function updateBlockAttributes(block, day, colIndex, snappedTop, rowIndex) {
         block.setAttribute('data-day', day);
         block.setAttribute('data-col-index', colIndex);
-        
-        // НЕ устанавливаем data-original-top и data-compensated здесь!
-        // Это будет сделано правильно в BlockDropService на основе фактической позиции
+        // Update semantic row coordinate so updateActivityPositions() can reposition correctly
+        // rowIndex is not directly available here — the caller must pass it
+        if (typeof rowIndex !== 'undefined') {
+            block.setAttribute('data-start-row', rowIndex);
+        }
+        block.removeAttribute('data-original-top');
+        block.removeAttribute('data-compensated');
         
         // Обновляем класс дня
         block.className = block.className.replace(/activity-day-\w+/, 'activity-day-' + day);

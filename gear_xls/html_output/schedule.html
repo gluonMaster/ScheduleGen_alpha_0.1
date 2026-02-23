@@ -200,16 +200,13 @@
         var daysOrder = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
         var timeInterval = 5;
         var borderWidth = 0.5;
+        var gridStart = 540;
 
         // Глобальные переменные для отслеживания состояния
         window.editDialogOpen = false;
         window.draggedBlock = null;
-        
-        // Переменные для хранения параметров компенсации
-        window.compensationFactor = 0.4;
-        window.compensationExponent = 1.02;
-        window.previousCompensationFactor = 0.4;
-        window.previousCompensationExponent = 1.02;        // Храним измеренную ширину колонки времени
+
+        // Храним измеренную ширину колонки времени
         var measuredTimeColWidth = 0;
     
               // === НОВЫЕ СЕРВИСЫ ДЛЯ DRAG&DROP ФУНКЦИОНАЛЬНОСТИ ===
@@ -659,41 +656,25 @@ var GridSnapService = (function() {
     }
 
     function snapToClosestCell(closestCell, container, block) {
-        var table = container.querySelector('.schedule-grid');
         var containerRect = container.getBoundingClientRect();
-        var containerStyle = window.getComputedStyle(container);
-        var padTop = parseFloat(containerStyle.paddingTop) || 0;
         
         var closestCellRect = closestCell.getBoundingClientRect();
         var day = closestCell.className.match(/day-(\w+)/)[1];
         var colIndex = parseInt(closestCell.getAttribute('data-col')) || 0;
         var rowIndex = parseInt(closestCell.getAttribute('data-row')) || 0;
         
-        // Определяем точные координаты для привязки
-        var dayHeaders = table.querySelectorAll('th.day-' + day);
-        var headerLeftPosition = 0;
-        var headerHeight = table.querySelector('thead').getBoundingClientRect().height;
-        
-        if (dayHeaders.length > 0) {
-            // Если у нас есть заголовки дня, используем их для определения левой позиции
-            var dayHeaderRect = dayHeaders[colIndex].getBoundingClientRect();
-            headerLeftPosition = dayHeaderRect.left - containerRect.left + container.scrollLeft;
-        } else {
-            // Запасной вариант - используем позицию ячейки
-            headerLeftPosition = closestCellRect.left - containerRect.left + container.scrollLeft;
-        }
-        
         // Устанавливаем точное позиционирование
-        var snappedLeft = headerLeftPosition;
-        // Вычисляем позицию для привязки к ячейке во время перетаскивания
-        var snappedTop = headerHeight + padTop + (rowIndex * (gridCellHeight + borderWidth));
+        var snappedLeft = closestCellRect.left - containerRect.left - (parseFloat(window.getComputedStyle(container).borderLeftWidth) || 0) + container.scrollLeft;
+        // Position using the cell rect directly (avoids formula drift)
+        var snappedTop = closestCellRect.top - containerRect.top - (parseFloat(window.getComputedStyle(container).borderTopWidth) || 0) + container.scrollTop;
         
         // Обновляем день и колонку для текущего перетаскивания
         block.setAttribute('data-day', day);
         block.setAttribute('data-col-index', colIndex);
+        block.setAttribute('data-start-row', rowIndex);
+        // Keep data-row-span unchanged during drag — block duration does not change
         
-        // НЕ устанавливаем data-original-top и data-compensated здесь!
-        // Это будет сделано правильно в BlockDropService на основе фактической позиции
+        // Устаревшие drag-атрибуты здесь не выставляются
         
         // Обновляем класс для соответствия новому дню
         block.className = block.className.replace(/activity-day-\w+/, 'activity-day-' + day);
@@ -724,7 +705,8 @@ var GridSnapService = (function() {
         var chosenDay = findDayByOffset(offsetWithinContainer, dayOffsets);
         
         // Вычисляем индекс столбца в рамках выбранного дня
-        var newColIndex = calculateColumnIndex(offsetWithinContainer, chosenDay, table);
+        var colIndex = calculateColumnIndex(offsetWithinContainer, chosenDay, table);
+        var newColIndex = colIndex;
           // Рассчитываем позиции
         var snappedLeft = calculateLeftPosition(timeCellWidth, padLeft, chosenDay, newColIndex, table);
         
@@ -732,12 +714,20 @@ var GridSnapService = (function() {
         // Определяем к какой строке должен привязаться блок
         var rowIndex = Math.round((top - headerHeight - padTop) / (gridCellHeight + borderWidth));
         rowIndex = Math.max(0, rowIndex); // не может быть отрицательным
-        
-        // Вычисляем точную позицию строки БЕЗ компенсации
-        var snappedTop = headerHeight + padTop + (rowIndex * (gridCellHeight + borderWidth));
+
+        // Look up the actual cell for precise top coordinate
+        var snappedTop;
+        // Use the snapped day and col to find the cell
+        var snapCell = table.querySelector('td.day-' + chosenDay.day + '[data-col="' + colIndex + '"][data-row="' + rowIndex + '"]');
+        if (snapCell) {
+            snappedTop = snapCell.getBoundingClientRect().top - containerRect.top - (parseFloat(window.getComputedStyle(container).borderTopWidth) || 0) + container.scrollTop;
+        } else {
+            // Cell not found — fall back to formula (handles edge rows)
+            snappedTop = headerHeight + padTop + (rowIndex * (gridCellHeight + borderWidth));
+        }
         
         // Обновляем атрибуты блока
-        updateBlockAttributes(block, chosenDay.day, newColIndex, snappedTop);
+        updateBlockAttributes(block, chosenDay.day, newColIndex, snappedTop, rowIndex);
         
         return { left: snappedLeft, top: snappedTop };
     }
@@ -827,12 +817,16 @@ var GridSnapService = (function() {
         
         return leftOffset;
     }
-      function updateBlockAttributes(block, day, colIndex, snappedTop) {
+      function updateBlockAttributes(block, day, colIndex, snappedTop, rowIndex) {
         block.setAttribute('data-day', day);
         block.setAttribute('data-col-index', colIndex);
-        
-        // НЕ устанавливаем data-original-top и data-compensated здесь!
-        // Это будет сделано правильно в BlockDropService на основе фактической позиции
+        // Update semantic row coordinate so updateActivityPositions() can reposition correctly
+        // rowIndex is not directly available here — the caller must pass it
+        if (typeof rowIndex !== 'undefined') {
+            block.setAttribute('data-start-row', rowIndex);
+        }
+        block.removeAttribute('data-original-top');
+        block.removeAttribute('data-compensated');
         
         // Обновляем класс дня
         block.className = block.className.replace(/activity-day-\w+/, 'activity-day-' + day);
@@ -874,6 +868,35 @@ var BlockDropService = (function() {
     'use strict';
     
     // Приватные методы
+    function findClosestRowByTop(block, day, colIndex, table) {
+        // The block already has data-start-row set by snapToClosestCell/snapToGridFallback during drag
+        // Prefer reading it directly
+        var existingRow = block.getAttribute('data-start-row');
+        if (existingRow !== null && existingRow !== '') {
+            return parseInt(existingRow);
+        }
+        // Fallback: find the cell whose top is closest to block's current top
+        var blockTop = parseFloat(block.style.top) || 0;
+        var container = block.parentElement;
+        var containerRect = container.getBoundingClientRect();
+        var borderTop = parseFloat(window.getComputedStyle(container).borderTopWidth) || 0;
+        // blockTop is container-relative; convert to viewport
+        var blockTopViewport = blockTop + containerRect.top + borderTop - container.scrollTop;
+
+        var cells = Array.from(table.querySelectorAll('td.day-' + day + '[data-col="' + colIndex + '"]'));
+        var closestRow = 0;
+        var minDist = Infinity;
+        cells.forEach(function(cell) {
+            var cellRect = cell.getBoundingClientRect();
+            var dist = Math.abs(cellRect.top - blockTopViewport);
+            if (dist < minDist) {
+                minDist = dist;
+                closestRow = parseInt(cell.getAttribute('data-row')) || 0;
+            }
+        });
+        return closestRow;
+    }
+
     function findClosestHeaderByPosition(block, day, table) {
         // Находим все заголовки для этого дня
         var dayHeaders = Array.from(table.querySelectorAll('th.day-' + day));
@@ -911,29 +934,20 @@ var BlockDropService = (function() {
     }
     
     function updateBlockPositionData(block, day, colIndex, table) {
-        var headerHeight = table.querySelector('thead').getBoundingClientRect().height;
-        var currentTop = parseFloat(block.style.top);
-        
-        // ВОЗВРАЩАЕМ ПРОСТУЮ ЛОГИКУ СТАРОГО КОДА:
-        // Определяем номер строки напрямую по текущей позиции блока
-        var rowIndex = Math.round((currentTop - headerHeight) / (gridCellHeight + borderWidth));
-        rowIndex = Math.max(0, rowIndex); // не может быть отрицательным
-        
-        // Вычисляем компенсацию для найденной строки (как в старом коде)
-        var factor = window.compensationFactor || 0.4;
-        var exponent = window.compensationExponent || 1.02;
-        var compensation = Math.pow(rowIndex, exponent) * factor;
-        
-        // ПРАВИЛЬНО восстанавливаем исходную позицию (как в старом коде)
-        var originalTopForNewPosition = currentTop + compensation;
-        
-        // Обновляем атрибуты блока
+        // Determine the start row for the dropped block
+        var closestRow = findClosestRowByTop(block, day, colIndex, table);
+
+        // Update semantic coordinates
         block.setAttribute('data-col-index', colIndex);
         block.setAttribute('data-day', day);
-        block.setAttribute('data-original-top', originalTopForNewPosition);
-        block.setAttribute('data-compensated', 'false');
-        
-        // Обновляем класс для соответствия дню
+        block.setAttribute('data-start-row', closestRow);
+        // data-row-span is unchanged — block duration does not change on drop
+
+        // Remove stale drag attributes
+        block.removeAttribute('data-original-top');
+        block.removeAttribute('data-compensated');
+
+        // Update CSS class
         block.className = block.className.replace(/activity-day-\w+/, 'activity-day-' + day);
     }
     
@@ -1111,12 +1125,6 @@ window.toggleDay = function(btn, dayCode) {
     updateActivityPositions();
 };
 
-// Функция сброса компенсации
-function resetCompensation() {
-    // Просто обновляем позиции, новая логика автоматически применит корректные значения
-    updateActivityPositions();
-}
-
             
             // Модуль для позиционирования элементов расписания
 
@@ -1125,85 +1133,118 @@ if (typeof window.daysOrder === 'undefined') {
     window.daysOrder = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 }
 
+// Returns start row derived from time text in block content, or null on failure.
+// Uses the LAST match to avoid false positives from subject/teacher text that looks like a time.
+function deriveStartRowFromBlock(block, table) {
+    var text = block.textContent || '';
+    var all = text.match(/\d{1,2}:\d{2}\s*[-\u2013]\s*\d{1,2}:\d{2}/g);
+    if (!all) { console.warn('deriveStartRowFromBlock: no time found in block text'); return null; }
+    var last = all[all.length - 1].match(/^(\d{1,2}):(\d{2})/);
+    if (!last) { return null; }
+    var startMinutes = parseInt(last[1], 10) * 60 + parseInt(last[2], 10);
+    var gStart = (typeof gridStart !== 'undefined') ? gridStart : 9 * 60;
+    var tInterval = (typeof timeInterval !== 'undefined') ? timeInterval : 5;
+    var row = Math.floor((startMinutes - gStart) / tInterval);
+    if (isNaN(row) || row < 0) { console.warn('deriveStartRowFromBlock: invalid row', row); return null; }
+    return String(row);
+}
+
+// Returns row span derived from time text in block content, or null on failure.
+// Uses the LAST match to avoid false positives from subject/teacher text that looks like a time.
+function deriveRowSpanFromBlock(block) {
+    var text = block.textContent || '';
+    var all = text.match(/(\d{1,2}):(\d{2})\s*[-\u2013]\s*(\d{1,2}):(\d{2})/g);
+    if (!all) { console.warn('deriveRowSpanFromBlock: no time range found in block text'); return null; }
+    var m = all[all.length - 1].match(/^(\d{1,2}):(\d{2})\s*[-\u2013]\s*(\d{1,2}):(\d{2})$/);
+    if (!m) { return null; }
+    var startMin = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    var endMin   = parseInt(m[3], 10) * 60 + parseInt(m[4], 10);
+    var tInterval = (typeof timeInterval !== 'undefined') ? timeInterval : 5;
+    var span = Math.floor((endMin - startMin) / tInterval);
+    if (isNaN(span) || span <= 0) { console.warn('deriveRowSpanFromBlock: invalid span', span); return null; }
+    return String(span);
+}
+
 // Модифицированная функция обновления позиций activity-block
 function updateActivityPositions() {
     document.querySelectorAll('.schedule-container').forEach(function(container) {
-        var containerStyle = window.getComputedStyle(container);
-        var containerLeftPadding = parseFloat(containerStyle.paddingLeft) || 0;
-
         var table = container.querySelector('.schedule-grid');
-        var timeCell = table.querySelector('th.time-cell');
-        var timeCellWidthMeasured = timeCell
-            ? timeCell.getBoundingClientRect().width
-            : 0; // fallback
+        if (!table) return;
 
-        // Запоминаем измеренную ширину колонки времени
-        measuredTimeColWidth = timeCellWidthMeasured;
+        var containerRect = container.getBoundingClientRect();
+        var containerStyle = window.getComputedStyle(container);
+        var borderLeft = parseFloat(containerStyle.borderLeftWidth) || 0;
+        var borderTop = parseFloat(containerStyle.borderTopWidth) || 0;
 
-        // Позиционируем каждый блок
+        // Find the maximum data-row value present in this table (for boundary clamping)
+        var allDataCells = table.querySelectorAll('td[data-row]');
+        var maxRow = 0;
+        allDataCells.forEach(function(cell) {
+            var r = parseInt(cell.getAttribute('data-row'), 10);
+            if (!isNaN(r) && r > maxRow) maxRow = r;
+        });
+
         container.querySelectorAll('.activity-block').forEach(function(block) {
             var day = block.getAttribute('data-day');
-            var colIndex = parseInt(block.getAttribute('data-col-index'));
+            var col = block.getAttribute('data-col-index');
+            var startRow = block.getAttribute('data-start-row');
+            var rowSpan = block.getAttribute('data-row-span');
 
-            // Стартуем с реальной ширины колонки времени
-            var leftOffset = timeCellWidthMeasured;
-
-            // Прибавляем ширину всех предыдущих дней
-            var daysOrder = window.daysOrder || ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
-            for (var i = 0; i < daysOrder.length; i++) {
-                var d = daysOrder[i];
-                if (d === day) break;
-                var headers = table.querySelectorAll('th.day-' + d);
-                headers.forEach(function(h) {
-                    if (window.getComputedStyle(h).display !== 'none') {
-                        leftOffset += h.getBoundingClientRect().width;
-                    }
-                });
+            // Backward-compat fallback: if data-start-row is missing, derive from time text
+            if (startRow === null || startRow === '') {
+                startRow = deriveStartRowFromBlock(block, table);
+                if (startRow === null) return; // cannot position
+                block.setAttribute('data-start-row', startRow);
+            }
+            if (rowSpan === null || rowSpan === '') {
+                rowSpan = deriveRowSpanFromBlock(block);
+                if (rowSpan === null) return;
+                block.setAttribute('data-row-span', rowSpan);
             }
 
-            // Прибавляем ширину нужного количества столбцов текущего дня
-            var currentDayHeaders = table.querySelectorAll('th.day-' + day);
-            for (var j = 0; j < colIndex; j++) {
-                if (currentDayHeaders[j] && window.getComputedStyle(currentDayHeaders[j]).display !== 'none') {
-                    leftOffset += currentDayHeaders[j].getBoundingClientRect().width;
-                }
+            startRow = parseInt(startRow, 10);
+            rowSpan = parseInt(rowSpan, 10);
+            col = parseInt(col, 10);
+
+            // Find anchor cell
+            var startCell = table.querySelector(
+                'td.day-' + day + '[data-col="' + col + '"][data-row="' + startRow + '"]'
+            );
+            if (!startCell) {
+                console.warn('updateActivityPositions: anchor cell not found for block', day, col, startRow);
+                return;
             }
 
-            // Учитываем padding контейнера
-            leftOffset = leftOffset + containerLeftPadding;
-            block.style.left = leftOffset + 'px';
+            var startCellRect = startCell.getBoundingClientRect();
 
-            // НАЧАЛО ЛОГИКИ КОМПЕНСАЦИИ
-            
-            // Получаем исходную позицию (если есть) или текущую позицию
-            var originalTop;
-            if (block.hasAttribute('data-original-top')) {
-                originalTop = parseFloat(block.getAttribute('data-original-top'));
+            // Find end boundary cell (the cell AT startRow + rowSpan)
+            var endRow = startRow + rowSpan;
+            var endCell = table.querySelector(
+                'td.day-' + day + '[data-col="' + col + '"][data-row="' + endRow + '"]'
+            );
+            var endCellTop;
+            if (endCell) {
+                endCellTop = endCell.getBoundingClientRect().top;
             } else {
-                // Если нет атрибута, используем текущую позицию как исходную
-                originalTop = parseFloat(block.style.top);
-                block.setAttribute('data-original-top', originalTop);
+                // Block extends to or past the last row - use bottom of last available cell
+                var lastCell = table.querySelector(
+                    'td.day-' + day + '[data-col="' + col + '"][data-row="' + maxRow + '"]'
+                );
+                endCellTop = lastCell
+                    ? lastCell.getBoundingClientRect().bottom
+                    : startCellRect.bottom;
             }
-            
-            var headerHeight = parseFloat(table.querySelector('thead').getBoundingClientRect().height);
-            
-            // Определяем номер строки от начала таблицы используя исходную позицию
-            var rowIndex = Math.floor((originalTop - headerHeight) / (gridCellHeight + borderWidth));
-            
-            // Используем текущие настройки компенсации
-            var factor = window.compensationFactor !== undefined ? window.compensationFactor : 0.4;
-            var exponent = window.compensationExponent !== undefined ? window.compensationExponent : 1.02;
-            
-            // Рассчитываем компенсацию
-            var compensation = Math.pow(rowIndex, exponent) * factor;
-            
-            // Применяем компенсацию к исходному положению
-            block.style.top = (originalTop - compensation) + 'px';
-            
-            // Помечаем блок как имеющий компенсацию
-            block.setAttribute('data-compensated', 'true');
-            
-            // КОНЕЦ ЛОГИКИ КОМПЕНСАЦИИ
+
+            // Convert viewport-relative coordinates to container-relative (position:absolute origin)
+            var left = startCellRect.left - containerRect.left - borderLeft + container.scrollLeft;
+            var top = startCellRect.top - containerRect.top - borderTop + container.scrollTop;
+            var width = startCellRect.width;
+            var height = endCellTop - startCellRect.top;
+
+            block.style.left = left + 'px';
+            block.style.top = top + 'px';
+            block.style.width = width + 'px';
+            block.style.height = height + 'px';
         });
     });
 }
@@ -1213,64 +1254,27 @@ window.updateActivityPositions = updateActivityPositions;
 
 // Функция для обновления позиции и размера блока при изменении времени
 function updateBlockPosition(block, newTimeRange) {
-    // Разбираем новое время
     var times = newTimeRange.match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
     if (!times) {
-        console.error('Некорректный формат времени:', newTimeRange);
+        console.error('updateBlockPosition: bad time format:', newTimeRange);
         return;
     }
-    
-    var startHour = parseInt(times[1]);
-    var startMinute = parseInt(times[2]);
-    var endHour = parseInt(times[3]);
-    var endMinute = parseInt(times[4]);
-    
-    // Время в минутах от начала суток
-    var startMinutes = startHour * 60 + startMinute;
-    var endMinutes = endHour * 60 + endMinute;
-    
-    // Определяем начало сетки (по умолчанию 9:00)
-    var gridStart = 9 * 60; // 09:00 в минутах
-    
-    // Рассчитываем количество интервалов с начала сетки
-    var timeInterval = 5; // 5-минутные интервалы
-    var startQuants = (startMinutes - gridStart) / timeInterval;
-    var endQuants = (endMinutes - gridStart) / timeInterval;
-    
-    // Получаем текущую высоту заголовка и ячейки
-    var container = block.parentElement;
-    var table = container.querySelector('.schedule-grid');
-    var headerHeight = table.querySelector('thead').getBoundingClientRect().height;
-    var cellHeight = window.gridCellHeight || 15;
-    var borderWidth = window.borderWidth || 0.5;
-    
-    // Рассчитываем новую позицию без компенсации
-    var newOriginalTop = headerHeight + (startQuants * cellHeight) + (startQuants * borderWidth);
-    
-    var quantCount = endQuants - startQuants;
-    var internalBorders = Math.max(0, quantCount - 1);
-    var height = (quantCount * cellHeight) + (internalBorders * borderWidth * 0.5);
-    
-    // Отладочная информация
-    console.log('Обновление позиции блока:', {
-        newTime: newTimeRange,
-        startMinutes: startMinutes,
-        endMinutes: endMinutes,
-        startQuants: startQuants,
-        endQuants: endQuants,
-        newOriginalTop: newOriginalTop,
-        height: height
-    });
-    
-    // Сохраняем исходную позицию без компенсации
-    block.setAttribute('data-original-top', newOriginalTop);
-    
-    // Устанавливаем высоту блока
-    block.style.height = height + 'px';
-    
-    // Сбрасываем флаг компенсации, чтобы новая компенсация была применена при updateActivityPositions
-    block.setAttribute('data-compensated', 'false');
+    var startMinutes = parseInt(times[1], 10) * 60 + parseInt(times[2], 10);
+    var endMinutes = parseInt(times[3], 10) * 60 + parseInt(times[4], 10);
+
+    var gStart = (typeof gridStart !== 'undefined') ? gridStart : 9 * 60;
+    var tInterval = (typeof timeInterval !== 'undefined') ? timeInterval : 5;
+
+    var newStartRow = Math.floor((startMinutes - gStart) / tInterval);
+    var newRowSpan = Math.floor((endMinutes - startMinutes) / tInterval);
+
+    block.setAttribute('data-start-row', newStartRow);
+    block.setAttribute('data-row-span', newRowSpan);
+
+    updateActivityPositions();
 }
+
+window.updateBlockPosition = updateBlockPosition;
 
 // Функция для обновления колонки блока при изменении кабинета
 function updateBlockColumn(block, newRoom) {
@@ -1465,10 +1469,9 @@ function initLegacyDragAndDrop() {
                 // Обновляем data-аттрибуты блока
                 window.draggedBlock.setAttribute('data-day', day);
                 window.draggedBlock.setAttribute('data-col-index', colIndex);
-                window.draggedBlock.setAttribute('data-compensated', 'false'); // Важно: устанавливаем false!
-                
-                // Сохраняем исходное положение блока без компенсации
-                window.draggedBlock.setAttribute('data-original-top', snappedTop);
+                window.draggedBlock.setAttribute('data-start-row', rowIndex);
+                window.draggedBlock.removeAttribute('data-original-top');
+                window.draggedBlock.removeAttribute('data-compensated');
                 
                 // Обновляем класс для соответствия новому дню
                 window.draggedBlock.className = window.draggedBlock.className.replace(/activity-day-\w+/, 'activity-day-' + day);
@@ -1562,10 +1565,9 @@ function initLegacyDragAndDrop() {
         // Обновляем атрибуты блока
         window.draggedBlock.setAttribute('data-day', chosenDay.day);
         window.draggedBlock.setAttribute('data-col-index', newColIndex);
-        window.draggedBlock.setAttribute('data-compensated', 'false'); // Устанавливаем false!
-        
-        // Сохраняем оригинальную позицию до компенсации
-        window.draggedBlock.setAttribute('data-original-top', snappedTop);
+        window.draggedBlock.setAttribute('data-start-row', rowIndex);
+        window.draggedBlock.removeAttribute('data-original-top');
+        window.draggedBlock.removeAttribute('data-compensated');
         
         // Обновляем класс дня
         window.draggedBlock.className = window.draggedBlock.className.replace(/activity-day-\w+/, 'activity-day-' + chosenDay.day);
@@ -1744,31 +1746,44 @@ function legacyProcessBlockDrop(block) {
     }
 }
 
+function findClosestRowByTopInRefactored(block, day, colIndex, table) {
+    var blockTop = parseFloat(block.style.top) || 0;
+    var container = block.parentElement;
+    var containerRect = container.getBoundingClientRect();
+    var borderTop = parseFloat(window.getComputedStyle(container).borderTopWidth) || 0;
+    var blockTopViewport = blockTop + containerRect.top + borderTop - container.scrollTop;
+
+    var cells = Array.from(table.querySelectorAll('td.day-' + day + '[data-col="' + colIndex + '"]'));
+    var closestRow = 0;
+    var minDist = Infinity;
+    cells.forEach(function(cell) {
+        var cellRect = cell.getBoundingClientRect();
+        var dist = Math.abs(cellRect.top - blockTopViewport);
+        if (dist < minDist) {
+            minDist = dist;
+            closestRow = parseInt(cell.getAttribute('data-row')) || 0;
+        }
+    });
+    return closestRow;
+}
+
 // Вспомогательная функция для обновления атрибутов блока
 function updateBlockDropAttributes(block, day, colIndex, table) {
-    var headerHeight = table.querySelector('thead').getBoundingClientRect().height;
-    var currentTop = parseFloat(block.style.top);
-    
-    // ВОЗВРАЩАЕМ ПРОСТУЮ ЛОГИКУ СТАРОГО КОДА:
-    // Определяем номер строки напрямую по текущей позиции блока
-    var rowIndex = Math.round((currentTop - headerHeight) / (gridCellHeight + borderWidth));
-    rowIndex = Math.max(0, rowIndex); // не может быть отрицательным
-    
-    // Вычисляем компенсацию для найденной строки (как в старом коде)
-    var factor = window.compensationFactor || 0.4;
-    var exponent = window.compensationExponent || 1.02;
-    var compensation = Math.pow(rowIndex, exponent) * factor;
-    
-    // ПРАВИЛЬНО восстанавливаем исходную позицию (как в старом коде)
-    var originalTopForNewPosition = currentTop + compensation;
-    
-    // Обновляем атрибуты блока
+    // Determine start row: prefer the value already set by snapToClosestCell during drag
+    var startRow = block.getAttribute('data-start-row');
+    if (startRow === null || startRow === '') {
+        // Fallback: find closest row by vertical proximity (same logic as BlockDropService)
+        startRow = String(findClosestRowByTopInRefactored(block, day, colIndex, table));
+    }
+
     block.setAttribute('data-col-index', colIndex);
     block.setAttribute('data-day', day);
-    block.setAttribute('data-original-top', originalTopForNewPosition);
-    block.setAttribute('data-compensated', 'false');
-    
-    // Обновляем класс для соответствия дню
+    block.setAttribute('data-start-row', startRow);
+    // data-row-span unchanged
+
+    block.removeAttribute('data-original-top');
+    block.removeAttribute('data-compensated');
+
     block.className = block.className.replace(/activity-day-\w+/, 'activity-day-' + day);
 }
 
@@ -2111,271 +2126,6 @@ window.addColumnIfMissing = addColumnIfMissing;
 window.formatDayRoomHeader = formatDayRoomHeader;
 
             
-            // Модуль панели настроек компенсации
-
-// Обновленная функция применения настроек компенсации
-function applyCompensationSettings() {
-    // Сохраняем предыдущие значения 
-    window.previousCompensationFactor = window.compensationFactor;
-    window.previousCompensationExponent = window.compensationExponent;
-    
-    // Получаем новые значения из ползунков
-    var newSettings = {
-        compensationFactor: parseFloat(document.getElementById('comp-factor').value),
-        compensationExponent: parseFloat(document.getElementById('comp-exponent').value)
-    };
-    
-    // Обновляем глобальные переменные
-    window.compensationFactor = newSettings.compensationFactor;
-    window.compensationExponent = newSettings.compensationExponent;
-    
-    // Сохраняем настройки в localStorage
-    saveSettings(newSettings);
-    
-    // Обновляем позиции всех блоков, используя новые параметры компенсации
-    updateActivityPositions();
-    
-    // Уведомляем пользователя
-    alert('Настройки компенсации применены!');
-}
-
-// Обновленная функция инициализации настроек компенсации
-function initCompensationSettings() {
-    // Значения по умолчанию
-    var defaultSettings = {
-        compensationFactor: 0.4,
-        compensationExponent: 1.02
-    };
-    
-    // Получаем сохраненные настройки или используем значения по умолчанию
-    var settings = loadSettings() || defaultSettings;
-    
-    // Обновляем глобальные переменные
-    window.compensationFactor = settings.compensationFactor;
-    window.compensationExponent = settings.compensationExponent;
-    window.previousCompensationFactor = settings.compensationFactor;
-    window.previousCompensationExponent = settings.compensationExponent;
-    
-    // Проверяем, существует ли уже панель настроек
-    var existingPanel = document.querySelector('.settings-panel');
-    
-    if (!existingPanel) {
-        // Создаем HTML панели настроек только если её нет
-        var settingsHTML = `
-            <div class="settings-panel">
-                <div class="settings-toggle">⚙️</div>
-                <div class="settings-content">
-                    <h3>Настройки отображения</h3>
-                    <div class="setting-row">
-                        <label for="comp-factor">Коэффициент компенсации: <span id="comp-factor-value">${settings.compensationFactor}</span></label>
-                        <input type="range" id="comp-factor" min="0" max="1" step="0.05" value="${settings.compensationFactor}">
-                    </div>
-                    <div class="setting-row">
-                        <label for="comp-exponent">Показатель нелинейности: <span id="comp-exponent-value">${settings.compensationExponent}</span></label>
-                        <input type="range" id="comp-exponent" min="0.8" max="1.5" step="0.01" value="${settings.compensationExponent}">
-                    </div>
-                    <div class="setting-buttons">
-                        <button id="apply-settings">Применить</button>
-                        <button id="reset-settings">Сбросить</button>
-                    </div>
-                    <div class="settings-info">
-                        Настройки помогают корректно отображать блоки в вашем браузере.
-                        <br>Изменяйте значения и нажимайте "Применить" для проверки.
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        // Создаем и добавляем стили (только при создании новой панели)
-        var styleElement = document.createElement('style');
-        styleElement.textContent = `
-            .settings-panel {
-                position: fixed;
-                bottom: 20px;
-                right: 20px;
-                z-index: 999;
-                font-family: Arial, sans-serif;
-            }
-            .settings-toggle {
-                width: 40px;
-                height: 40px;
-                background-color: white;
-                border-radius: 50%;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                cursor: pointer;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-                font-size: 20px;
-            }
-            .settings-content {
-                position: absolute;
-                bottom: 50px;
-                right: 0;
-                width: 300px;
-                background-color: white;
-                border-radius: 8px;
-                padding: 15px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-                display: none;
-            }
-            .settings-content h3 {
-                margin-top: 0;
-                margin-bottom: 15px;
-                font-size: 16px;
-                color: #333;
-                border-bottom: 1px solid #eee;
-                padding-bottom: 8px;
-            }
-            .setting-row {
-                margin-bottom: 15px;
-            }
-            .setting-row label {
-                display: block;
-                margin-bottom: 5px;
-                font-size: 14px;
-            }
-            .setting-row input {
-                width: 100%;
-            }
-            .setting-buttons {
-                display: flex;
-                margin-top: 15px;
-        }
-        .setting-buttons button {
-            padding: 8px 12px;
-            border: none;
-            border-radius: 4px;
-            background-color: #4CAF50;
-            color: white;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        .setting-buttons button:hover {
-            opacity: 0.9;
-        }
-        .setting-buttons button#reset-settings {
-            background-color: #f1f1f1;
-            color: #333;
-        }
-        .settings-info {
-            margin-top: 15px;
-            font-size: 12px;
-            color: #666;
-            font-style: italic;
-            line-height: 1.4;
-        }
-        .settings-open .settings-content {
-            display: block;
-        }
-        `;
-        document.head.appendChild(styleElement);
-        
-        // Создаем панель настроек (только если её нет)
-        var settingsElement = document.createElement('div');
-        settingsElement.innerHTML = settingsHTML;
-        document.body.appendChild(settingsElement);
-    }
-    
-    // Получаем элементы (независимо от того, создали мы их или они уже существовали)
-    var settingsPanel = document.querySelector('.settings-panel');
-    var settingsToggle = document.querySelector('.settings-toggle');
-    var compFactorInput = document.getElementById('comp-factor');
-    var compExponentInput = document.getElementById('comp-exponent');
-    var compFactorValue = document.getElementById('comp-factor-value');
-    var compExponentValue = document.getElementById('comp-exponent-value');
-    var applyButton = document.getElementById('apply-settings');
-    var resetButton = document.getElementById('reset-settings');
-    
-    // Обновляем значения в уже существующих элементах
-    if (compFactorInput) compFactorInput.value = settings.compensationFactor;
-    if (compExponentInput) compExponentInput.value = settings.compensationExponent;
-    if (compFactorValue) compFactorValue.textContent = settings.compensationFactor;
-    if (compExponentValue) compExponentValue.textContent = settings.compensationExponent;
-    
-    // Очищаем старые обработчики событий путем клонирования элементов
-    if (settingsToggle) {
-        var newSettingsToggle = settingsToggle.cloneNode(true);
-        settingsToggle.parentNode.replaceChild(newSettingsToggle, settingsToggle);
-        settingsToggle = newSettingsToggle;
-    }
-    
-    if (applyButton) {
-        var newApplyButton = applyButton.cloneNode(true);
-        applyButton.parentNode.replaceChild(newApplyButton, applyButton);
-        applyButton = newApplyButton;
-    }
-    
-    if (resetButton) {
-        var newResetButton = resetButton.cloneNode(true);
-        resetButton.parentNode.replaceChild(newResetButton, resetButton);
-        resetButton = newResetButton;
-    }
-    
-    if (compFactorInput) {
-        var newCompFactorInput = compFactorInput.cloneNode(true);
-        compFactorInput.parentNode.replaceChild(newCompFactorInput, compFactorInput);
-        compFactorInput = newCompFactorInput;
-    }
-    
-    if (compExponentInput) {
-        var newCompExponentInput = compExponentInput.cloneNode(true);
-        compExponentInput.parentNode.replaceChild(newCompExponentInput, compExponentInput);
-        compExponentInput = newCompExponentInput;
-    }
-    
-    // Привязываем обработчики событий заново
-    if (settingsToggle && settingsPanel) {
-        settingsToggle.addEventListener('click', function() {
-            settingsPanel.classList.toggle('settings-open');
-        });
-    }
-    
-    if (compFactorInput && compFactorValue) {
-        compFactorInput.addEventListener('input', function() {
-            compFactorValue.textContent = this.value;
-        });
-    }
-    
-    if (compExponentInput && compExponentValue) {
-        compExponentInput.addEventListener('input', function() {
-            compExponentValue.textContent = this.value;
-        });
-    }
-    
-    if (applyButton) {
-        applyButton.addEventListener('click', applyCompensationSettings);
-    }
-    
-    if (resetButton) {
-        resetButton.addEventListener('click', function() {
-            // Сбрасываем к значениям по умолчанию
-            if (compFactorInput) compFactorInput.value = defaultSettings.compensationFactor;
-            if (compExponentInput) compExponentInput.value = defaultSettings.compensationExponent;
-            if (compFactorValue) compFactorValue.textContent = defaultSettings.compensationFactor;
-            if (compExponentValue) compExponentValue.textContent = defaultSettings.compensationExponent;
-            
-            // Сохраняем предыдущие значения перед обновлением
-            window.previousCompensationFactor = window.compensationFactor;
-            window.previousCompensationExponent = window.compensationExponent;
-            
-            // Применяем значения по умолчанию
-            window.compensationFactor = defaultSettings.compensationFactor;
-            window.compensationExponent = defaultSettings.compensationExponent;
-            
-            // Сохраняем настройки по умолчанию
-            saveSettings(defaultSettings);
-            
-            // Обновляем позиции всех блоков
-            resetCompensation();
-            updateActivityPositions();
-            
-            // Уведомляем пользователя
-            alert('Настройки сброшены к значениям по умолчанию!');
-        });
-    }
-}
-            
             // Модуль для сохранения и экспорта расписания
 
 // Инициализация функций сохранения
@@ -2663,8 +2413,7 @@ function collectScheduleData() {
         var table = container.querySelector('.schedule-grid');
         var headerHeight = table.querySelector('thead').getBoundingClientRect().height;
         
-        // Получаем начало сетки расписания в минутах (по умолчанию 9:00)
-        var gridStart = 9 * 60; // 09:00 в минутах
+        // Начало сетки берётся из глобала gridStart, эмитируемого html_javascript.py
         
         // Проходим по всем блокам активностей в этом здании
         container.querySelectorAll('.activity-block').forEach(function(block) {
@@ -2676,10 +2425,6 @@ function collectScheduleData() {
             // Извлекаем данные из блока
             var day = block.getAttribute('data-day');
             var colIndex = parseInt(block.getAttribute('data-col-index'));
-            
-            // Получаем оригинальную позицию (без компенсации)
-            var originalTop = parseFloat(block.getAttribute('data-original-top') || block.style.top);
-            var blockHeight = parseFloat(block.style.height);
             
             // Получаем заголовок колонки для определения кабинета
             var roomName = '';
@@ -2734,19 +2479,24 @@ function collectScheduleData() {
             
             // Если время не найдено в содержимом блока, используем расчет по позиции (резервный вариант)
             if (!timeMatch) {
-                console.warn('Время не найдено в содержимом блока, используем расчет по позиции для блока: ' + 
-                            (lines[0] || 'неизвестный') + ' в кабинете ' + (roomName || 'неизвестен') + 
-                            ' в день ' + day + ' в здании ' + building);
-                
-                var rowIndex = Math.floor((originalTop - headerHeight) / (gridCellHeight + borderWidth));
-                var startMinutes = gridStart + (rowIndex * timeInterval);
-                
-                var rowSpan = Math.ceil(blockHeight / (gridCellHeight + borderWidth * 0.5));
-                var endMinutes = startMinutes + (rowSpan * timeInterval);
-                
-                startTime = minutesToTime(startMinutes);
-                endTime = minutesToTime(endMinutes);
-                duration = endMinutes - startMinutes;
+                console.warn('Время не найдено в содержимом блока, используем data-start-row/data-row-span');
+
+                var gStart    = (typeof gridStart !== 'undefined') ? gridStart : 9 * 60;
+                var tInterval = (typeof timeInterval !== 'undefined') ? timeInterval : 5;
+
+                var attrStartRow = parseInt(block.getAttribute('data-start-row'));
+                var attrRowSpan  = parseInt(block.getAttribute('data-row-span'));
+
+                if (!isNaN(attrStartRow) && !isNaN(attrRowSpan) && attrRowSpan > 0) {
+                    var startMinutes = gStart + attrStartRow * tInterval;
+                    var endMinutes   = gStart + (attrStartRow + attrRowSpan) * tInterval;
+                    startTime = minutesToTime(startMinutes);
+                    endTime   = minutesToTime(endMinutes);
+                    duration  = endMinutes - startMinutes;
+                } else {
+                    console.error('collectScheduleData: missing data-start-row/data-row-span and no time text found');
+                    // Keep startTime/endTime/duration at their zero-values; the export will contain empty time
+                }
             }
 
             // Извлекаем данные из содержимого блока
@@ -3601,7 +3351,6 @@ function createNewBlock(building, day, colIndex, subject, teacher, students, roo
     newBlock.setAttribute('data-day', day);
     newBlock.setAttribute('data-col-index', colIndex);
     newBlock.setAttribute('data-building', building);
-    newBlock.setAttribute('data-compensated', 'false');
     
     // Применяем выбранный цвет фона
     newBlock.style.backgroundColor = backgroundColor || '#FFFBD3'; // Желтый по умолчанию, если цвет не указан
@@ -3629,60 +3378,34 @@ function createNewBlock(building, day, colIndex, subject, teacher, students, roo
 
 // Функция для позиционирования нового блока
 function positionNewBlock(block, timeRange) {
-    var container = block.parentElement;
-    var table = container.querySelector('.schedule-grid');
-    
-    // Разбираем время
     var times = timeRange.match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
     if (!times) {
-        console.error('Некорректный формат времени:', timeRange);
+        console.error('positionNewBlock: bad time format:', timeRange);
         return;
     }
-    
-    var startHour = parseInt(times[1]);
-    var startMinute = parseInt(times[2]);
-    var endHour = parseInt(times[3]);
-    var endMinute = parseInt(times[4]);
-    
-    // Время в минутах от начала суток
-    var startMinutes = startHour * 60 + startMinute;
-    var endMinutes = endHour * 60 + endMinute;
-    
-    // Определяем начало сетки (обычно 9:00)
-    var gridStart = 9 * 60; // 09:00 в минутах
-    
-    // Рассчитываем количество интервалов с начала сетки
-    var timeInterval = window.timeInterval || 5; // 5-минутные интервалы по умолчанию
-    var startQuants = (startMinutes - gridStart) / timeInterval;
-    var endQuants = (endMinutes - gridStart) / timeInterval;
-    
-    // Получаем высоту заголовка и ячейки
-    var headerHeight = table.querySelector('thead').getBoundingClientRect().height;
-    var cellHeight = window.gridCellHeight || 15;
-    var borderWidth = window.borderWidth || 0.5;
-    
-    // Рассчитываем позицию top без компенсации
-    var originalTop = headerHeight + (startQuants * cellHeight) + (startQuants * borderWidth);
-    
-    // Рассчитываем высоту блока
-    var quantCount = endQuants - startQuants;
-    var internalBorders = Math.max(0, quantCount - 1);
-    var height = (quantCount * cellHeight) + (internalBorders * borderWidth * 0.5);
-    
-    // Устанавливаем оригинальную позицию без компенсации и высоту
-    block.setAttribute('data-original-top', originalTop);
-    block.style.height = height + 'px';
-    
-    // ВАЖНО: Ширина блока уже установлена в функции createNewBlock
-    // Здесь мы не трогаем параметр width, чтобы сохранить фиксированное значение 100px
-    
-    // Обновляем позиции всех блоков для применения компенсации
+    var startMinutes = parseInt(times[1]) * 60 + parseInt(times[2]);
+    var endMinutes   = parseInt(times[3]) * 60 + parseInt(times[4]);
+
+    var gStart    = (typeof gridStart !== 'undefined') ? gridStart : 9 * 60;
+    var tInterval = (typeof timeInterval !== 'undefined') ? timeInterval : 5;
+
+    var startRow = Math.floor((startMinutes - gStart) / tInterval);
+    var rowSpan  = Math.floor((endMinutes - startMinutes) / tInterval);
+
+    block.setAttribute('data-start-row', startRow);
+    block.setAttribute('data-row-span',  rowSpan);
+
+    // Remove stale legacy attributes if present (e.g. from old HTML files)
+    block.removeAttribute('data-original-top');
+    block.removeAttribute('data-compensated');
+
     updateActivityPositions();
 }
 
 // Экспортируем функции для использования в других модулях
 window.createNewBlock = createNewBlock;
 window.positionNewBlock = positionNewBlock;
+
             
             // Модуль с обработчиками событий для блоков занятий
 // ОБНОВЛЕН: использует BuildingService вместо дублированных функций
@@ -5565,7 +5288,6 @@ function initializeApplication() {
         
         initDragAndDrop();
         initBlockEditing();
-        initCompensationSettings();
         initSaveExport();
         initAddBlocks();  // Инициализация нового модуля
         initDeleteBlocks(); // Инициализация модуля удаления блоков
@@ -5608,25 +5330,6 @@ function initializeApplication() {
     }
 }
 
-// Функции для сохранения и загрузки настроек
-function saveSettings(settings) {
-    try {
-        localStorage.setItem('scheduleCompensationSettings', JSON.stringify(settings));
-    } catch (e) {
-        console.error('Не удалось сохранить настройки:', e);
-    }
-}
-
-function loadSettings() {
-    try {
-        var settings = localStorage.getItem('scheduleCompensationSettings');
-        return settings ? JSON.parse(settings) : null;
-    } catch (e) {
-        console.error('Не удалось загрузить настройки:', e);
-        return null;
-    }
-}
-
 // Функция для сброса состояния инициализации (для принудительной переинициализации)
 function resetApplicationState() {
     window.applicationInitialized = false;
@@ -5656,7 +5359,7 @@ function forceReinitializeApplication() {
 <button id="saveIntermediate">Сохранить промежуточный результат</button>
 <button id="saveSchedule">Сохранить финальную версию</button>
 <button id="exportToExcel">Экспорт в Excel</button>
-<input type="hidden" id="csrf_token" value="46181471-941d-4c49-b669-58604f58f959">
+<input type="hidden" id="csrf_token" value="8cba2ba6-00b8-479b-b052-a1a62cc6c45d">
 </div>
 <h1>Расписание занятий</h1>
 <h2>Здание: Villa</h2>
@@ -5846,103 +5549,103 @@ function forceReinitializeApplication() {
 <tr><td class="time-cell" data-row="129" data-col="time">19:45</td><td class="day-Mo" data-row="129" data-col="0"></td><td class="day-Mo" data-row="129" data-col="1"></td><td class="day-Mo" data-row="129" data-col="2"></td><td class="day-Mo" data-row="129" data-col="3"></td><td class="day-Mo" data-row="129" data-col="4"></td><td class="day-Mo" data-row="129" data-col="5"></td><td class="day-Mo" data-row="129" data-col="6"></td><td class="day-Mo" data-row="129" data-col="7"></td><td class="day-Mo" data-row="129" data-col="8"></td><td class="day-Di" data-row="129" data-col="0"></td><td class="day-Di" data-row="129" data-col="1"></td><td class="day-Di" data-row="129" data-col="2"></td><td class="day-Di" data-row="129" data-col="3"></td><td class="day-Di" data-row="129" data-col="4"></td><td class="day-Di" data-row="129" data-col="5"></td><td class="day-Mi" data-row="129" data-col="0"></td><td class="day-Mi" data-row="129" data-col="1"></td><td class="day-Mi" data-row="129" data-col="2"></td><td class="day-Mi" data-row="129" data-col="3"></td><td class="day-Mi" data-row="129" data-col="4"></td><td class="day-Mi" data-row="129" data-col="5"></td><td class="day-Mi" data-row="129" data-col="6"></td><td class="day-Do" data-row="129" data-col="0"></td><td class="day-Do" data-row="129" data-col="1"></td><td class="day-Do" data-row="129" data-col="2"></td><td class="day-Do" data-row="129" data-col="3"></td><td class="day-Do" data-row="129" data-col="4"></td><td class="day-Do" data-row="129" data-col="5"></td><td class="day-Fr" data-row="129" data-col="0"></td><td class="day-Fr" data-row="129" data-col="1"></td><td class="day-Fr" data-row="129" data-col="2"></td><td class="day-Fr" data-row="129" data-col="3"></td><td class="day-Fr" data-row="129" data-col="4"></td><td class="day-Fr" data-row="129" data-col="5"></td><td class="day-Fr" data-row="129" data-col="6"></td><td class="day-Fr" data-row="129" data-col="7"></td><td class="day-Sa" data-row="129" data-col="0"></td><td class="day-Sa" data-row="129" data-col="1"></td><td class="day-Sa" data-row="129" data-col="2"></td><td class="day-Sa" data-row="129" data-col="3"></td><td class="day-Sa" data-row="129" data-col="4"></td><td class="day-Sa" data-row="129" data-col="5"></td><td class="day-Sa" data-row="129" data-col="6"></td><td class="day-Sa" data-row="129" data-col="7"></td><td class="day-Sa" data-row="129" data-col="8"></td><td class="day-Sa" data-row="129" data-col="9"></td></tr>
 </tbody>
 </table>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='8' data-building='Villa' style='top:1347.0px; left:880px; width:100px; height:228.5px; background-color:#c309f0; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>2D<br>2.09<br>16:00-17:15</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='3' data-building='Villa' style='top:1595.0px; left:380px; width:100px; height:137.0px; background-color:#c309f0; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Stepanova Olesia<br>Kunst Mo 2D<br>1.05<br>17:20-18:05</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='5' data-building='Villa' style='top:1254.0px; left:580px; width:100px; height:182.75px; background-color:#71d771; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Olekh Katerina<br>Deutsch  4kl Mo<br>2.03<br>15:30-16:30</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='4' data-building='Villa' style='top:1300.5px; left:480px; width:100px; height:274.25px; background-color:#75dbff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Mo 6-7J<br>1.06<br>15:45-17:15</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='4' data-building='Villa' style='top:1595.0px; left:480px; width:100px; height:274.25px; background-color:#68ceff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Mo 10-11J<br>1.06<br>17:20-18:50</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='0' data-building='Villa' style='top:1579.5px; left:80px; width:100px; height:137.0px; background-color:#ffd670; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Gitarre</strong><br>Aleiev Oleg<br>Gitarre A Mo<br>K.07<br>17:15-18:00</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='2' data-building='Villa' style='top:1440.0px; left:280px; width:100px; height:137.0px; background-color:#16003f; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Mo 4A+6A<br>1.03<br>16:30-17:15</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='8' data-building='Villa' style='top:1595.0px; left:880px; width:100px; height:274.25px; background-color:#710fb2; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>6A<br>2.09<br>17:20-18:50</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='7' data-building='Villa' style='top:1347.0px; left:780px; width:100px; height:228.5px; background-color:#5bd15c; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>3A<br>2.07<br>16:00-17:15</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='2' data-building='Villa' style='top:1595.0px; left:280px; width:100px; height:137.0px; background-color:#5bd15c; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Mo 3A<br>1.03<br>17:20-18:05</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='7' data-building='Villa' style='top:1595.0px; left:780px; width:100px; height:182.75px; background-color:#21e1dc; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>4A<br>2.07<br>17:20-18:20</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='1' data-building='Villa' style='top:1347.0px; left:180px; width:100px; height:182.75px; background-color:#0aca63; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Theater</strong><br>Müller Lüsia<br>Theater 10-12<br>0.08<br>16:00-17:00</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='1' data-building='Villa' style='top:1564.0px; left:180px; width:100px; height:182.75px; background-color:#ba91cb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Theater</strong><br>Müller Lüsia<br>Theater 14-18<br>0.08<br>17:10-18:10</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='3' data-building='Villa' style='top:1393.5px; left:380px; width:100px; height:137.0px; background-color:#efaa15; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Stepanova Olesia<br>Kunst Mo 1A<br>1.05<br>16:15-17:00</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='6' data-building='Villa' style='top:1548.5px; left:680px; width:100px; height:182.75px; background-color:#efaa15; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Wagner Galina<br>1A<br>2.04<br>17:05-18:05</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='1' data-building='Villa' style='top:1502.0px; left:1080px; width:100px; height:137.0px; background-color:#068e46; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Di 7A+5G<br>1.03<br>16:50-17:35</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='3' data-building='Villa' style='top:1657.0px; left:1280px; width:100px; height:274.25px; background-color:#1c222c; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Kremenchutski Larissa<br>11A<br>2.03<br>17:40-19:10</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='2' data-building='Villa' style='top:1347.0px; left:1180px; width:100px; height:137.0px; background-color:#3848ad; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Stepanova Olesia<br>Kunst Di 2A<br>1.05<br>16:00-16:45</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='4' data-building='Villa' style='top:1502.0px; left:1380px; width:100px; height:228.5px; background-color:#3848ad; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>2A<br>2.07<br>16:50-18:05</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='4' data-building='Villa' style='top:1750.0px; left:1380px; width:100px; height:137.0px; background-color:#3848ad; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Mathe</strong><br>Tchoudnovskaia Anna<br>Mathe 2A<br>2.07<br>18:10-18:55</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='0' data-building='Villa' style='top:1533.0px; left:980px; width:100px; height:137.0px; background-color:#ffd46e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Gitarre</strong><br>Aleiev Oleg<br>Gitarre E Di<br>K.07<br>17:00-17:45</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='0' data-building='Villa' style='top:1688.0px; left:980px; width:100px; height:137.0px; background-color:#fac761; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Gitarre</strong><br>Aleiev Oleg<br>Gitarre F Di<br>K.07<br>17:50-18:35</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='3' data-building='Villa' style='top:1409.0px; left:1280px; width:100px; height:228.5px; background-color:#b99aeb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>4B<br>2.03<br>16:20-17:35</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='1' data-building='Villa' style='top:1657.0px; left:1080px; width:100px; height:137.0px; background-color:#b99aeb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Di 4B<br>1.03<br>17:40-18:25</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='4' data-building='Villa' style='top:1347.0px; left:1380px; width:100px; height:137.0px; background-color:#9bd82f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>5G<br>2.07<br>16:00-16:45</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='5' data-building='Villa' style='top:1347.0px; left:1480px; width:100px; height:182.75px; background-color:#53b953; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Eichmann Irina<br>Deutsch ab 5J Di<br>2.09<br>16:00-17:00</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='5' data-building='Villa' style='top:1548.5px; left:1480px; width:100px; height:137.0px; background-color:#1ca0e2; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>12C<br>2.09<br>17:05-17:50</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='3' data-building='Villa' style='top:1347.0px; left:1880px; width:100px; height:137.0px; background-color:#d105ae; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Mi 6B<br>1.05<br>16:00-16:45</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='6' data-building='Villa' style='top:1533.0px; left:2180px; width:100px; height:228.5px; background-color:#d105ae; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>6B<br>2.07<br>17:00-18:15</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='6' data-building='Villa' style='top:1781.0px; left:2180px; width:100px; height:137.0px; background-color:#d105ae; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Mathe</strong><br>Tchoudnovskaia Anna<br>6B<br>2.07<br>18:20-19:05</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='2' data-building='Villa' style='top:1347.0px; left:1780px; width:100px; height:137.0px; background-color:#3de20f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Mi 9A<br>1.03<br>16:00-16:45</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='5' data-building='Villa' style='top:1641.5px; left:2080px; width:100px; height:182.75px; background-color:#3de20f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>9A<br>2.03<br>17:35-18:35</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='0' data-building='Villa' style='top:1347.0px; left:1580px; width:100px; height:137.0px; background-color:#f55cc2; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Mi A<br>K.11<br>16:00-16:45</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='0' data-building='Villa' style='top:1502.0px; left:1580px; width:100px; height:137.0px; background-color:#ff67cd; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Mi B<br>K.11<br>16:50-17:35</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='2' data-building='Villa' style='top:1533.0px; left:1780px; width:100px; height:274.25px; background-color:#083476; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Mi StudioO<br>1.03<br>17:00-18:30</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='4' data-building='Villa' style='top:1347.0px; left:1980px; width:100px; height:182.75px; background-color:#61c7fa; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Mi ab 7J<br>1.06<br>16:00-17:00</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='4' data-building='Villa' style='top:1533.0px; left:1980px; width:100px; height:274.25px; background-color:#55bbee; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Mi ab 11J<br>1.06<br>17:00-18:30</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='1' data-building='Villa' style='top:1486.5px; left:1680px; width:100px; height:137.0px; background-color:#a62c58; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Log</strong><br>Kremenchutski Larissa<br>3JC Log<br>0.08<br>16:45-17:30</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='5' data-building='Villa' style='top:1347.0px; left:2080px; width:100px; height:91.25px; background-color:#a62c58; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russisch</strong><br>Kremenchutki Larissa<br>3JC<br>2.03<br>16:00-16:30</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='1' data-building='Villa' style='top:1393.5px; left:2380px; width:100px; height:137.0px; background-color:#47f700; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Do 9G+5B<br>1.03<br>16:15-17:00</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='4' data-building='Villa' style='top:1579.5px; left:2680px; width:100px; height:274.25px; background-color:#14ef8a; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>5B<br>2.04<br>17:15-18:45</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='5' data-building='Villa' style='top:1347.0px; left:2780px; width:100px; height:182.75px; background-color:#738c83; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>9B<br>2.09<br>16:00-17:00</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='1' data-building='Villa' style='top:1548.5px; left:2380px; width:100px; height:137.0px; background-color:#738c83; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Do 9B<br>1.03<br>17:05-17:50</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='5' data-building='Villa' style='top:1548.5px; left:2780px; width:100px; height:182.75px; background-color:#8fd740; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Urich Evgenia<br>9G<br>2.09<br>17:05-18:05</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='2' data-building='Villa' style='top:1300.5px; left:2480px; width:100px; height:274.25px; background-color:#5fc5f8; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Do 6-7J<br>1.06<br>15:45-17:15</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='2' data-building='Villa' style='top:1610.5px; left:2480px; width:100px; height:274.25px; background-color:#74daff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Do 10-11J<br>1.06<br>17:25-18:55</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='4' data-building='Villa' style='top:1161.0px; left:2680px; width:100px; height:137.0px; background-color:#738aeb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>10C<br>2.04<br>15:00-15:45</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='0' data-building='Villa' style='top:1347.0px; left:2280px; width:100px; height:182.75px; background-color:#f54c13; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Baby</strong><br>Kremenchutski Larissa<br>Baby Do<br>0.08<br>16:00-17:00</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='3' data-building='Villa' style='top:1347.0px; left:2580px; width:100px; height:182.75px; background-color:#5fc55f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Olekh Katerina<br>Deutsch 5-7kl Do<br>2.03<br>16:00-17:00</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='3' data-building='Villa' style='top:1548.5px; left:2580px; width:100px; height:182.75px; background-color:#6ed46e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Olekh Katerina<br>Deutsch 7-9kl Do<br>2.03<br>17:05-18:05</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='0' data-building='Villa' style='top:1579.5px; left:2280px; width:100px; height:137.0px; background-color:#d93693; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Theater</strong><br>Müller Lüsia<br>Theater ab 6J<br>0.08<br>17:15-18:00</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='4' data-building='Villa' style='top:1300.5px; left:3280px; width:100px; height:274.25px; background-color:#276758; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Wagner Galina<br>7B<br>2.03<br>15:45-17:15</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='2' data-building='Villa' style='top:1595.0px; left:3080px; width:100px; height:137.0px; background-color:#72e9d3; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Fr 5D+7B<br>1.05<br>17:20-18:05</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='6' data-building='Villa' style='top:1300.5px; left:3480px; width:100px; height:274.25px; background-color:#1ade4e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Urich Evgenia<br>5D<br>2.07<br>15:45-17:15</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='6' data-building='Villa' style='top:1595.0px; left:3480px; width:100px; height:228.5px; background-color:#994076; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>8D<br>2.07<br>17:20-18:35</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='5' data-building='Villa' style='top:1579.5px; left:3380px; width:100px; height:182.75px; background-color:#c309f0; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Kremenchutski Larissa<br>2D<br>2.04<br>17:15-18:15</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='7' data-building='Villa' style='top:1347.0px; left:3580px; width:100px; height:182.75px; background-color:#53b953; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Audzyeenka Swietlana<br>Deutsch ab 5J Fr<br>2.09<br>16:00-17:00</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='7' data-building='Villa' style='top:1548.5px; left:3580px; width:100px; height:182.75px; background-color:#79df79; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Eichmann Irina<br>Deutsch ab 6J Fr<br>2.09<br>17:05-18:05</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='0' data-building='Villa' style='top:1347.0px; left:2880px; width:100px; height:182.75px; background-color:#5d26c8; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Orchester</strong><br>Nepomnaschi Tatiana<br>Orchester Fr<br>0.08<br>16:00-17:00</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='1' data-building='Villa' style='top:1393.5px; left:2980px; width:100px; height:137.0px; background-color:#f8bc2f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Fr 2B<br>1.03<br>16:15-17:00</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='2' data-building='Villa' style='top:1409.0px; left:3080px; width:100px; height:137.0px; background-color:#994076; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Fr 8D<br>1.05<br>16:20-17:05</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='3' data-building='Villa' style='top:1347.0px; left:3180px; width:100px; height:274.25px; background-color:#72d8ff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Fr 14-15J<br>1.06<br>16:00-17:30</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='5' data-building='Villa' style='top:1347.0px; left:3380px; width:100px; height:137.0px; background-color:#71149d; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>10A<br>2.04<br>16:00-16:45</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='0' data-building='Villa' style='top:91.5px; left:3680px; width:100px; height:137.0px; background-color:#ff79df; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Sa C<br>K.11<br>09:15-10:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='0' data-building='Villa' style='top:246.5px; left:3680px; width:100px; height:137.0px; background-color:#fc63c9; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Sa D<br>K.11<br>10:05-10:50</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='0' data-building='Villa' style='top:417.0px; left:3680px; width:100px; height:137.0px; background-color:#fb62c8; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Sa E<br>K.11<br>11:00-11:45</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='1' data-building='Villa' style='top:91.5px; left:3780px; width:100px; height:182.75px; background-color:#66ccff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Sa 4J<br>0.08<br>09:15-10:15</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='1' data-building='Villa' style='top:293.0px; left:3780px; width:100px; height:228.5px; background-color:#69cfff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Sa 5J<br>0.08<br>10:20-11:35</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='4' data-building='Villa' style='top:91.5px; left:4080px; width:100px; height:274.25px; background-color:#55bbee; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Sa 12-13J<br>1.06<br>09:15-10:45</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='4' data-building='Villa' style='top:417.0px; left:4080px; width:100px; height:274.25px; background-color:#79dfff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Sa 14-15J<br>1.06<br>11:00-12:30</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='4' data-building='Villa' style='top:727.0px; left:4080px; width:100px; height:274.25px; background-color:#76dcff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Sa 10-11J<br>1.06<br>12:40-14:10</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='Villa' style='top:91.5px; left:3880px; width:100px; height:137.0px; background-color:#a35aea; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 1B<br>1.03<br>09:15-10:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='9' data-building='Villa' style='top:277.5px; left:4580px; width:100px; height:182.75px; background-color:#a35aea; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>1B<br>2.09<br>10:15-11:15</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='1' data-building='Villa' style='top:882.0px; left:3780px; width:100px; height:274.25px; background-color:#26defa; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Orchester</strong><br>Nepomnaschi Tatiana<br>Orchester Sa<br>0.08<br>13:30-15:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='9' data-building='Villa' style='top:479.0px; left:4580px; width:100px; height:274.25px; background-color:#f78518; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Urich Evgenia<br>9C<br>2.09<br>11:20-12:50</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='9' data-building='Villa' style='top:45.0px; left:4580px; width:100px; height:182.75px; background-color:#d1052c; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>9D<br>2.09<br>09:00-10:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='Villa' style='top:262.0px; left:3880px; width:100px; height:137.0px; background-color:#a32e42; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 9D+9C+7C<br>1.03<br>10:10-10:55</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='8' data-building='Villa' style='top:448.0px; left:4480px; width:100px; height:274.25px; background-color:#d448da; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>7C<br>2.07<br>11:10-12:40</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='8' data-building='Villa' style='top:758.0px; left:4480px; width:100px; height:137.0px; background-color:#d448da; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Mathe</strong><br>Tchoudnovskaia Anna<br>Mathe 7C<br>2.07<br>12:50-13:35</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='8' data-building='Villa' style='top:184.5px; left:4480px; width:100px; height:228.5px; background-color:#073169; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>2C<br>2.07<br>09:45-11:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='3' data-building='Villa' style='top:448.0px; left:3980px; width:100px; height:137.0px; background-color:#99594c; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa 3D+2C<br>1.05<br>11:10-11:55</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='6' data-building='Villa' style='top:107.0px; left:4280px; width:100px; height:274.25px; background-color:#3848ad; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Kremenchutski Larissa<br>4C<br>2.03<br>09:20-10:50</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='3' data-building='Villa' style='top:262.0px; left:3980px; width:100px; height:137.0px; background-color:#6dd949; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa 3B<br>1.05<br>10:10-10:55</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='6' data-building='Villa' style='top:417.0px; left:4280px; width:100px; height:274.25px; background-color:#6dd949; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>3B<br>2.03<br>11:00-12:30</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='Villa' style='top:448.0px; left:3880px; width:100px; height:137.0px; background-color:#602caf; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 4C+10B<br>1.03<br>11:10-11:55</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='5' data-building='Villa' style='top:603.0px; left:4180px; width:100px; height:137.0px; background-color:#d28cf0; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Mathe</strong><br>Zelenska Olena<br>Mathe 10B<br>1.09<br>12:00-12:45</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='5' data-building='Villa' style='top:789.0px; left:4180px; width:100px; height:274.25px; background-color:#d28cf0; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Wittmer Irina<br>10B<br>1.09<br>13:00-14:30</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='7' data-building='Villa' style='top:138.0px; left:4380px; width:100px; height:274.25px; background-color:#55fac2; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Wagner Galina<br>3D<br>2.04<br>09:30-11:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='5' data-building='Villa' style='top:277.5px; left:4180px; width:100px; height:137.0px; background-color:#033ebf; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Dykun Lüdmila<br>Kunst Sa 4D<br>1.09<br>10:15-11:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='7' data-building='Villa' style='top:448.0px; left:4380px; width:100px; height:274.25px; background-color:#033ebf; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Wagner Galina<br>4D<br>2.04<br>11:10-12:40</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='3' data-building='Villa' style='top:603.0px; left:3980px; width:100px; height:137.0px; background-color:#7ad1cb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa 5C<br>1.05<br>12:00-12:45</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='7' data-building='Villa' style='top:758.0px; left:4380px; width:100px; height:274.25px; background-color:#7ad1cb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Wagner Galina<br>5C<br>2.04<br>12:50-14:20</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='Villa' style='top:603.0px; left:3880px; width:100px; height:137.0px; background-color:#30ec5e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 11E<br>1.03<br>12:00-12:45</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='6' data-building='Villa' style='top:758.0px; left:4280px; width:100px; height:274.25px; background-color:#30ec5e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>11E<br>2.03<br>12:50-14:20</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='Villa' style='top:789.0px; left:3880px; width:100px; height:274.25px; background-color:#4a8e5b; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa StudioO<br>1.03<br>13:00-14:30</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='9' data-building='Villa' style='top:789.0px; left:4580px; width:100px; height:182.75px; background-color:#1ca0e2; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>12C<br>2.09<br>13:00-14:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='3' data-building='Villa' style='top:789.0px; left:3980px; width:100px; height:274.25px; background-color:#eae197; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa StudioP<br>1.05<br>13:00-14:30</div>
+<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='8' data-building='Villa' data-start-row='84' data-row-span='15' style='top:1347.0px; left:880px; width:100px; height:228.5px; background-color:#c309f0; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>2D<br>2.09<br>16:00-17:15</div>
+<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='3' data-building='Villa' data-start-row='100' data-row-span='9' style='top:1595.0px; left:380px; width:100px; height:137.0px; background-color:#c309f0; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Stepanova Olesia<br>Kunst Mo 2D<br>1.05<br>17:20-18:05</div>
+<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='5' data-building='Villa' data-start-row='78' data-row-span='12' style='top:1254.0px; left:580px; width:100px; height:182.75px; background-color:#71d771; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Olekh Katerina<br>Deutsch  4kl Mo<br>2.03<br>15:30-16:30</div>
+<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='4' data-building='Villa' data-start-row='81' data-row-span='18' style='top:1300.5px; left:480px; width:100px; height:274.25px; background-color:#75dbff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Mo 6-7J<br>1.06<br>15:45-17:15</div>
+<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='4' data-building='Villa' data-start-row='100' data-row-span='18' style='top:1595.0px; left:480px; width:100px; height:274.25px; background-color:#68ceff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Mo 10-11J<br>1.06<br>17:20-18:50</div>
+<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='0' data-building='Villa' data-start-row='99' data-row-span='9' style='top:1579.5px; left:80px; width:100px; height:137.0px; background-color:#ffd670; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Gitarre</strong><br>Aleiev Oleg<br>Gitarre A Mo<br>K.07<br>17:15-18:00</div>
+<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='2' data-building='Villa' data-start-row='90' data-row-span='9' style='top:1440.0px; left:280px; width:100px; height:137.0px; background-color:#16003f; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Mo 4A+6A<br>1.03<br>16:30-17:15</div>
+<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='8' data-building='Villa' data-start-row='100' data-row-span='18' style='top:1595.0px; left:880px; width:100px; height:274.25px; background-color:#710fb2; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>6A<br>2.09<br>17:20-18:50</div>
+<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='7' data-building='Villa' data-start-row='84' data-row-span='15' style='top:1347.0px; left:780px; width:100px; height:228.5px; background-color:#5bd15c; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>3A<br>2.07<br>16:00-17:15</div>
+<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='2' data-building='Villa' data-start-row='100' data-row-span='9' style='top:1595.0px; left:280px; width:100px; height:137.0px; background-color:#5bd15c; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Mo 3A<br>1.03<br>17:20-18:05</div>
+<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='7' data-building='Villa' data-start-row='100' data-row-span='12' style='top:1595.0px; left:780px; width:100px; height:182.75px; background-color:#21e1dc; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>4A<br>2.07<br>17:20-18:20</div>
+<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='1' data-building='Villa' data-start-row='84' data-row-span='12' style='top:1347.0px; left:180px; width:100px; height:182.75px; background-color:#0aca63; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Theater</strong><br>Müller Lüsia<br>Theater 10-12<br>0.08<br>16:00-17:00</div>
+<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='1' data-building='Villa' data-start-row='98' data-row-span='12' style='top:1564.0px; left:180px; width:100px; height:182.75px; background-color:#ba91cb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Theater</strong><br>Müller Lüsia<br>Theater 14-18<br>0.08<br>17:10-18:10</div>
+<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='3' data-building='Villa' data-start-row='87' data-row-span='9' style='top:1393.5px; left:380px; width:100px; height:137.0px; background-color:#efaa15; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Stepanova Olesia<br>Kunst Mo 1A<br>1.05<br>16:15-17:00</div>
+<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='6' data-building='Villa' data-start-row='97' data-row-span='12' style='top:1548.5px; left:680px; width:100px; height:182.75px; background-color:#efaa15; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Wagner Galina<br>1A<br>2.04<br>17:05-18:05</div>
+<div class='activity-block activity-day-Di' data-day='Di' data-col-index='1' data-building='Villa' data-start-row='94' data-row-span='9' style='top:1502.0px; left:1080px; width:100px; height:137.0px; background-color:#068e46; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Di 7A+5G<br>1.03<br>16:50-17:35</div>
+<div class='activity-block activity-day-Di' data-day='Di' data-col-index='3' data-building='Villa' data-start-row='104' data-row-span='18' style='top:1657.0px; left:1280px; width:100px; height:274.25px; background-color:#1c222c; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Kremenchutski Larissa<br>11A<br>2.03<br>17:40-19:10</div>
+<div class='activity-block activity-day-Di' data-day='Di' data-col-index='2' data-building='Villa' data-start-row='84' data-row-span='9' style='top:1347.0px; left:1180px; width:100px; height:137.0px; background-color:#3848ad; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Stepanova Olesia<br>Kunst Di 2A<br>1.05<br>16:00-16:45</div>
+<div class='activity-block activity-day-Di' data-day='Di' data-col-index='4' data-building='Villa' data-start-row='94' data-row-span='15' style='top:1502.0px; left:1380px; width:100px; height:228.5px; background-color:#3848ad; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>2A<br>2.07<br>16:50-18:05</div>
+<div class='activity-block activity-day-Di' data-day='Di' data-col-index='4' data-building='Villa' data-start-row='110' data-row-span='9' style='top:1750.0px; left:1380px; width:100px; height:137.0px; background-color:#3848ad; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Mathe</strong><br>Tchoudnovskaia Anna<br>Mathe 2A<br>2.07<br>18:10-18:55</div>
+<div class='activity-block activity-day-Di' data-day='Di' data-col-index='0' data-building='Villa' data-start-row='96' data-row-span='9' style='top:1533.0px; left:980px; width:100px; height:137.0px; background-color:#ffd46e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Gitarre</strong><br>Aleiev Oleg<br>Gitarre E Di<br>K.07<br>17:00-17:45</div>
+<div class='activity-block activity-day-Di' data-day='Di' data-col-index='0' data-building='Villa' data-start-row='106' data-row-span='9' style='top:1688.0px; left:980px; width:100px; height:137.0px; background-color:#fac761; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Gitarre</strong><br>Aleiev Oleg<br>Gitarre F Di<br>K.07<br>17:50-18:35</div>
+<div class='activity-block activity-day-Di' data-day='Di' data-col-index='3' data-building='Villa' data-start-row='88' data-row-span='15' style='top:1409.0px; left:1280px; width:100px; height:228.5px; background-color:#b99aeb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>4B<br>2.03<br>16:20-17:35</div>
+<div class='activity-block activity-day-Di' data-day='Di' data-col-index='1' data-building='Villa' data-start-row='104' data-row-span='9' style='top:1657.0px; left:1080px; width:100px; height:137.0px; background-color:#b99aeb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Di 4B<br>1.03<br>17:40-18:25</div>
+<div class='activity-block activity-day-Di' data-day='Di' data-col-index='4' data-building='Villa' data-start-row='84' data-row-span='9' style='top:1347.0px; left:1380px; width:100px; height:137.0px; background-color:#9bd82f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>5G<br>2.07<br>16:00-16:45</div>
+<div class='activity-block activity-day-Di' data-day='Di' data-col-index='5' data-building='Villa' data-start-row='84' data-row-span='12' style='top:1347.0px; left:1480px; width:100px; height:182.75px; background-color:#53b953; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Eichmann Irina<br>Deutsch ab 5J Di<br>2.09<br>16:00-17:00</div>
+<div class='activity-block activity-day-Di' data-day='Di' data-col-index='5' data-building='Villa' data-start-row='97' data-row-span='9' style='top:1548.5px; left:1480px; width:100px; height:137.0px; background-color:#1ca0e2; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>12C<br>2.09<br>17:05-17:50</div>
+<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='3' data-building='Villa' data-start-row='84' data-row-span='9' style='top:1347.0px; left:1880px; width:100px; height:137.0px; background-color:#d105ae; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Mi 6B<br>1.05<br>16:00-16:45</div>
+<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='6' data-building='Villa' data-start-row='96' data-row-span='15' style='top:1533.0px; left:2180px; width:100px; height:228.5px; background-color:#d105ae; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>6B<br>2.07<br>17:00-18:15</div>
+<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='6' data-building='Villa' data-start-row='112' data-row-span='9' style='top:1781.0px; left:2180px; width:100px; height:137.0px; background-color:#d105ae; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Mathe</strong><br>Tchoudnovskaia Anna<br>6B<br>2.07<br>18:20-19:05</div>
+<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='2' data-building='Villa' data-start-row='84' data-row-span='9' style='top:1347.0px; left:1780px; width:100px; height:137.0px; background-color:#3de20f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Mi 9A<br>1.03<br>16:00-16:45</div>
+<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='5' data-building='Villa' data-start-row='103' data-row-span='12' style='top:1641.5px; left:2080px; width:100px; height:182.75px; background-color:#3de20f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>9A<br>2.03<br>17:35-18:35</div>
+<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='0' data-building='Villa' data-start-row='84' data-row-span='9' style='top:1347.0px; left:1580px; width:100px; height:137.0px; background-color:#f55cc2; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Mi A<br>K.11<br>16:00-16:45</div>
+<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='0' data-building='Villa' data-start-row='94' data-row-span='9' style='top:1502.0px; left:1580px; width:100px; height:137.0px; background-color:#ff67cd; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Mi B<br>K.11<br>16:50-17:35</div>
+<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='2' data-building='Villa' data-start-row='96' data-row-span='18' style='top:1533.0px; left:1780px; width:100px; height:274.25px; background-color:#083476; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Mi StudioO<br>1.03<br>17:00-18:30</div>
+<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='4' data-building='Villa' data-start-row='84' data-row-span='12' style='top:1347.0px; left:1980px; width:100px; height:182.75px; background-color:#61c7fa; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Mi ab 7J<br>1.06<br>16:00-17:00</div>
+<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='4' data-building='Villa' data-start-row='96' data-row-span='18' style='top:1533.0px; left:1980px; width:100px; height:274.25px; background-color:#55bbee; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Mi ab 11J<br>1.06<br>17:00-18:30</div>
+<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='1' data-building='Villa' data-start-row='93' data-row-span='9' style='top:1486.5px; left:1680px; width:100px; height:137.0px; background-color:#a62c58; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Log</strong><br>Kremenchutski Larissa<br>3JC Log<br>0.08<br>16:45-17:30</div>
+<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='5' data-building='Villa' data-start-row='84' data-row-span='6' style='top:1347.0px; left:2080px; width:100px; height:91.25px; background-color:#a62c58; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russisch</strong><br>Kremenchutki Larissa<br>3JC<br>2.03<br>16:00-16:30</div>
+<div class='activity-block activity-day-Do' data-day='Do' data-col-index='1' data-building='Villa' data-start-row='87' data-row-span='9' style='top:1393.5px; left:2380px; width:100px; height:137.0px; background-color:#47f700; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Do 9G+5B<br>1.03<br>16:15-17:00</div>
+<div class='activity-block activity-day-Do' data-day='Do' data-col-index='4' data-building='Villa' data-start-row='99' data-row-span='18' style='top:1579.5px; left:2680px; width:100px; height:274.25px; background-color:#14ef8a; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>5B<br>2.04<br>17:15-18:45</div>
+<div class='activity-block activity-day-Do' data-day='Do' data-col-index='5' data-building='Villa' data-start-row='84' data-row-span='12' style='top:1347.0px; left:2780px; width:100px; height:182.75px; background-color:#738c83; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>9B<br>2.09<br>16:00-17:00</div>
+<div class='activity-block activity-day-Do' data-day='Do' data-col-index='1' data-building='Villa' data-start-row='97' data-row-span='9' style='top:1548.5px; left:2380px; width:100px; height:137.0px; background-color:#738c83; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Do 9B<br>1.03<br>17:05-17:50</div>
+<div class='activity-block activity-day-Do' data-day='Do' data-col-index='5' data-building='Villa' data-start-row='97' data-row-span='12' style='top:1548.5px; left:2780px; width:100px; height:182.75px; background-color:#8fd740; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Urich Evgenia<br>9G<br>2.09<br>17:05-18:05</div>
+<div class='activity-block activity-day-Do' data-day='Do' data-col-index='2' data-building='Villa' data-start-row='81' data-row-span='18' style='top:1300.5px; left:2480px; width:100px; height:274.25px; background-color:#5fc5f8; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Do 6-7J<br>1.06<br>15:45-17:15</div>
+<div class='activity-block activity-day-Do' data-day='Do' data-col-index='2' data-building='Villa' data-start-row='101' data-row-span='18' style='top:1610.5px; left:2480px; width:100px; height:274.25px; background-color:#74daff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Do 10-11J<br>1.06<br>17:25-18:55</div>
+<div class='activity-block activity-day-Do' data-day='Do' data-col-index='4' data-building='Villa' data-start-row='72' data-row-span='9' style='top:1161.0px; left:2680px; width:100px; height:137.0px; background-color:#738aeb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>10C<br>2.04<br>15:00-15:45</div>
+<div class='activity-block activity-day-Do' data-day='Do' data-col-index='0' data-building='Villa' data-start-row='84' data-row-span='12' style='top:1347.0px; left:2280px; width:100px; height:182.75px; background-color:#f54c13; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Baby</strong><br>Kremenchutski Larissa<br>Baby Do<br>0.08<br>16:00-17:00</div>
+<div class='activity-block activity-day-Do' data-day='Do' data-col-index='3' data-building='Villa' data-start-row='84' data-row-span='12' style='top:1347.0px; left:2580px; width:100px; height:182.75px; background-color:#5fc55f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Olekh Katerina<br>Deutsch 5-7kl Do<br>2.03<br>16:00-17:00</div>
+<div class='activity-block activity-day-Do' data-day='Do' data-col-index='3' data-building='Villa' data-start-row='97' data-row-span='12' style='top:1548.5px; left:2580px; width:100px; height:182.75px; background-color:#6ed46e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Olekh Katerina<br>Deutsch 7-9kl Do<br>2.03<br>17:05-18:05</div>
+<div class='activity-block activity-day-Do' data-day='Do' data-col-index='0' data-building='Villa' data-start-row='99' data-row-span='9' style='top:1579.5px; left:2280px; width:100px; height:137.0px; background-color:#d93693; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Theater</strong><br>Müller Lüsia<br>Theater ab 6J<br>0.08<br>17:15-18:00</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='4' data-building='Villa' data-start-row='81' data-row-span='18' style='top:1300.5px; left:3280px; width:100px; height:274.25px; background-color:#276758; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Wagner Galina<br>7B<br>2.03<br>15:45-17:15</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='2' data-building='Villa' data-start-row='100' data-row-span='9' style='top:1595.0px; left:3080px; width:100px; height:137.0px; background-color:#72e9d3; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Fr 5D+7B<br>1.05<br>17:20-18:05</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='6' data-building='Villa' data-start-row='81' data-row-span='18' style='top:1300.5px; left:3480px; width:100px; height:274.25px; background-color:#1ade4e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Urich Evgenia<br>5D<br>2.07<br>15:45-17:15</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='6' data-building='Villa' data-start-row='100' data-row-span='15' style='top:1595.0px; left:3480px; width:100px; height:228.5px; background-color:#994076; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>8D<br>2.07<br>17:20-18:35</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='5' data-building='Villa' data-start-row='99' data-row-span='12' style='top:1579.5px; left:3380px; width:100px; height:182.75px; background-color:#c309f0; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Kremenchutski Larissa<br>2D<br>2.04<br>17:15-18:15</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='7' data-building='Villa' data-start-row='84' data-row-span='12' style='top:1347.0px; left:3580px; width:100px; height:182.75px; background-color:#53b953; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Audzyeenka Swietlana<br>Deutsch ab 5J Fr<br>2.09<br>16:00-17:00</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='7' data-building='Villa' data-start-row='97' data-row-span='12' style='top:1548.5px; left:3580px; width:100px; height:182.75px; background-color:#79df79; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Eichmann Irina<br>Deutsch ab 6J Fr<br>2.09<br>17:05-18:05</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='0' data-building='Villa' data-start-row='84' data-row-span='12' style='top:1347.0px; left:2880px; width:100px; height:182.75px; background-color:#5d26c8; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Orchester</strong><br>Nepomnaschi Tatiana<br>Orchester Fr<br>0.08<br>16:00-17:00</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='1' data-building='Villa' data-start-row='87' data-row-span='9' style='top:1393.5px; left:2980px; width:100px; height:137.0px; background-color:#f8bc2f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Fr 2B<br>1.03<br>16:15-17:00</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='2' data-building='Villa' data-start-row='88' data-row-span='9' style='top:1409.0px; left:3080px; width:100px; height:137.0px; background-color:#994076; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Fr 8D<br>1.05<br>16:20-17:05</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='3' data-building='Villa' data-start-row='84' data-row-span='18' style='top:1347.0px; left:3180px; width:100px; height:274.25px; background-color:#72d8ff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Fr 14-15J<br>1.06<br>16:00-17:30</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='5' data-building='Villa' data-start-row='84' data-row-span='9' style='top:1347.0px; left:3380px; width:100px; height:137.0px; background-color:#71149d; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>10A<br>2.04<br>16:00-16:45</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='0' data-building='Villa' data-start-row='3' data-row-span='9' style='top:91.5px; left:3680px; width:100px; height:137.0px; background-color:#ff79df; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Sa C<br>K.11<br>09:15-10:00</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='0' data-building='Villa' data-start-row='13' data-row-span='9' style='top:246.5px; left:3680px; width:100px; height:137.0px; background-color:#fc63c9; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Sa D<br>K.11<br>10:05-10:50</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='0' data-building='Villa' data-start-row='24' data-row-span='9' style='top:417.0px; left:3680px; width:100px; height:137.0px; background-color:#fb62c8; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Sa E<br>K.11<br>11:00-11:45</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='1' data-building='Villa' data-start-row='3' data-row-span='12' style='top:91.5px; left:3780px; width:100px; height:182.75px; background-color:#66ccff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Sa 4J<br>0.08<br>09:15-10:15</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='1' data-building='Villa' data-start-row='16' data-row-span='15' style='top:293.0px; left:3780px; width:100px; height:228.5px; background-color:#69cfff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Sa 5J<br>0.08<br>10:20-11:35</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='4' data-building='Villa' data-start-row='3' data-row-span='18' style='top:91.5px; left:4080px; width:100px; height:274.25px; background-color:#55bbee; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Sa 12-13J<br>1.06<br>09:15-10:45</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='4' data-building='Villa' data-start-row='24' data-row-span='18' style='top:417.0px; left:4080px; width:100px; height:274.25px; background-color:#79dfff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Sa 14-15J<br>1.06<br>11:00-12:30</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='4' data-building='Villa' data-start-row='44' data-row-span='18' style='top:727.0px; left:4080px; width:100px; height:274.25px; background-color:#76dcff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Sa 10-11J<br>1.06<br>12:40-14:10</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='Villa' data-start-row='3' data-row-span='9' style='top:91.5px; left:3880px; width:100px; height:137.0px; background-color:#a35aea; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 1B<br>1.03<br>09:15-10:00</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='9' data-building='Villa' data-start-row='15' data-row-span='12' style='top:277.5px; left:4580px; width:100px; height:182.75px; background-color:#a35aea; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>1B<br>2.09<br>10:15-11:15</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='1' data-building='Villa' data-start-row='54' data-row-span='18' style='top:882.0px; left:3780px; width:100px; height:274.25px; background-color:#26defa; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Orchester</strong><br>Nepomnaschi Tatiana<br>Orchester Sa<br>0.08<br>13:30-15:00</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='9' data-building='Villa' data-start-row='28' data-row-span='18' style='top:479.0px; left:4580px; width:100px; height:274.25px; background-color:#f78518; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Urich Evgenia<br>9C<br>2.09<br>11:20-12:50</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='9' data-building='Villa' data-start-row='0' data-row-span='12' style='top:45.0px; left:4580px; width:100px; height:182.75px; background-color:#d1052c; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>9D<br>2.09<br>09:00-10:00</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='Villa' data-start-row='14' data-row-span='9' style='top:262.0px; left:3880px; width:100px; height:137.0px; background-color:#a32e42; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 9D+9C+7C<br>1.03<br>10:10-10:55</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='8' data-building='Villa' data-start-row='26' data-row-span='18' style='top:448.0px; left:4480px; width:100px; height:274.25px; background-color:#d448da; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>7C<br>2.07<br>11:10-12:40</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='8' data-building='Villa' data-start-row='46' data-row-span='9' style='top:758.0px; left:4480px; width:100px; height:137.0px; background-color:#d448da; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Mathe</strong><br>Tchoudnovskaia Anna<br>Mathe 7C<br>2.07<br>12:50-13:35</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='8' data-building='Villa' data-start-row='9' data-row-span='15' style='top:184.5px; left:4480px; width:100px; height:228.5px; background-color:#073169; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>2C<br>2.07<br>09:45-11:00</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='3' data-building='Villa' data-start-row='26' data-row-span='9' style='top:448.0px; left:3980px; width:100px; height:137.0px; background-color:#99594c; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa 3D+2C<br>1.05<br>11:10-11:55</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='6' data-building='Villa' data-start-row='4' data-row-span='18' style='top:107.0px; left:4280px; width:100px; height:274.25px; background-color:#3848ad; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Kremenchutski Larissa<br>4C<br>2.03<br>09:20-10:50</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='3' data-building='Villa' data-start-row='14' data-row-span='9' style='top:262.0px; left:3980px; width:100px; height:137.0px; background-color:#6dd949; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa 3B<br>1.05<br>10:10-10:55</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='6' data-building='Villa' data-start-row='24' data-row-span='18' style='top:417.0px; left:4280px; width:100px; height:274.25px; background-color:#6dd949; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>3B<br>2.03<br>11:00-12:30</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='Villa' data-start-row='26' data-row-span='9' style='top:448.0px; left:3880px; width:100px; height:137.0px; background-color:#602caf; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 4C+10B<br>1.03<br>11:10-11:55</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='5' data-building='Villa' data-start-row='36' data-row-span='9' style='top:603.0px; left:4180px; width:100px; height:137.0px; background-color:#d28cf0; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Mathe</strong><br>Zelenska Olena<br>Mathe 10B<br>1.09<br>12:00-12:45</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='5' data-building='Villa' data-start-row='48' data-row-span='18' style='top:789.0px; left:4180px; width:100px; height:274.25px; background-color:#d28cf0; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Wittmer Irina<br>10B<br>1.09<br>13:00-14:30</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='7' data-building='Villa' data-start-row='6' data-row-span='18' style='top:138.0px; left:4380px; width:100px; height:274.25px; background-color:#55fac2; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Wagner Galina<br>3D<br>2.04<br>09:30-11:00</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='5' data-building='Villa' data-start-row='15' data-row-span='9' style='top:277.5px; left:4180px; width:100px; height:137.0px; background-color:#033ebf; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Dykun Lüdmila<br>Kunst Sa 4D<br>1.09<br>10:15-11:00</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='7' data-building='Villa' data-start-row='26' data-row-span='18' style='top:448.0px; left:4380px; width:100px; height:274.25px; background-color:#033ebf; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Wagner Galina<br>4D<br>2.04<br>11:10-12:40</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='3' data-building='Villa' data-start-row='36' data-row-span='9' style='top:603.0px; left:3980px; width:100px; height:137.0px; background-color:#7ad1cb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa 5C<br>1.05<br>12:00-12:45</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='7' data-building='Villa' data-start-row='46' data-row-span='18' style='top:758.0px; left:4380px; width:100px; height:274.25px; background-color:#7ad1cb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Wagner Galina<br>5C<br>2.04<br>12:50-14:20</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='Villa' data-start-row='36' data-row-span='9' style='top:603.0px; left:3880px; width:100px; height:137.0px; background-color:#30ec5e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 11E<br>1.03<br>12:00-12:45</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='6' data-building='Villa' data-start-row='46' data-row-span='18' style='top:758.0px; left:4280px; width:100px; height:274.25px; background-color:#30ec5e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>11E<br>2.03<br>12:50-14:20</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='Villa' data-start-row='48' data-row-span='18' style='top:789.0px; left:3880px; width:100px; height:274.25px; background-color:#4a8e5b; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa StudioO<br>1.03<br>13:00-14:30</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='9' data-building='Villa' data-start-row='48' data-row-span='12' style='top:789.0px; left:4580px; width:100px; height:182.75px; background-color:#1ca0e2; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>12C<br>2.09<br>13:00-14:00</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='3' data-building='Villa' data-start-row='48' data-row-span='18' style='top:789.0px; left:3980px; width:100px; height:274.25px; background-color:#eae197; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa StudioP<br>1.05<br>13:00-14:30</div>
 </div>
 <h2>Здание: Kolibri</h2>
 <div class="schedule-container" style="width:1380px;" data-building="Kolibri">
@@ -6098,25 +5801,25 @@ function forceReinitializeApplication() {
 <tr><td class="time-cell" data-row="129" data-col="time">19:45</td><td class="day-Mo" data-row="129" data-col="0"></td><td class="day-Di" data-row="129" data-col="0"></td><td class="day-Di" data-row="129" data-col="1"></td><td class="day-Mi" data-row="129" data-col="0"></td><td class="day-Mi" data-row="129" data-col="1"></td><td class="day-Mi" data-row="129" data-col="2"></td><td class="day-Do" data-row="129" data-col="0"></td><td class="day-Do" data-row="129" data-col="1"></td><td class="day-Do" data-row="129" data-col="2"></td><td class="day-Fr" data-row="129" data-col="0"></td><td class="day-Fr" data-row="129" data-col="1"></td><td class="day-Fr" data-row="129" data-col="2"></td><td class="day-Sa" data-row="129" data-col="0"></td></tr>
 </tbody>
 </table>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='0' data-building='Kolibri' style='top:1347.0px; left:80px; width:100px; height:137.0px; background-color:#5debf1; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>VSpE</strong><br>Mustafaeva Liliia<br>VSpE_L<br>2.5<br>16:00-16:45</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='0' data-building='Kolibri' style='top:1347.0px; left:180px; width:100px; height:137.0px; background-color:#f132c9; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Ukr. Mus.</strong><br>Dosenko Evgeniy<br>Ukrainische Musik Di 5-6J<br>2.2<br>16:00-16:45</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='1' data-building='Kolibri' style='top:1533.0px; left:280px; width:100px; height:137.0px; background-color:#f132c9; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Ukrainisch</strong><br>Perevoznyk Inna<br>Ukrainisch Di 5-6J<br>2.4<br>17:00-17:45</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='1' data-building='Kolibri' style='top:1347.0px; left:280px; width:100px; height:137.0px; background-color:#c78a5b; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukrainisch</strong><br>Perevoznyk Inna<br>Ukrainisch Di 4-5J<br>2.4<br>16:00-16:45</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='0' data-building='Kolibri' style='top:1533.0px; left:180px; width:100px; height:137.0px; background-color:#c78a5b; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukr. Mus.</strong><br>Dosenko Evgeniy<br>Ukrainische Musik Di 4-5J<br>2.2<br>17:00-17:45</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='2' data-building='Kolibri' style='top:1347.0px; left:580px; width:100px; height:91.25px; background-color:#65a3e7; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>VSpE</strong><br>Koputska Elena<br>VSpE_E<br>2.4<br>16:00-16:30</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='1' data-building='Kolibri' style='top:1347.0px; left:480px; width:100px; height:137.0px; background-color:#e2353c; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>4Jahrige</strong><br>Tchoudnovskaia Anna<br>4JA<br>2.3<br>16:00-16:45</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='0' data-building='Kolibri' style='top:1533.0px; left:380px; width:100px; height:137.0px; background-color:#baa827; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Logorithmika</strong><br>Shik Swetlana<br>4JA_Log<br>2.2<br>17:00-17:45</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='0' data-building='Kolibri' style='top:1347.0px; left:680px; width:100px; height:137.0px; background-color:#f132c9; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Ukr. Mus.</strong><br>Dosenko Evgeniy<br>Ukrainische Musik Do 5-6J<br>2.2<br>16:00-16:45</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='1' data-building='Kolibri' style='top:1533.0px; left:780px; width:100px; height:137.0px; background-color:#f132c9; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Ukrainisch</strong><br>Perevoznyk Inna<br>Ukrainisch Do 5-6J<br>2.4<br>17:00-17:45</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='1' data-building='Kolibri' style='top:1347.0px; left:780px; width:100px; height:137.0px; background-color:#c78a5b; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukrainisch</strong><br>Perevoznyk Inna<br>Ukrainisch Do 4-5J<br>2.4<br>16:00-16:45</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='0' data-building='Kolibri' style='top:1533.0px; left:680px; width:100px; height:137.0px; background-color:#c78a5b; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukr. Mus.</strong><br>Dosenko Evgeniy<br>Ukrainische Musik Do 4-5J<br>2.2<br>17:00-17:45</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='2' data-building='Kolibri' style='top:1347.0px; left:880px; width:100px; height:182.75px; background-color:#d1a45a; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>4Jahrige</strong><br>Wagner Galina<br>4JC<br>2.7<br>16:00-17:00</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='1' data-building='Kolibri' style='top:1347.0px; left:1080px; width:100px; height:137.0px; background-color:#1bbf7e; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>4Jahrige</strong><br>Kremenchutski Larissa<br>4JB<br>2.3<br>16:00-16:45</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='1' data-building='Kolibri' style='top:1579.5px; left:1080px; width:100px; height:91.25px; background-color:#efa9bc; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>3JA<br>2.3<br>17:15-17:45</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='0' data-building='Kolibri' style='top:1347.0px; left:980px; width:100px; height:182.75px; background-color:#ee69ca; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Logorithmika</strong><br>Shik Swetlana<br>3JB_Log<br>2.2<br>16:00-17:00</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='0' data-building='Kolibri' style='top:1533.0px; left:980px; width:100px; height:137.0px; background-color:#fed1d5; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Logorithmika</strong><br>Shik Swetlana<br>4JB_Log<br>2.2<br>17:00-17:45</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='2' data-building='Kolibri' style='top:1347.0px; left:1180px; width:100px; height:182.75px; background-color:#dae8bf; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukrainisch</strong><br>Gorochovska Olena<br>Ukrainisch Fr ab 6J<br>2.4<br>16:00-17:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='0' data-building='Kolibri' style='top:231.0px; left:1280px; width:100px; height:182.75px; background-color:#463f4b; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Baby</strong><br>Shik Swetlana<br>Baby Sa<br>2.2<br>10:00-11:00</div>
+<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='0' data-building='Kolibri' data-start-row='84' data-row-span='9' style='top:1347.0px; left:80px; width:100px; height:137.0px; background-color:#5debf1; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>VSpE</strong><br>Mustafaeva Liliia<br>VSpE_L<br>2.5<br>16:00-16:45</div>
+<div class='activity-block activity-day-Di' data-day='Di' data-col-index='0' data-building='Kolibri' data-start-row='84' data-row-span='9' style='top:1347.0px; left:180px; width:100px; height:137.0px; background-color:#f132c9; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Ukr. Mus.</strong><br>Dosenko Evgeniy<br>Ukrainische Musik Di 5-6J<br>2.2<br>16:00-16:45</div>
+<div class='activity-block activity-day-Di' data-day='Di' data-col-index='1' data-building='Kolibri' data-start-row='96' data-row-span='9' style='top:1533.0px; left:280px; width:100px; height:137.0px; background-color:#f132c9; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Ukrainisch</strong><br>Perevoznyk Inna<br>Ukrainisch Di 5-6J<br>2.4<br>17:00-17:45</div>
+<div class='activity-block activity-day-Di' data-day='Di' data-col-index='1' data-building='Kolibri' data-start-row='84' data-row-span='9' style='top:1347.0px; left:280px; width:100px; height:137.0px; background-color:#c78a5b; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukrainisch</strong><br>Perevoznyk Inna<br>Ukrainisch Di 4-5J<br>2.4<br>16:00-16:45</div>
+<div class='activity-block activity-day-Di' data-day='Di' data-col-index='0' data-building='Kolibri' data-start-row='96' data-row-span='9' style='top:1533.0px; left:180px; width:100px; height:137.0px; background-color:#c78a5b; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukr. Mus.</strong><br>Dosenko Evgeniy<br>Ukrainische Musik Di 4-5J<br>2.2<br>17:00-17:45</div>
+<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='2' data-building='Kolibri' data-start-row='84' data-row-span='6' style='top:1347.0px; left:580px; width:100px; height:91.25px; background-color:#65a3e7; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>VSpE</strong><br>Koputska Elena<br>VSpE_E<br>2.4<br>16:00-16:30</div>
+<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='1' data-building='Kolibri' data-start-row='84' data-row-span='9' style='top:1347.0px; left:480px; width:100px; height:137.0px; background-color:#e2353c; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>4Jahrige</strong><br>Tchoudnovskaia Anna<br>4JA<br>2.3<br>16:00-16:45</div>
+<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='0' data-building='Kolibri' data-start-row='96' data-row-span='9' style='top:1533.0px; left:380px; width:100px; height:137.0px; background-color:#baa827; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Logorithmika</strong><br>Shik Swetlana<br>4JA_Log<br>2.2<br>17:00-17:45</div>
+<div class='activity-block activity-day-Do' data-day='Do' data-col-index='0' data-building='Kolibri' data-start-row='84' data-row-span='9' style='top:1347.0px; left:680px; width:100px; height:137.0px; background-color:#f132c9; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Ukr. Mus.</strong><br>Dosenko Evgeniy<br>Ukrainische Musik Do 5-6J<br>2.2<br>16:00-16:45</div>
+<div class='activity-block activity-day-Do' data-day='Do' data-col-index='1' data-building='Kolibri' data-start-row='96' data-row-span='9' style='top:1533.0px; left:780px; width:100px; height:137.0px; background-color:#f132c9; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Ukrainisch</strong><br>Perevoznyk Inna<br>Ukrainisch Do 5-6J<br>2.4<br>17:00-17:45</div>
+<div class='activity-block activity-day-Do' data-day='Do' data-col-index='1' data-building='Kolibri' data-start-row='84' data-row-span='9' style='top:1347.0px; left:780px; width:100px; height:137.0px; background-color:#c78a5b; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukrainisch</strong><br>Perevoznyk Inna<br>Ukrainisch Do 4-5J<br>2.4<br>16:00-16:45</div>
+<div class='activity-block activity-day-Do' data-day='Do' data-col-index='0' data-building='Kolibri' data-start-row='96' data-row-span='9' style='top:1533.0px; left:680px; width:100px; height:137.0px; background-color:#c78a5b; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukr. Mus.</strong><br>Dosenko Evgeniy<br>Ukrainische Musik Do 4-5J<br>2.2<br>17:00-17:45</div>
+<div class='activity-block activity-day-Do' data-day='Do' data-col-index='2' data-building='Kolibri' data-start-row='84' data-row-span='12' style='top:1347.0px; left:880px; width:100px; height:182.75px; background-color:#d1a45a; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>4Jahrige</strong><br>Wagner Galina<br>4JC<br>2.7<br>16:00-17:00</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='1' data-building='Kolibri' data-start-row='84' data-row-span='9' style='top:1347.0px; left:1080px; width:100px; height:137.0px; background-color:#1bbf7e; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>4Jahrige</strong><br>Kremenchutski Larissa<br>4JB<br>2.3<br>16:00-16:45</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='1' data-building='Kolibri' data-start-row='99' data-row-span='6' style='top:1579.5px; left:1080px; width:100px; height:91.25px; background-color:#efa9bc; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>3JA<br>2.3<br>17:15-17:45</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='0' data-building='Kolibri' data-start-row='84' data-row-span='12' style='top:1347.0px; left:980px; width:100px; height:182.75px; background-color:#ee69ca; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Logorithmika</strong><br>Shik Swetlana<br>3JB_Log<br>2.2<br>16:00-17:00</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='0' data-building='Kolibri' data-start-row='96' data-row-span='9' style='top:1533.0px; left:980px; width:100px; height:137.0px; background-color:#fed1d5; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Logorithmika</strong><br>Shik Swetlana<br>4JB_Log<br>2.2<br>17:00-17:45</div>
+<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='2' data-building='Kolibri' data-start-row='84' data-row-span='12' style='top:1347.0px; left:1180px; width:100px; height:182.75px; background-color:#dae8bf; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukrainisch</strong><br>Gorochovska Olena<br>Ukrainisch Fr ab 6J<br>2.4<br>16:00-17:00</div>
+<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='0' data-building='Kolibri' data-start-row='12' data-row-span='12' style='top:231.0px; left:1280px; width:100px; height:182.75px; background-color:#463f4b; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Baby</strong><br>Shik Swetlana<br>Baby Sa<br>2.2<br>10:00-11:00</div>
 </div>
 </body>
 </html>

@@ -4,10 +4,10 @@
 """
 import os
 
-def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_interval, borderWidth=1):
+def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_interval, borderWidth=1, grid_start=9*60):
     """
     Возвращает строку с JavaScript-кодом для интерактивности HTML-расписания.
-    
+
     Args:
         cellHeight (int): Высота ячейки в пикселях
         dayCellWidth (int): Ширина ячейки дня в пикселях
@@ -15,7 +15,8 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
         days_order (list): Список дней недели
         time_interval (int): Интервал времени в минутах
         borderWidth (int): Толщина границы ячейки в пикселях
-        
+        grid_start (int): Начало сетки в минутах (например, 9*60 = 540 для 09:00)
+
     Returns:
         str: JavaScript-код
     """
@@ -40,16 +41,13 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
         var daysOrder = {str(days_order)};
         var timeInterval = {time_interval};
         var borderWidth = {float(borderWidth)};
+        var gridStart = {int(grid_start)};
 
         // Глобальные переменные для отслеживания состояния
         window.editDialogOpen = false;
         window.draggedBlock = null;
-        
-        // Переменные для хранения параметров компенсации
-        window.compensationFactor = 0.4;
-        window.compensationExponent = 1.02;
-        window.previousCompensationFactor = 0.4;
-        window.previousCompensationExponent = 1.02;        // Храним измеренную ширину колонки времени
+
+        // Храним измеренную ширину колонки времени
         var measuredTimeColWidth = 0;
     """
     
@@ -63,7 +61,6 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
         'core',
         'position',
         'drag_drop_refactored',           # Обновленный модуль drag_drop
-        'settings_panel',
         'save_export',
         'column_helpers',  # Модуль для работы с колонками в разных зданиях
         'color_utils',     # Модуль для работы с цветами
@@ -140,8 +137,6 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
             {js_modules.get('drag_drop_refactored', '')}
             
             {js_modules.get('column_helpers', '')}
-            
-            {js_modules.get('settings_panel', '')}
             
             {js_modules.get('save_export', '')}
             
