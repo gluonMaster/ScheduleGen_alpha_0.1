@@ -71,6 +71,11 @@ function positionNewBlock(block, timeRange) {
     block.removeAttribute('data-compensated');
 
     updateActivityPositions();
+
+    // Sync block text so room name matches column header
+    if (typeof syncBlockContent === 'function') {
+        syncBlockContent(block);
+    }
 }
 
 // Экспортируем функции для использования в других модулях

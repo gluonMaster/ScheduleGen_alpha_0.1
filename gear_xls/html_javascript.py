@@ -63,24 +63,28 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
         'drag_drop_refactored',           # Обновленный модуль drag_drop
         'save_export',
         'column_helpers',  # Модуль для работы с колонками в разных зданиях
+        'column_delete',   # Модуль удаления колонок и кнопок удаления
         'color_utils',     # Модуль для работы с цветами
         'adaptive_text_color',  # Модуль для адаптивного изменения цвета текста
-        'export_to_excel'  # Модуль для экспорта расписания в Excel
+        'export_to_excel', # Модуль для экспорта расписания в Excel
+        'menu'             # Модуль меню и создания нового расписания
     ]
     
     # Список названий модулей для добавления блоков
     add_blocks_module_names = [
         'add_blocks_main',
         'block_creation_dialog',
-        'block_positioning',
+        'block_utils',
+        'block_content_sync',   # NEW: must be after column_helpers (extractRoomFromDayHeader, in base_module_names)
+        'conflict_detector',    # depends on block_utils
+        'block_positioning',    # calls syncBlockContent after positionNewBlock
         'block_event_handlers',
         'quick_add_mode',
-        'block_utils',
-        'conflict_detector',  # Обнаружение конфликтов расписания (зависит от block_utils)
-        'editing_update',  # Обновленный модуль редактирования с поддержкой зданий
-        'delete_blocks',     # Модуль для удаления блоков
-        'delete_blocks_observer',  # Наблюдатель за новыми блоками для режима удаления
-        'app_initialization'  # Модуль инициализации приложения
+        'editing_update',
+        'delete_blocks',
+        'delete_blocks_observer',
+        'block_resize',         # NEW: must be after block_content_sync, position.js, drag_drop_service
+        'app_initialization'    # last: calls initBlockResize()
     ]
     
     # Загружаем содержимое модулей
@@ -137,6 +141,8 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
             {js_modules.get('drag_drop_refactored', '')}
             
             {js_modules.get('column_helpers', '')}
+
+            {js_modules.get('column_delete', '')}
             
             {js_modules.get('save_export', '')}
             
@@ -147,21 +153,27 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
             
             // Подключение модуля экспорта в Excel
             {js_modules.get('export_to_excel', '')}
+
+            // Подключение модуля меню и управления колонками
+            {js_modules.get('menu', '')}
             
             // Подключение модулей для работы с блоками
+            {js_modules.get('add_blocks_main', '')}
+
+            {js_modules.get('block_creation_dialog', '')}
+
             {js_modules.get('block_utils', '')}
 
+            // Синхронизация текста блока после перемещения
+            {js_modules.get('block_content_sync', '')}
+
             {js_modules.get('conflict_detector', '')}
-            
+
             {js_modules.get('block_positioning', '')}
-            
+
             {js_modules.get('block_event_handlers', '')}
-            
-            {js_modules.get('block_creation_dialog', '')}
-            
+
             {js_modules.get('quick_add_mode', '')}
-            
-            {js_modules.get('add_blocks_main', '')}
             
             // Подключение обновленного модуля редактирования с поддержкой зданий
             {js_modules.get('editing_update', '')}
@@ -170,7 +182,10 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
             {js_modules.get('delete_blocks', '')}
             
             {js_modules.get('delete_blocks_observer', '')}
-            
+
+            // Вертикальный ресайз блоков
+            {js_modules.get('block_resize', '')}
+
             // Подключение модуля инициализации приложения
             {js_modules.get('app_initialization', '')}
             

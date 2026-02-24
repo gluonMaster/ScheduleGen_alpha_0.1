@@ -29,7 +29,7 @@ CODEX_PROMPT = Path("CODEX_VERIFY_PROMPT.md")
 CODEX_RESPONSE = Path("CODEX_VERIFY_RESPONSE.md")
 PROMPTS_DIR = Path("PROMPTS")
 TEST_SCRIPT = Path("test_timewindow.py")
-TEST_INPUT = Path("xlsx_initial/schedule_planning.xlsx")
+TEST_INPUT = Path("xlsx_initial/schedule_planning.xlsm")
 
 
 # --- State helpers ---

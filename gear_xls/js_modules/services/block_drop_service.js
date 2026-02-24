@@ -174,6 +174,11 @@ var BlockDropService = (function() {
         // Обновляем позиции всех блоков
         if (typeof updateActivityPositions === 'function') {
             updateActivityPositions();
+
+            // Sync block text (room + time) to match new position
+            if (typeof syncBlockContent === 'function') {
+                syncBlockContent(block);
+            }
             
             // Обновляем подсветку конфликтов после перемещения блока
             if (typeof ConflictDetector !== 'undefined') {
@@ -206,6 +211,11 @@ var BlockDropService = (function() {
                 // Обновляем позиции всех блоков
                 if (typeof updateActivityPositions === 'function') {
                     updateActivityPositions();
+
+                    // Sync block text (room + time) to match new position
+                    if (typeof syncBlockContent === 'function') {
+                        syncBlockContent(block);
+                    }
                     
                     // Обновляем подсветку конфликтов после перемещения блока
                     if (typeof ConflictDetector !== 'undefined') {

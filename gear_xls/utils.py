@@ -24,8 +24,9 @@ def create_output_directories():
     Returns:
         dict: Словарь с путями к директориям
     """
+    module_dir = os.path.dirname(os.path.abspath(__file__))
     output_dirs = {
-        "html": "html_output"
+        "html": os.path.join(module_dir, "html_output")
     }
     
     for dir_name, dir_path in output_dirs.items():

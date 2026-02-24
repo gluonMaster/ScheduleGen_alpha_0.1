@@ -200,5 +200,158 @@ def get_css_styles(cellHeight, dayCellWidth, timeColWidth, borderWidth=1):
           margin-right: 0;
         }}
       }}
+
+      /* === РљРЅРѕРїРєР° "РњРµРЅСЋ" === */
+      #menuButton {{
+         background-color: #6c757d;
+         color: #fff;
+         border: 1px solid #5a6268;
+         padding: 8px 12px;
+         margin-right: 15px;
+         margin-bottom: 5px;
+         cursor: pointer;
+         border-radius: 4px;
+         font-size: 14px;
+         font-weight: bold;
+         transition: background-color 0.2s;
+      }}
+
+      #menuButton:hover {{
+         background-color: #5a6268;
+      }}
+
+      /* === Р’С‹РїР°РґР°СЋС‰РµРµ РјРµРЅСЋ === */
+      #menuDropdown {{
+         display: none;
+         position: absolute;
+         top: 50px;
+         left: 10px;
+         background: #fff;
+         border: 1px solid #ccc;
+         border-radius: 8px;
+         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+         z-index: 10001;
+         min-width: 240px;
+         padding: 6px 0;
+      }}
+
+      #menuDropdown.open {{
+         display: block;
+      }}
+
+      .menu-item {{
+         padding: 10px 20px;
+         cursor: pointer;
+         font-size: 14px;
+         color: #333;
+         white-space: nowrap;
+      }}
+
+      .menu-item:hover {{
+         background-color: #f0f0f0;
+      }}
+
+      /* === РљРЅРѕРїРєР° СѓРґР°Р»РµРЅРёСЏ РєРѕР»РѕРЅРєРё РІ Р·Р°РіРѕР»РѕРІРєРµ === */
+      .col-delete-btn {{
+         display: none;
+         position: absolute;
+         top: 2px;
+         right: 2px;
+         width: 16px;
+         height: 16px;
+         line-height: 14px;
+         font-size: 12px;
+         text-align: center;
+         color: #c00;
+         background: rgba(255,255,255,0.85);
+         border: 1px solid #c00;
+         border-radius: 3px;
+         cursor: pointer;
+         padding: 0;
+         z-index: 5;
+      }}
+
+      .col-delete-btn::before {{
+         content: '×';
+      }}
+
+      .schedule-grid thead th:hover .col-delete-btn {{
+         display: block;
+      }}
+
+      .schedule-grid thead th.time-cell .col-delete-btn {{
+         display: none !important;
+      }}
+
+      /* === РњРѕРґР°Р»СЊРЅРѕРµ РѕРєРЅРѕ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ (РјРµРЅСЋ) === */
+      .menu-modal-overlay {{
+         display: none;
+         position: fixed;
+         top: 0; left: 0; right: 0; bottom: 0;
+         background: rgba(0,0,0,0.4);
+         z-index: 10100;
+         justify-content: center;
+         align-items: center;
+      }}
+
+      .menu-modal-overlay.open {{
+         display: flex;
+      }}
+
+      .menu-modal {{
+         background: #fff;
+         border-radius: 8px;
+         padding: 28px 32px;
+         box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+         max-width: 420px;
+         width: 90%;
+         text-align: center;
+      }}
+
+      .menu-modal p {{
+         font-size: 15px;
+         margin-bottom: 20px;
+         color: #333;
+      }}
+
+      .menu-modal-btn-yes {{
+         background: #28a745;
+         color: #fff;
+         border: none;
+         padding: 10px 22px;
+         border-radius: 4px;
+         cursor: pointer;
+         font-size: 14px;
+         margin-right: 10px;
+      }}
+
+      .menu-modal-btn-yes:hover {{
+         background: #218838;
+      }}
+
+      .menu-modal-btn-cancel {{
+         background: #dc3545;
+         color: #fff;
+         border: none;
+         padding: 10px 22px;
+         border-radius: 4px;
+         cursor: pointer;
+         font-size: 14px;
+      }}
+
+      .menu-modal-btn-cancel:hover {{
+         background: #c82333;
+      }}
+
+      /* === Vertical resize: block being resized === */
+      .activity-block.resizing {{
+         border-bottom: 2px dashed #1976d2;
+         opacity: 0.85;
+      }}
+
+      /* === Vertical resize: cursor near bottom edge === */
+      .activity-block[data-resize-hover] {{
+         cursor: ns-resize;
+      }}
     </style>
     """

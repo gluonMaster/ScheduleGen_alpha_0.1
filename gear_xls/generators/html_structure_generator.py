@@ -93,7 +93,11 @@ class HTMLStructureGenerator:
         csrf_token = str(uuid.uuid4())
         
         panel_parts = [
-            '<div class="sticky-buttons">'
+            '<div class="sticky-buttons">',
+            '<button id="menuButton" onclick="toggleMenu()">&#9776; Меню</button>',
+            '<div id="menuDropdown">',
+            '  <div class="menu-item" id="menuItemNewSchedule" onclick="handleNewSchedule()">Создать новое расписание</div>',
+            '</div>',
         ]
         
         # Кнопки показа/скрытия дней

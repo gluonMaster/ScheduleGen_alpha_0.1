@@ -34,6 +34,16 @@ function initializeApplication() {
         initDeleteBlocksObserver(); // Инициализация наблюдателя за блоками
         initAdaptiveTextColor(); // Инициализация адаптивного цвета текста
         initExcelExport(); // Инициализация функции экспорта в Excel
+
+        if (typeof initMenu === 'function') {
+            initMenu(); // Инициализация меню и управления колонками
+        }
+        if (typeof initColumnDeleteButtons === 'function') {
+            initColumnDeleteButtons(); // Инициализация кнопок удаления колонок
+        }
+        if (typeof initBlockResize === 'function') {
+            initBlockResize(); // Initialize vertical resize for lesson blocks
+        }
         
         // Устанавливаем флаг инициализации
         window.applicationInitialized = true;

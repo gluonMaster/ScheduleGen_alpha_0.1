@@ -384,7 +384,7 @@ class AppActions:
         self.log_action("Запуск планировщика...")
         
         commands = [
-            "python main_sch.py xlsx_initial/schedule_planning.xlsx --time-limit 300 --verbose --time-interval 5"
+            "python main_sch.py xlsx_initial/schedule_planning.xlsm --time-limit 300 --verbose --time-interval 5"
         ]
         
         def run_in_thread():

@@ -353,7 +353,7 @@ class ScheduleReader:
 
 def main():
     """Example usage of the ScheduleReader class."""
-    file_path = Path("xlsx_initial") / "schedule_planning.xlsx"
+    file_path = Path("xlsx_initial") / "schedule_planning.xlsm"
     reader = ScheduleReader(file_path)
     
     try:

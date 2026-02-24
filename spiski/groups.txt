@@ -1,0 +1,141 @@
+1A
+1B
+1C
+1D
+2A
+2B
+2C
+2D
+3A
+3B
+3D
+3JA        
+3JB
+3JA_Log
+3JB_Log
+4A
+4B
+4C
+4D
+4JA
+4JB
+4JC
+4JA_Log
+4JB_Log
+5A
+5B
+5C
+5D
+5G
+6A
+6B
+7A
+7B
+7C
+8D
+9A
+9B
+9C
+9D
+9G
+10A
+10B
+10C
+11A
+11B
+11E
+12C
+Baby Do
+Baby Mo
+Baby Sa
+Deutsch 5-7kl Do
+Deutsch 7-9kl Do
+Deutsch  3kl Mo
+Deutsch  4kl Mo
+Deutsch ab 5J Fr
+Deutsch ab 5J Di
+Deutsch ab 6J Fr
+Gitarre A Mo
+Gitarre B Mo
+Gitarre C Mo
+Gitarre D Do
+Gitarre E Di
+Gitarre F Di
+Kunst Mo 1A
+Kunst Mo 2D
+Kunst Mo 3A
+Kunst Mo 4A+6A
+Kunst Di 11A
+Kunst Di 2A
+Kunst Di 4B
+Kunst Di 7A+5G
+Kunst Mi 6B
+Kunst Mi 9A
+Kunst Mi StudioO
+Kunst Mi StudioP
+Kunst Do 9B
+Kunst Do 9G+5B
+Kunst Fr 2B
+Kunst Fr 5D+7B
+Kunst Fr 8D
+Kunst Sa 1B
+Kunst Sa 2C
+Kunst Sa 3B
+Kunst Sa 3D+2C
+Kunst Sa 4C+10B
+Kunst Sa 4D
+Kunst Sa 5C
+Kunst Sa 7C 
+Kunst Sa 9C+7C
+Kunst Sa 9D+9C+7C
+Kunst Sa 10B
+Kunst Sa 11E
+Kunst Sa StudioO
+Kunst Sa StudioP
+Mathe 2A
+Mathe 6B
+Mathe 7C
+Mathe 10B
+Musik 1B
+Musik 2C
+Schach Mi A
+Schach Mi B
+Schach Sa C
+Schach Sa D
+Schach Sa E
+Schach Sa F
+Tanz Mo 6-7J
+Tanz Mo 10-11J
+Tanz Mi ab 7J
+Tanz Mi ab 11J 
+Tanz Mi 14-15J 
+Tanz Do ab 10J
+Tanz Do 6-7J
+Tanz Do 10-11J
+Tanz Fr 6-7J
+Tanz Fr 14-15J
+Tanz Sa 4J
+Tanz Sa 5J
+Tanz Sa 10-11J
+Tanz Sa 12-13J
+Tanz Sa 14-15J
+Tanz Sa Ukr
+Tanz Jugentliche
+Theater 10-12
+Theater 14-18
+Theater ab 6J
+Ukrainisch Di 4-5J
+Ukrainisch Di 5-6J
+Ukrainisch Do 4-5J
+Ukrainisch Do 5-6J
+Ukrainisch Fr ab 6J
+Ukrainische Musik Di 4-5J
+Ukrainische Musik Di 5-6J
+Ukrainische Musik Do 4-5J
+Ukrainische Musik Do 5-6J
+VSpE_L
+VSpE_E
+Orchester Fr
+Orchester Sa
+Ukr. Tanz
+
