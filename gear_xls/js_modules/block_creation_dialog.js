@@ -301,6 +301,41 @@ function openCreateBlockDialog(e, preselectedDay, preselectedCol, preselectedRow
     var columnSelect = document.getElementById('new-column');
     var roomInput = document.getElementById('new-room');
     var roomHint = document.getElementById('new-room-hint');
+
+    // === Autocomplete dropdowns (spiskiData) ===
+    var subjectsList = (typeof spiskiData !== 'undefined' && spiskiData && Array.isArray(spiskiData.subjects)) ? spiskiData.subjects : [];
+    var teachersList = (typeof spiskiData !== 'undefined' && spiskiData && Array.isArray(spiskiData.teachers)) ? spiskiData.teachers : [];
+    var groupsList = (typeof spiskiData !== 'undefined' && spiskiData && Array.isArray(spiskiData.groups)) ? spiskiData.groups : [];
+
+    // Rooms are building-specific. Use a proxy array updated in-place on building changes
+    // to avoid re-attaching event listeners to the same input element.
+    var roomProxyItems = [];
+
+    function _refreshRoomProxyItems(buildingName) {
+        var src = getRoomListForBuilding(buildingName);
+        roomProxyItems.length = 0;
+        src.forEach(function(r) { roomProxyItems.push(r); });
+    }
+
+    _refreshRoomProxyItems(buildingSelect ? buildingSelect.value : '');
+
+    if (typeof createAutocompleteInput === 'function') {
+        createAutocompleteInput(document.getElementById('new-subject'), subjectsList, { allowCustom: true, spiskiKey: 'subjects' });
+        createAutocompleteInput(document.getElementById('new-teacher'), teachersList, { allowCustom: true, spiskiKey: 'teachers' });
+        createAutocompleteInput(document.getElementById('new-students'), groupsList, { allowCustom: true, spiskiKey: 'groups' });
+        createAutocompleteInput(roomInput, roomProxyItems, {
+            allowCustom: true,
+            onAddItem: function(v) {
+                // Persist in-memory (survives building switches within session).
+                var building = buildingSelect ? buildingSelect.value : '';
+                if (building) addRoomToBuildingList(building, v);
+                // Persist to server (survives HTML regeneration).
+                if (building && typeof _persistSpiskiToServer === 'function') {
+                    _persistSpiskiToServer('rooms_' + building, v);
+                }
+            }
+        });
+    }
     
     function setRoomInputMode(isNewRoomMode, shouldFocusRoom) {
         if (isNewRoomMode) {
@@ -347,6 +382,9 @@ function openCreateBlockDialog(e, preselectedDay, preselectedCol, preselectedRow
     // Обновляем функцию получения колонок для учета здания
     function updateColumnOptions() {
         var selectedBuilding = buildingSelect.value;
+        if (typeof _refreshRoomProxyItems === 'function') {
+            _refreshRoomProxyItems(selectedBuilding);
+        }
         var selectedDay = daySelect.value;
         var previousColumnValue = columnSelect.value;
         

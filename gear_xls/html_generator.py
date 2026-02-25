@@ -32,7 +32,7 @@ logger = logging.getLogger('html_generator')
 
 
 def generate_html_schedule(buildings, output_html="schedule.html", output_css="schedule.css", 
-                          time_interval=5, borderWidth=0.5):
+                          time_interval=5, borderWidth=0.5, spiski_data=None):
     """
     Генерирует HTML-страницу с интерактивным расписанием.
     
@@ -67,7 +67,7 @@ def generate_html_schedule(buildings, output_html="schedule.html", output_css="s
         )
         
         # Генерация полного расписания
-        result_path = coordinator.generate_complete_schedule(buildings, output_html, output_css)
+        result_path = coordinator.generate_complete_schedule(buildings, output_html, output_css, spiski_data=spiski_data)
         
         # Сбор статистики генерации
         stats = coordinator.get_generation_statistics(buildings)

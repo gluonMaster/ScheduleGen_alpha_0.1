@@ -41,6 +41,9 @@ function initializeApplication() {
         if (typeof initColumnDeleteButtons === 'function') {
             initColumnDeleteButtons(); // Инициализация кнопок удаления колонок
         }
+        if (typeof initColumnAddButtons === 'function') {
+            initColumnAddButtons(); // Инициализация кнопок добавления колонок ("+")
+        }
         if (typeof initBlockResize === 'function') {
             initBlockResize(); // Initialize vertical resize for lesson blocks
         }

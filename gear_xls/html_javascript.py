@@ -3,8 +3,9 @@
 Использует модульный подход для организации кода.
 """
 import os
+import json
 
-def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_interval, borderWidth=1, grid_start=9*60):
+def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_interval, borderWidth=1, grid_start=9*60, spiski_data=None):
     """
     Возвращает строку с JavaScript-кодом для интерактивности HTML-расписания.
 
@@ -50,6 +51,32 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
         // Храним измеренную ширину колонки времени
         var measuredTimeColWidth = 0;
     """
+
+    # Serialize spiski data to JS global.
+    # Use json.dumps to safely escape all string values.
+    if spiski_data and isinstance(spiski_data, dict):
+        _subjects_json  = json.dumps(spiski_data.get('subjects', []),      ensure_ascii=False)
+        _groups_json    = json.dumps(spiski_data.get('groups', []),         ensure_ascii=False)
+        _teachers_json  = json.dumps(spiski_data.get('teachers', []),       ensure_ascii=False)
+        _rooms_v_json   = json.dumps(spiski_data.get('rooms_Villa', []),    ensure_ascii=False)
+        _rooms_k_json   = json.dumps(spiski_data.get('rooms_Kolibri', []), ensure_ascii=False)
+    else:
+        _subjects_json = '[]'
+        _groups_json   = '[]'
+        _teachers_json = '[]'
+        _rooms_v_json  = '[]'
+        _rooms_k_json  = '[]'
+
+    js_spiski = (
+        f'var spiskiData = {{\n'
+        f'    "subjects": {_subjects_json},\n'
+        f'    "groups": {_groups_json},\n'
+        f'    "teachers": {_teachers_json},\n'
+        f'    "rooms_Villa": {_rooms_v_json},\n'
+        f'    "rooms_Kolibri": {_rooms_k_json}\n'
+        f'}};\n'
+        f'window.spiskiData = spiskiData;'
+    )
     
     # Список названий модулей для загрузки (обновленный порядок)
     # ВАЖНО: services должны загружаться первыми, так как используются другими модулями
@@ -72,6 +99,7 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
     
     # Список названий модулей для добавления блоков
     add_blocks_module_names = [
+        'dropdown_widget',          # NEW: must load before block_creation_dialog and editing_update
         'add_blocks_main',
         'block_creation_dialog',
         'block_utils',
@@ -124,6 +152,9 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
     <script>
         document.addEventListener('DOMContentLoaded', function() {{
             {js_variables}
+
+            // Данные списков (предметы, группы, преподаватели, кабинеты)
+            {js_spiski}
               // === НОВЫЕ СЕРВИСЫ ДЛЯ DRAG&DROP ФУНКЦИОНАЛЬНОСТИ ===
             {js_modules.get('services/building_service', '')}
             
@@ -158,6 +189,9 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
             {js_modules.get('menu', '')}
             
             // Подключение модулей для работы с блоками
+            // Виджет автодополнения (загружается первым среди блочных модулей)
+            {js_modules.get('dropdown_widget', '')}
+
             {js_modules.get('add_blocks_main', '')}
 
             {js_modules.get('block_creation_dialog', '')}

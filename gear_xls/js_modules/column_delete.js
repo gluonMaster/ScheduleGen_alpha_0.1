@@ -151,6 +151,54 @@ function initColumnDeleteButtons() {
     observer.observe(document.body, { childList: true, subtree: true });
 }
 
+function initColumnAddButtons() {
+    _attachAddButtonsToExistingHeaders();
+
+    if (window.__columnAddObserverInitialized) return;
+    window.__columnAddObserverInitialized = true;
+
+    // Reuse the same MutationObserver strategy as initColumnDeleteButtons.
+    var observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            mutation.addedNodes.forEach(function(node) {
+                if (!node || node.nodeType !== 1) return;
+
+                if (node.nodeName === 'TH' && !node.classList.contains('time-cell')) {
+                    _attachAddButtonToHeader(node);
+                    return;
+                }
+
+                if (node.classList && node.classList.contains('schedule-grid')) {
+                    node.querySelectorAll('thead th').forEach(function(th) {
+                        if (!th.classList.contains('time-cell')) {
+                            _attachAddButtonToHeader(th);
+                        }
+                    });
+                    return;
+                }
+
+                if (node.querySelectorAll) {
+                    node.querySelectorAll('.schedule-grid thead th').forEach(function(th) {
+                        if (!th.classList.contains('time-cell')) {
+                            _attachAddButtonToHeader(th);
+                        }
+                    });
+                }
+            });
+        });
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+}
+
+function _attachAddButtonsToExistingHeaders() {
+    document.querySelectorAll('.schedule-grid thead th').forEach(function(th) {
+        if (!th.classList.contains('time-cell')) {
+            _attachAddButtonToHeader(th);
+        }
+    });
+}
+
 function _attachDeleteButtonsToExistingHeaders() {
     document.querySelectorAll('.schedule-grid thead th').forEach(function(th) {
         if (!th.classList.contains('time-cell')) {
@@ -177,6 +225,48 @@ function _attachDeleteButtonToHeader(th) {
     });
 
     th.appendChild(btn);
+}
+
+function _attachAddButtonToHeader(th) {
+    // Avoid double-attaching.
+    if (th.querySelector('.col-add-btn')) return;
+
+    var btn = document.createElement('button');
+    btn.className = 'col-add-btn';
+    // Do NOT put '+' as a DOM text node inside <th>.
+    // extractRoomFromDayHeader() parses innerHTML and would include that text.
+    // Render '+' via CSS ::before instead.
+    btn.textContent = '';
+    btn.title = 'Добавить колонку';
+
+    btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        // If any edit dialog is open, ignore the click.
+        if (window.editDialogOpen) return;
+        _onAddColumnClick(th);
+    });
+
+    th.appendChild(btn);
+}
+
+function _onAddColumnClick(th) {
+    var container = th.closest('.schedule-container');
+    if (!container) return;
+    var building = container.getAttribute('data-building');
+
+    var dayClass = Array.from(th.classList).find(function(cls) {
+        return cls.startsWith('day-');
+    });
+    if (!dayClass) return;
+    var day = dayClass.replace('day-', '');
+
+    // openAddColumnDialog is defined in menu.js (Phase 8-05).
+    // Guard with typeof check to degrade gracefully if menu.js is not loaded.
+    if (typeof openAddColumnDialog === 'function') {
+        openAddColumnDialog(building, day);
+    } else {
+        console.warn('_onAddColumnClick: openAddColumnDialog not available yet');
+    }
 }
 
 function _onDeleteColumnClick(th) {
@@ -212,3 +302,4 @@ function _onDeleteColumnClick(th) {
 
 window.removeColumn = removeColumn;
 window.initColumnDeleteButtons = initColumnDeleteButtons;
+window.initColumnAddButtons = initColumnAddButtons;

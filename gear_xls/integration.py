@@ -29,6 +29,52 @@ DEFAULT_TIME_INTERVAL = 5
 DEFAULT_BORDER_WIDTH = 0.5
 
 
+def load_spiski_data() -> dict:
+    """
+    Loads the five spiski/*.txt files and returns a dictionary with suggestion lists.
+
+    Returns:
+        dict with keys:
+            "subjects"      — list of strings from disciplins.txt
+            "groups"        — list of strings from groups.txt
+            "teachers"      — list of strings from teachers.txt
+            "rooms_Villa"   — list of strings from kabinets_Villa.txt
+            "rooms_Kolibri" — list of strings from kabinets_Kolibri.txt
+
+        Missing or empty files produce an empty list for that key; no exception is raised.
+    """
+    # spiski/ sits one level above gear_xls/ (i.e., at the project root)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    spiski_dir = os.path.join(current_dir, '..', 'spiski')
+
+    file_map = {
+        'subjects': 'disciplins.txt',
+        'groups': 'groups.txt',
+        'teachers': 'teachers.txt',
+        'rooms_Villa': 'kabinets_Villa.txt',
+        'rooms_Kolibri': 'kabinets_Kolibri.txt',
+    }
+
+    result = {}
+    for key, filename in file_map.items():
+        path = os.path.join(spiski_dir, filename)
+        entries = []
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    stripped = line.strip()
+                    if stripped:
+                        entries.append(stripped)
+            logger.info(f"Loaded spiski file: {filename} ({len(entries)} entries)")
+        except FileNotFoundError:
+            logger.warning(f"Spiski file not found (using empty list): {path}")
+        except Exception as e:
+            logger.warning(f"Error reading spiski file {path}: {e}")
+        result[key] = entries
+
+    return result
+
+
 def setup_environment():
     """
     Подготавливает окружение для работы приложения:
@@ -154,10 +200,13 @@ def run_full_pipeline(excel_file_path: str,                     time_interval: i
             time_interval=time_interval,
             border_width=border_width
         )
+
+        # Load suggestion lists from spiski/ files.
+        spiski_data = load_spiski_data()
         
         # Выполняем основную обработку
         logger.info("Запуск обработки через SchedulePipeline...")
-        result = pipeline.process_excel_to_outputs(excel_file_path, output_dirs)
+        result = pipeline.process_excel_to_outputs(excel_file_path, output_dirs, spiski_data=spiski_data)
           # Логируем подробные результаты
         logger.info("Обработка завершена успешно:")
         logger.info(f"  - Входной файл: {excel_file_path}")

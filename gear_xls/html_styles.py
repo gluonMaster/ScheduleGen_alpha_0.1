@@ -353,5 +353,67 @@ def get_css_styles(cellHeight, dayCellWidth, timeColWidth, borderWidth=1):
       .activity-block[data-resize-hover] {{
          cursor: ns-resize;
       }}
+      
+      /* === РљРЅРѕРїРєР° РґРѕР±Р°РІР»РµРЅРёСЏ РєРѕР»РѕРЅРєРё РІ Р·Р°РіРѕР»РѕРІРєРµ === */
+      .col-add-btn {{
+         display: none;
+         position: absolute;
+         bottom: 2px;
+         right: 2px;
+         width: 16px;
+         height: 16px;
+         line-height: 14px;
+         font-size: 14px;
+         text-align: center;
+         color: #007700;
+         background: rgba(255,255,255,0.85);
+         border: 1px solid #007700;
+         border-radius: 3px;
+         cursor: pointer;
+         padding: 0;
+         z-index: 5;
+      }}
+
+      .col-add-btn::before {{
+         content: '+';
+      }}
+
+      .schedule-grid thead th:hover .col-add-btn {{
+         display: block;
+      }}
+
+      .schedule-grid thead th.time-cell .col-add-btn {{
+         display: none !important;
+      }}
+
+      /* === Р’С‹РїР°РґР°СЋС‰РёР№ СЃРїРёСЃРѕРє Р°РІС‚РѕРґРѕРїРѕР»РЅРµРЅРёСЏ === */
+      .autocomplete-dropdown {{
+         position: absolute;
+         background: #fff;
+         border: 1px solid #ccc;
+         border-radius: 4px;
+         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+         z-index: 10300;
+         max-height: 225px;
+         overflow-y: auto;
+         min-width: 160px;
+         padding: 2px 0;
+      }}
+
+      .autocomplete-dropdown-item {{
+         padding: 6px 12px;
+         cursor: pointer;
+         font-size: 13px;
+         color: #222;
+         white-space: nowrap;
+         overflow: hidden;
+         text-overflow: ellipsis;
+      }}
+
+      .autocomplete-dropdown-item:hover,
+      .autocomplete-dropdown-item.highlighted {{
+         background-color: #e8f0fe;
+         color: #1a56db;
+      }}
     </style>
     """

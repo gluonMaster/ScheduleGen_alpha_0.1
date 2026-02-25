@@ -47,7 +47,7 @@ class SchedulePipeline:
         self.border_width = border_width
         logger.info(f"Инициализирован SchedulePipeline: interval={time_interval}мин, border={border_width}px")
     
-    def process_excel_to_outputs(self, excel_file_path: str,        output_dirs: Dict[str, str]) -> Dict[str, Any]:
+    def process_excel_to_outputs(self, excel_file_path: str, output_dirs: Dict[str, str], spiski_data=None) -> Dict[str, Any]:
         """
         Обрабатывает Excel файл и создает HTML выходной файл.
         
@@ -105,7 +105,8 @@ class SchedulePipeline:
                 buildings, 
                 output_html=html_file, 
                 time_interval=self.time_interval,
-                borderWidth=self.border_width
+                borderWidth=self.border_width,
+                spiski_data=spiski_data
             )
             
             if not os.path.exists(html_file):

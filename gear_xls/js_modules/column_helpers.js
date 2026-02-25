@@ -116,6 +116,49 @@ function formatDayRoomHeader(day, room, building) {
     return day + room;
 }
 
+// Компаратор для сортировки кабинетов: подвал (K.*) → 0.* → 1.* → 2.* → прочие.
+// Реплика Python utils.room_sort_key().
+function roomSortKey(room) {
+    var s = (room || '').trim();
+    if (!s) return [Infinity, 0, ''];
+
+    // Mirror Python utils.room_sort_key(): treat "K.*" (and Cyrillic "К.*") as basement, then numeric floors.
+    // Examples: "K.06", "К.06", "0.05", "1.03", "2.7"
+    var parts = s.split('.');
+    if (parts.length === 2 && /^\d+$/.test(parts[1])) {
+        var floorPart = parts[0] || '';
+        var roomPart = parts[1] || '';
+
+        var floorOrder;
+        if (/^k/i.test(floorPart) || floorPart === 'К' || floorPart === 'к') {
+            floorOrder = -1; // basement first
+        } else if (/^\d+$/.test(floorPart)) {
+            floorOrder = parseInt(floorPart, 10);
+        } else {
+            floorOrder = Infinity; // non-standard prefix goes last
+        }
+
+        var num = parseInt(roomPart, 10);
+        if (isNaN(num)) num = 0;
+        return [floorOrder, num, s];
+    }
+
+    // Non-standard format -> sort to end.
+    return [Infinity, 0, s];
+}
+
+function _compareRoomKeys(a, b) {
+    var ka = roomSortKey(a);
+    var kb = roomSortKey(b);
+    if (ka[0] !== kb[0]) {
+        if (ka[0] === Infinity) return 1;
+        if (kb[0] === Infinity) return -1;
+        return ka[0] - kb[0];
+    }
+    if (ka[1] !== kb[1]) return ka[1] - kb[1];
+    return ka[2] < kb[2] ? -1 : ka[2] > kb[2] ? 1 : 0;
+}
+
 // Функция для создания новой колонки, если она отсутствует
 function addColumnIfMissing(day, room, building) {
     var normalizedRoom = (room || '').trim();
@@ -157,8 +200,15 @@ function addColumnIfMissing(day, room, building) {
     // Кабинет не найден, нужно создать новую колонку
     console.log(`Создание новой колонки для кабинета ${normalizedRoom}`);
     
-    // Определяем позицию для вставки (в конце группы дня)
-    var insertionIndex = dayHeaders.length;
+    // Определяем позицию для вставки по порядку сортировки кабинетов.
+    var insertionIndex = dayHeaders.length; // default: append at end
+    for (var j = 0; j < dayHeaders.length; j++) {
+        var existingRoom = extractRoomFromDayHeader(dayHeaders[j], day);
+        if (_compareRoomKeys(normalizedRoom, existingRoom) < 0) {
+            insertionIndex = j;
+            break;
+        }
+    }
     
     // Создаем новый заголовок
     var newHeader = document.createElement('th');
@@ -199,6 +249,15 @@ function addColumnIfMissing(day, room, building) {
     }
     
     console.log(`Ячейки tbody добавлены успешно`);
+
+    // Important: after insertion, renumber data-col for ALL cells of this day.
+    // data-col is used by drag & drop / snapping to resolve colIndex; duplicates would break placement.
+    for (var r2 = 0; r2 < rows.length; r2++) {
+        var dayCells = Array.from(rows[r2].querySelectorAll('td.day-' + day));
+        dayCells.forEach(function(td, idx) {
+            td.setAttribute('data-col', idx);
+        });
+    }
     
     // Обновляем data-col-index для существующих блоков того же дня и здания
     console.log(`Обновление data-col-index для существующих блоков дня ${day} в здании ${building}`);
@@ -223,9 +282,9 @@ function findInsertPositionInHeader(headerRow, day, insertionIndex) {
     // Проходим все дни в порядке daysOrder до нашего дня
     for (var d = 0; d < daysOrder.length; d++) {
         if (daysOrder[d] === day) {
-            // Добавляем количество существующих колонок для этого дня
-            var existingCols = headerRow.querySelectorAll('.day-' + day).length;
-            position += existingCols;
+            // Используем insertionIndex (а не общее количество колонок),
+            // чтобы вставить в отсортированную позицию, а не в конец.
+            position += insertionIndex;
             break;
         } else {
             // Добавляем количество колонок для предыдущих дней
@@ -262,3 +321,4 @@ window.findMatchingColumnInBuilding = findMatchingColumnInBuilding;
 window.updateBlockColumnForBuilding = updateBlockColumnForBuilding;
 window.addColumnIfMissing = addColumnIfMissing;
 window.formatDayRoomHeader = formatDayRoomHeader;
+window.roomSortKey = roomSortKey;

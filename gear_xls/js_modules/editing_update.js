@@ -189,6 +189,50 @@ function openEditDialog(block, origLeft, origTop, building) {
     dialogElement.innerHTML = dialogHTML;
     document.body.appendChild(dialogElement);
 
+    // === Autocomplete dropdowns (spiskiData) ===
+    var subjectsList = (typeof spiskiData !== 'undefined' && spiskiData && Array.isArray(spiskiData.subjects)) ? spiskiData.subjects : [];
+    var teachersList = (typeof spiskiData !== 'undefined' && spiskiData && Array.isArray(spiskiData.teachers)) ? spiskiData.teachers : [];
+    var groupsList = (typeof spiskiData !== 'undefined' && spiskiData && Array.isArray(spiskiData.groups)) ? spiskiData.groups : [];
+
+    var buildingSelect = document.getElementById('edit-building');
+    var roomInput = document.getElementById('edit-room');
+
+    // Rooms are building-specific. Use a proxy array updated in-place on building changes
+    // to avoid re-attaching event listeners to the same input element.
+    var roomProxyItems = [];
+
+    function _refreshRoomProxyItems(buildingName) {
+        var src = getRoomListForBuilding(buildingName);
+        roomProxyItems.length = 0;
+        src.forEach(function(r) { roomProxyItems.push(r); });
+    }
+
+    _refreshRoomProxyItems(buildingSelect ? buildingSelect.value : '');
+
+    if (typeof createAutocompleteInput === 'function') {
+        createAutocompleteInput(document.getElementById('edit-subject'), subjectsList, { allowCustom: true, spiskiKey: 'subjects' });
+        createAutocompleteInput(document.getElementById('edit-teacher'), teachersList, { allowCustom: true, spiskiKey: 'teachers' });
+        createAutocompleteInput(document.getElementById('edit-students'), groupsList, { allowCustom: true, spiskiKey: 'groups' });
+        createAutocompleteInput(roomInput, roomProxyItems, {
+            allowCustom: true,
+            onAddItem: function(v) {
+                // Persist in-memory (survives building switches within session).
+                var building = buildingSelect ? buildingSelect.value : '';
+                if (building) addRoomToBuildingList(building, v);
+                // Persist to server (survives HTML regeneration).
+                if (building && typeof _persistSpiskiToServer === 'function') {
+                    _persistSpiskiToServer('rooms_' + building, v);
+                }
+            }
+        });
+
+        if (buildingSelect) {
+            buildingSelect.addEventListener('change', function() {
+                _refreshRoomProxyItems(buildingSelect.value);
+            });
+        }
+    }
+
     // Нужно предотвратить скролл страницы
     document.body.style.overflow = 'hidden';
 

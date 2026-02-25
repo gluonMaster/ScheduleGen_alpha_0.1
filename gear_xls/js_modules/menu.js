@@ -9,6 +9,11 @@ var MENU_DAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 var _menuModalEscapeHandler = null;
 var _menuInitialized = false;
 
+var _addColumnDialogOpen = false;
+var _addColumnAutocompleteCtrl = null; // current autocomplete controller for room input
+var _addColumnRoomItems = []; // mutable list used by the room autocomplete (updated on building change)
+var _addColumnEscHandler = null; // keydown handler for Escape — stored at module level so _closeAddColumnDialog can remove it
+
 // === Menu open/close ===
 function toggleMenu() {
     var dropdown = document.getElementById('menuDropdown');
@@ -89,6 +94,233 @@ function handleNewSchedule() {
             _doCreateNewSchedule();
         }
     );
+}
+
+// Opens the "Добавить колонку" dialog.
+// prefillBuilding and prefillDay are optional; if provided the selects are pre-filled and disabled.
+function openAddColumnDialog(prefillBuilding, prefillDay) {
+    if (_addColumnDialogOpen) return;
+    closeMenu();
+    _addColumnDialogOpen = true;
+
+    var overlay = document.createElement('div');
+    overlay.className = 'menu-modal-overlay open';
+    overlay.id = 'addColumnOverlay';
+    overlay.innerHTML = _buildAddColumnDialogHTML(prefillBuilding, prefillDay);
+    document.body.appendChild(overlay);
+
+    // Wire up building selector → room autocomplete update.
+    var buildingSelect = overlay.querySelector('#addColBuilding');
+    var daySelect = overlay.querySelector('#addColDay');
+    var roomInput = overlay.querySelector('#addColRoom');
+
+    // Initialize autocomplete for room input (items array is updated in-place on building change).
+    _setAddColumnRoomItems(buildingSelect.value);
+    _addColumnAutocompleteCtrl = _initRoomAutocomplete(roomInput, _addColumnRoomItems);
+
+    if (buildingSelect) {
+        buildingSelect.addEventListener('change', function() {
+            _setAddColumnRoomItems(buildingSelect.value);
+        });
+    }
+
+    // Submit button.
+    var submitBtn = overlay.querySelector('#addColSubmit');
+    if (submitBtn) {
+        submitBtn.addEventListener('click', function() {
+            _handleAddColumnSubmit(overlay, buildingSelect, daySelect, roomInput);
+        });
+    }
+
+    // Cancel button.
+    var cancelBtn = overlay.querySelector('#addColCancel');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function() {
+            _closeAddColumnDialog(overlay);
+        });
+    }
+
+    // Click outside closes.
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) _closeAddColumnDialog(overlay);
+    });
+
+    // Escape closes.
+    // Store handler at module level so _closeAddColumnDialog can remove it
+    // even when the dialog is closed via Cancel/Submit (not only via Escape).
+    _addColumnEscHandler = function(e) {
+        if (e.key === 'Escape') {
+            _closeAddColumnDialog(overlay);
+        }
+    };
+    document.addEventListener('keydown', _addColumnEscHandler);
+}
+
+function _buildAddColumnDialogHTML(prefillBuilding, prefillDay) {
+    // Build available buildings from DOM (schedule-container), fall back to BUILDING_ROOMS keys.
+    var buildingMap = {};
+    document.querySelectorAll('.schedule-container').forEach(function(c) {
+        var b = c.getAttribute('data-building');
+        if (b) buildingMap[b] = true;
+    });
+    if (Object.keys(buildingMap).length === 0 && BUILDING_ROOMS) {
+        Object.keys(BUILDING_ROOMS).forEach(function(b) { buildingMap[b] = true; });
+    }
+
+    var buildings = Object.keys(buildingMap);
+    if (prefillBuilding && buildings.indexOf(prefillBuilding) === -1) {
+        buildings.unshift(prefillBuilding);
+    }
+    if (buildings.length === 0) {
+        buildings = ['Villa', 'Kolibri'];
+    }
+
+    var days = (typeof MENU_DAYS !== 'undefined' && MENU_DAYS) ? MENU_DAYS : ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+    if (prefillDay && days.indexOf(prefillDay) === -1) {
+        days = days.slice();
+        days.unshift(prefillDay);
+    }
+
+    var selectedBuilding = prefillBuilding || buildings[0];
+    var selectedDay = prefillDay || days[0];
+
+    var buildingOptions = buildings.map(function(b) {
+        var sel = (b === selectedBuilding) ? ' selected' : '';
+        return '<option value="' + b + '"' + sel + '>' + b + '</option>';
+    }).join('');
+
+    var dayOptions = days.map(function(d) {
+        var sel = (d === selectedDay) ? ' selected' : '';
+        return '<option value="' + d + '"' + sel + '>' + d + '</option>';
+    }).join('');
+
+    var buildingDisabled = prefillBuilding ? ' disabled' : '';
+    var dayDisabled = prefillDay ? ' disabled' : '';
+
+    return [
+        '<div class="menu-modal">',
+        '  <p style="font-weight:600;margin-top:0;">Добавить колонку</p>',
+        '  <div style="text-align:left;margin-bottom:12px;">',
+        '    <label style="display:block;font-size:13px;margin-bottom:4px;">Здание</label>',
+        '    <select id="addColBuilding"' + buildingDisabled + ' style="width:100%;padding:6px;font-size:13px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;">',
+        buildingOptions,
+        '    </select>',
+        '  </div>',
+        '  <div style="text-align:left;margin-bottom:12px;">',
+        '    <label style="display:block;font-size:13px;margin-bottom:4px;">День</label>',
+        '    <select id="addColDay"' + dayDisabled + ' style="width:100%;padding:6px;font-size:13px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;">',
+        dayOptions,
+        '    </select>',
+        '  </div>',
+        '  <div style="text-align:left;margin-bottom:16px;">',
+        '    <label style="display:block;font-size:13px;margin-bottom:4px;">Кабинет</label>',
+        '    <input id="addColRoom" type="text" placeholder="Введите название кабинета"',
+        '           style="width:100%;padding:6px;font-size:13px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;">',
+        '  </div>',
+        '  <div style="text-align:right;">',
+        '    <button id="addColSubmit" class="menu-modal-btn-yes" style="margin-right:8px;">Вставить</button>',
+        '    <button id="addColCancel" class="menu-modal-btn-cancel">Отмена</button>',
+        '  </div>',
+        '</div>'
+    ].join('\n');
+}
+
+function _setAddColumnRoomItems(building) {
+    // Pick the room list for this building from spiskiData (injected by html_javascript.py).
+    var roomList = [];
+    if (typeof spiskiData !== 'undefined' && spiskiData) {
+        if (building === 'Villa') {
+            roomList = spiskiData.rooms_Villa || [];
+        } else if (building === 'Kolibri') {
+            roomList = spiskiData.rooms_Kolibri || [];
+        } else {
+            // Try generic key or fall back to empty.
+            roomList = spiskiData['rooms_' + building] || [];
+        }
+    }
+
+    // Update the shared items array in-place to avoid re-attaching event listeners.
+    _addColumnRoomItems.length = 0;
+    roomList.forEach(function(r) { _addColumnRoomItems.push(r); });
+}
+
+function _initRoomAutocomplete(roomInput, items) {
+    if (typeof createAutocompleteInput === 'function') {
+        return createAutocompleteInput(roomInput, items, { allowCustom: false });
+    }
+    return null;
+}
+
+function _handleAddColumnSubmit(overlay, buildingSelect, daySelect, roomInput) {
+    var building = buildingSelect.value;
+    var day = daySelect.value;
+    var room = (roomInput.value || '').trim();
+
+    // Validate: non-empty.
+    if (!room) {
+        alert('Пожалуйста, введите название кабинета');
+        roomInput.focus();
+        return;
+    }
+
+    // Validate: no dangerous characters.
+    if (/[<>"'&]/.test(room)) {
+        alert('Название кабинета содержит недопустимые символы: < > & " \'');
+        roomInput.focus();
+        return;
+    }
+
+    // Call addColumnIfMissing — returns existing index if column already exists.
+    var prevCount = -1;
+    var container = (typeof BuildingService !== 'undefined')
+        ? BuildingService.findScheduleContainerForBuilding(building)
+        : null;
+    if (container) {
+        var table = container.querySelector('.schedule-grid');
+        prevCount = table ? table.querySelectorAll('thead th.day-' + day).length : -1;
+    }
+
+    var colIndex = (typeof addColumnIfMissing === 'function')
+        ? addColumnIfMissing(day, room, building)
+        : -1;
+
+    var newCount = -1;
+    if (container) {
+        var table2 = container.querySelector('.schedule-grid');
+        newCount = table2 ? table2.querySelectorAll('thead th.day-' + day).length : -1;
+    }
+
+    var wasNew = (newCount > prevCount);
+
+    if (wasNew) {
+        // Update container width.
+        if (container) {
+            var dcw = (typeof dayCellWidth !== 'undefined') ? dayCellWidth : 100;
+            var currentWidth = parseFloat(container.style.width) || 0;
+            container.style.width = (currentWidth + dcw) + 'px';
+        }
+        if (typeof updateActivityPositions === 'function') {
+            updateActivityPositions();
+        }
+        _showNotification('Добавлена колонка ' + day + ' ' + room);
+    } else {
+        _showNotification('Колонка ' + day + ' ' + room + ' уже существует');
+    }
+
+    _closeAddColumnDialog(overlay);
+}
+
+function _closeAddColumnDialog(overlay) {
+    _addColumnDialogOpen = false;
+    _addColumnAutocompleteCtrl = null;
+    // Always remove the Escape handler — mirrors the hideMenuConfirmModal pattern.
+    if (_addColumnEscHandler) {
+        document.removeEventListener('keydown', _addColumnEscHandler);
+        _addColumnEscHandler = null;
+    }
+    if (overlay && overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
+    }
 }
 
 // === Core schedule creation logic ===
@@ -275,3 +507,4 @@ window.initMenu = initMenu;
 window.toggleMenu = toggleMenu;
 window.closeMenu = closeMenu;
 window.handleNewSchedule = handleNewSchedule;
+window.openAddColumnDialog = openAddColumnDialog;

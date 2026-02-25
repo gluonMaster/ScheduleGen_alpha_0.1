@@ -15,6 +15,7 @@ import webbrowser
 # Импортируем новый сервис пайплайна
 from services.schedule_pipeline import SchedulePipeline, SchedulePipelineError
 from utils import create_output_directories
+from integration import load_spiski_data
 
 # Глобальная переменная для выбранного файла
 selected_file = None
@@ -61,7 +62,8 @@ def run_script():
     
     try:
         # Выполняем основную обработку через пайплайн
-        result = pipeline.process_excel_to_outputs(selected_file, output_dirs)
+        spiski_data = load_spiski_data()
+        result = pipeline.process_excel_to_outputs(selected_file, output_dirs, spiski_data=spiski_data)
           # Логируем результат
         print(f"Обработка завершена:")
         print(f"  - Занятий обработано: {result['activities_count']}")

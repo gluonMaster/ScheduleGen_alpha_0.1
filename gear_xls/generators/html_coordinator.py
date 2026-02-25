@@ -51,7 +51,7 @@ class HTMLCoordinator:
         
         logger.info(f"Инициализирован HTMLCoordinator: interval={time_interval}, border={border_width}")
     
-    def generate_complete_schedule(self, buildings, output_html="schedule.html", output_css="schedule.css"):
+    def generate_complete_schedule(self, buildings, output_html="schedule.html", output_css="schedule.css", spiski_data=None):
         """
         Генерирует полный HTML документ расписания.
         
@@ -75,7 +75,7 @@ class HTMLCoordinator:
         html_parts = []
         
         # 1. Генерация структуры документа
-        html_parts.extend(self.structure_generator.generate_document_head(output_css, grid_start))
+        html_parts.extend(self.structure_generator.generate_document_head(grid_start, spiski_data=spiski_data))
         html_parts.append("<body>")
         
         # 2. Генерация панели управления

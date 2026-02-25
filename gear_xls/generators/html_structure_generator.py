@@ -43,12 +43,11 @@ class HTMLStructureGenerator:
         self.border_width = border_width
         logger.debug(f"Инициализирован HTMLStructureGenerator: interval={time_interval}, border={border_width}")
     
-    def generate_document_head(self, output_css="schedule.css", grid_start=9*60):
+    def generate_document_head(self, grid_start=9*60, spiski_data=None):
         """
         Генерирует head секцию HTML документа.
 
         Args:
-            output_css (str): Путь к CSS файлу
             grid_start (int): Начало сетки в минутах (передаётся в JS как глобал gridStart)
 
         Returns:
@@ -66,7 +65,6 @@ class HTMLStructureGenerator:
             "<head>",
             '  <meta charset="UTF-8">',
             '  <meta name="viewport" content="width=device-width, initial-scale=1.0">',
-            f'  <link rel="stylesheet" type="text/css" href="{output_css}">',
             "  <title>Расписание занятий</title>"
         ]
 
@@ -75,7 +73,8 @@ class HTMLStructureGenerator:
 
         # Встроенный JavaScript
         head_parts.append(get_javascript(cellHeight, dayCellWidth, headerHeight, days_order,
-                                       self.time_interval, self.border_width, grid_start))
+                                       self.time_interval, self.border_width, grid_start,
+                                       spiski_data=spiski_data))
 
         head_parts.append("</head>")
         
@@ -97,6 +96,7 @@ class HTMLStructureGenerator:
             '<button id="menuButton" onclick="toggleMenu()">&#9776; Меню</button>',
             '<div id="menuDropdown">',
             '  <div class="menu-item" id="menuItemNewSchedule" onclick="handleNewSchedule()">Создать новое расписание</div>',
+            '  <div class="menu-item" id="menuItemAddColumn" onclick="openAddColumnDialog()">Добавить колонку</div>',
             '</div>',
         ]
         
