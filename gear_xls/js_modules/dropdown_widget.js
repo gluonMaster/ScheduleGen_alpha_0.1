@@ -243,6 +243,7 @@ function createAutocompleteInput(inputElement, items, options) {
         var exists = items.some(function(it) { return it.toLowerCase() === lowerTrimmed; });
         if (!exists) {
             items.push(trimmed);
+            sortStringListInPlace(items);
         }
     }
 
@@ -259,6 +260,24 @@ function createAutocompleteInput(inputElement, items, options) {
 
 window.createAutocompleteInput = createAutocompleteInput;
 
+function sortStringListInPlace(list) {
+    if (!Array.isArray(list)) return;
+    var collator = (typeof Intl !== 'undefined' && typeof Intl.Collator === 'function')
+        ? new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+        : null;
+
+    list.sort(function(a, b) {
+        var sa = (a || '').toString();
+        var sb = (b || '').toString();
+        if (collator) return collator.compare(sa, sb);
+        var la = sa.toLowerCase();
+        var lb = sb.toLowerCase();
+        if (la < lb) return -1;
+        if (la > lb) return 1;
+        return 0;
+    });
+}
+
 // Shared helpers for building-specific room lists.
 // Used by block_creation_dialog.js and editing_update.js (both load after dropdown_widget).
 function getRoomListForBuilding(buildingName) {
@@ -273,7 +292,10 @@ function addUniqueToList(list, value) {
     if (!v) return;
     var lower = v.toLowerCase();
     var exists = list.some(function(it) { return (it || '').toLowerCase() === lower; });
-    if (!exists) list.push(v);
+    if (!exists) {
+        list.push(v);
+        sortStringListInPlace(list);
+    }
 }
 
 function addRoomToBuildingList(buildingName, value) {
@@ -283,6 +305,7 @@ function addRoomToBuildingList(buildingName, value) {
 }
 
 window.getRoomListForBuilding = getRoomListForBuilding;
+window.sortStringListInPlace = sortStringListInPlace;
 window.addUniqueToList = addUniqueToList;
 window.addRoomToBuildingList = addRoomToBuildingList;
 

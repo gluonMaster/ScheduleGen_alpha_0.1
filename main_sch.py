@@ -14,6 +14,23 @@ from output_utils import get_schedule_dataframe, export_to_excel, get_teacher_sc
 
 default_output_path = Path("visualiser") / "optimized_schedule.xlsx"
 
+
+def _configure_stdio_for_unicode_logs():
+    """
+    Prevent UnicodeEncodeError on Windows code pages (e.g., cp1251)
+    when class/teacher names contain non-ASCII symbols like 'ü'.
+    """
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if not stream:
+            continue
+        try:
+            # Keep current encoding choice, but never crash on unsupported chars.
+            stream.reconfigure(errors="backslashreplace")
+        except Exception:
+            # Some environments may not support reconfigure(); keep default behavior.
+            pass
+
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='Generate optimized school schedule using OR-Tools.')
@@ -113,6 +130,8 @@ def print_solution_summary(optimizer):
 
 def main():
     """Main function to generate the optimized schedule."""
+    _configure_stdio_for_unicode_logs()
+
     # Parse command line arguments
     args = parse_arguments()
     

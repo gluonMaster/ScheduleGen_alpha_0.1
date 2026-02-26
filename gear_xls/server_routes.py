@@ -9,6 +9,7 @@ import os
 import json
 import logging
 import sys
+import re
 from flask import Flask, request, send_file, jsonify, redirect, url_for
 from excel_exporter import process_schedule_export_request
 from flask_cors import CORS  # Добавьте эту строку в начале файла
@@ -41,6 +42,18 @@ SPISKI_FILE_MAP = {
     'rooms_Villa':   'kabinets_Villa.txt',
     'rooms_Kolibri': 'kabinets_Kolibri.txt',
 }
+
+
+def _spiski_sort_key(value):
+    """Case-insensitive natural sort key (e.g. '2' < '10')."""
+    parts = re.findall(r'\d+|\D+', (value or '').strip())
+    key = []
+    for part in parts:
+        if part.isdigit():
+            key.append((0, int(part)))
+        else:
+            key.append((1, part.casefold()))
+    return tuple(key)
 
 # Проверяем, существует ли директория, и создаем, если нет
 if not os.path.exists(EXCEL_EXPORTS_DIR):
@@ -137,33 +150,30 @@ def add_spiski_item():
         filepath = os.path.join(SPISKI_DIR, filename)
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
 
-        # Проверяем дубликат (регистронезависимо)
+        # Read current entries, dedupe case-insensitively, then keep file sorted.
         existing = set()
+        entries = []
         if os.path.exists(filepath):
             with open(filepath, 'r', encoding='utf-8') as f:
                 for line in f:
-                    existing.add(line.strip().lower())
+                    item = line.strip()
+                    if not item:
+                        continue
+                    low = item.casefold()
+                    if low in existing:
+                        continue
+                    existing.add(low)
+                    entries.append(item)
 
-        if value.lower() in existing:
+        if value.casefold() in existing:
             return jsonify({"ok": True, "added": False, "reason": "already_exists"})
 
-        # Дописываем в конец файла (создаём файл если отсутствует).
-        # Не добавляем ведущую пустую строку, если файл пуст.
-        needs_newline = False
-        if os.path.exists(filepath):
-            try:
-                if os.path.getsize(filepath) > 0:
-                    with open(filepath, 'rb') as fb:
-                        fb.seek(-1, os.SEEK_END)
-                        last_byte = fb.read(1)
-                    needs_newline = (last_byte not in (b'\n', b'\r'))
-            except Exception:
-                needs_newline = True
+        entries.append(value)
+        entries.sort(key=_spiski_sort_key)
 
-        with open(filepath, 'a', encoding='utf-8') as f:
-            if needs_newline:
-                f.write('\n')
-            f.write(value)
+        with open(filepath, 'w', encoding='utf-8') as f:
+            if entries:
+                f.write('\n'.join(entries) + '\n')
 
         logger.info(f"Spiski: added {value!r} to {filename}")
         return jsonify({"ok": True, "added": True})

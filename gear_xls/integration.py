@@ -11,6 +11,7 @@ import logging
 import subprocess
 import time
 import webbrowser
+import re
 from pathlib import Path
 
 # Импортируем новый сервис пайплайна
@@ -27,6 +28,18 @@ logger = logging.getLogger('integration')
 # Константы конфигурации
 DEFAULT_TIME_INTERVAL = 5
 DEFAULT_BORDER_WIDTH = 0.5
+
+
+def _spiski_sort_key(value: str):
+    """Case-insensitive natural sort key (e.g. '2' < '10')."""
+    parts = re.findall(r'\d+|\D+', (value or '').strip())
+    key = []
+    for part in parts:
+        if part.isdigit():
+            key.append((0, int(part)))
+        else:
+            key.append((1, part.casefold()))
+    return tuple(key)
 
 
 def load_spiski_data() -> dict:
@@ -70,7 +83,7 @@ def load_spiski_data() -> dict:
             logger.warning(f"Spiski file not found (using empty list): {path}")
         except Exception as e:
             logger.warning(f"Error reading spiski file {path}: {e}")
-        result[key] = entries
+        result[key] = sorted(entries, key=_spiski_sort_key)
 
     return result
 

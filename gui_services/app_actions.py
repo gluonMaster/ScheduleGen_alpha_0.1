@@ -65,7 +65,7 @@ class AppActions:
                 
                 if len(parent_missing) < len(missing_dirs):
                     current_dir = parent_dir
-                    self.log_action(f"РСЃРїРѕР»СЊР·СѓСЋ СЂРѕРґРёС‚РµР»СЊСЃРєРёР№ РєР°С‚Р°Р»РѕРі: {current_dir}")
+                    self.log_action(f"Использую родительский каталог: {current_dir}")
                 else:
                     # Создаем недостающие каталоги, если их нет
                     for dir_name in missing_dirs:
@@ -101,7 +101,7 @@ class AppActions:
                     fallback_dir = os.path.dirname(sys.executable)
                 else:
                     fallback_dir = os.getcwd()
-                self.log_action(f"РСЃРїРѕР»СЊР·СѓСЋ СЂРµР·РµСЂРІРЅС‹Р№ РєР°С‚Р°Р»РѕРі: {fallback_dir}")
+                self.log_action(f"Использую резервный каталог: {fallback_dir}")
                 return fallback_dir
             except:
                 return None
@@ -116,7 +116,7 @@ class AppActions:
             self.log_action(f"Каталог excel_exports не найден: {exports_dir}")
             return None
         
-        # РС‰РµРј РІСЃРµ .xlsx С„Р°Р№Р»С‹ РІ РєР°С‚Р°Р»РѕРіРµ
+        # Ищем все .xlsx файлы в каталоге
         xlsx_pattern = os.path.join(exports_dir, "*.xlsx")
         xlsx_files = glob.glob(xlsx_pattern)
         
@@ -143,7 +143,7 @@ class AppActions:
                 self.log_action(f"Файл VBA модуля не найден: {module_path}")
                 return None
             
-            self.log_action("РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ COM РґР»СЏ Excel...")
+            self.log_action("Инициализация COM для Excel...")
             pythoncom.CoInitialize()
             
             try:
@@ -160,8 +160,8 @@ class AppActions:
                 self.log_action(f"Сохранение как XLSM: {os.path.basename(xlsm_file)}")
                 wb.SaveAs(xlsm_file, FileFormat=52)  # 52 = xlOpenXMLWorkbookMacroEnabled
                 
-                # РРјРїРѕСЂС‚ VBA РјРѕРґСѓР»СЏ
-                self.log_action("РРјРїРѕСЂС‚ VBA РјРѕРґСѓР»СЏ...")
+                # Импорт VBA модуля
+                self.log_action("Импорт VBA модуля...")
                 vba_project = wb.VBProject
                 vba_project.VBComponents.Import(module_path)
                 
@@ -345,7 +345,7 @@ class AppActions:
                     except Exception as e:
                         self.log_action(f"Ошибка при копировании файла {source_file}: {e}")
                 else:
-                    self.log_action(f"РСЃС…РѕРґРЅС‹Р№ С„Р°Р№Р» РЅРµ РЅР°Р№РґРµРЅ: {source_path}")
+                    self.log_action(f"Исходный файл не найден: {source_path}")
             
             if copied_files:
                 self.log_action(f"Успешно скопировано файлов: {len(copied_files)} в {destination_path}")
@@ -384,7 +384,7 @@ class AppActions:
         self.log_action("Запуск планировщика...")
         
         commands = [
-            "python main_sch.py xlsx_initial/schedule_planning.xlsm --time-limit 300 --verbose --time-interval 5"
+            "python -X utf8 main_sch.py xlsx_initial/schedule_planning.xlsm --time-limit 300 --verbose --time-interval 5"
         ]
         
         def run_in_thread():
@@ -424,7 +424,7 @@ class AppActions:
             return
         
         if self.process_manager.is_process_running(self.process_manager.flask_process):
-            messagebox.showinfo("РРЅС„РѕСЂРјР°С†РёСЏ", "Flask-СЃРµСЂРІРµСЂ СѓР¶Рµ Р·Р°РїСѓС‰РµРЅ")
+            messagebox.showinfo("Информация", "Flask-сервер уже запущен")
             return
         
         self.log_action("Запуск flask-сервера...")
@@ -591,7 +591,7 @@ class AppActions:
                 self.log_action("Шаг 4: Запуск планировщика с newpref.xlsx...")
 
                 commands = [
-                    "python -u main_sch.py xlsx_initial/newpref.xlsx --time-limit 300 --verbose --time-interval 5"
+                    "python -X utf8 -u main_sch.py xlsx_initial/newpref.xlsx --time-limit 300 --verbose --time-interval 5"
                 ]
 
                 # Запоминаем mtime выходного файла до запуска (страховочная проверка)
