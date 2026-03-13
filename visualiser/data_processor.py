@@ -6,6 +6,7 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime
+from lesson_type_utils import classify_lesson_type
 
 
 def load_data(excel_file_path):
@@ -44,6 +45,33 @@ def load_data(excel_file_path):
     df['end_time'] = df['end_time'].dt.strftime('%H:%M')
     
     return df
+
+
+def filter_by_lesson_type(df, lesson_type_filter='all'):
+    """
+    Filters a schedule DataFrame by lesson type.
+
+    Args:
+        df: DataFrame with a 'subject' column.
+        lesson_type_filter: one of 'all', 'group', 'individual', 'nachhilfe', 'non-group'.
+
+    Returns:
+        Filtered DataFrame (original df returned unchanged for filter='all').
+        If the 'subject' column is absent, returns df unchanged regardless of filter.
+    """
+    if lesson_type_filter == 'all':
+        return df
+    if 'subject' not in df.columns:
+        return df
+    if lesson_type_filter == 'non-group':
+        mask = df['subject'].apply(
+            lambda s: classify_lesson_type(str(s) if s is not None else '') in ('individual', 'nachhilfe')
+        )
+    else:
+        mask = df['subject'].apply(
+            lambda s: classify_lesson_type(str(s) if s is not None else '') == lesson_type_filter
+        )
+    return df[mask].reset_index(drop=True)
 
 
 def process_schedule_data(df):

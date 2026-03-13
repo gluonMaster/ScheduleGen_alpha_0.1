@@ -70,6 +70,14 @@ function syncBlockContent(block) {
 
     block.innerHTML = subject + '<br>' + teacher + '<br>' + students + '<br>' + newRoom + '<br>' + newTimeStr;
 
+    // Update lesson type attribute and re-apply active filter
+    if (typeof updateBlockLessonType === 'function') {
+        updateBlockLessonType(block);
+    }
+    if (typeof reapplyLessonTypeFilter === 'function') {
+        reapplyLessonTypeFilter();
+    }
+
     return {
         room:      newRoom,
         startTime: newTimeStr.split('-')[0] || '',

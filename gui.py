@@ -8,38 +8,38 @@ from gui_services import UIBuilder, FileManager, ProcessManager, AppActions, Log
 class ApplicationInterface:
     def __init__(self, root):
         self.root = root
-        
+
         # Настройка главного окна
         UIBuilder.create_main_window(root)
-        
+
         # Создание основного фрейма
         main_frame = UIBuilder.create_main_frame(root)
-        
+
         # Заголовок
         UIBuilder.create_title_label(main_frame)
-        
+
         # Инициализация сервисов (без logger пока)
         self.process_manager = ProcessManager()
         self.app_actions = AppActions(self.process_manager)  # Без log_callback
-        
+
         # Информационная панель
         info_frame = UIBuilder.create_info_frame(main_frame)
         self.dir_label, _ = UIBuilder.create_info_labels(info_frame)  # file_label больше не используется
-        
+
         # Контейнер для кнопок
         buttons_frame = UIBuilder.create_buttons_frame(main_frame)
-        
+
         # Лог действий
         log_frame = UIBuilder.create_log_frame(main_frame)
         log_text = UIBuilder.create_log_text(log_frame)
-        
-        # Статус бар  
+
+        # Статус бар
         status_bar = UIBuilder.create_status_bar(root)
-        
+
         # Теперь инициализируем logger и устанавливаем его в app_actions
         self.logger = Logger(log_text, status_bar, root)
         self.app_actions.set_log_callback(self.logger.log_action)
-        
+
         # Обновляем информацию о каталоге
         if self.app_actions.get_program_directory():
             directory = self.app_actions.get_program_directory()
@@ -51,20 +51,20 @@ class ApplicationInterface:
             self.dir_label.config(text=f"Рабочий каталог: {display_dir}")
         else:
             self.dir_label.config(text="⚠ Рабочий каталог: не определен автоматически")
-        
+
         # Создание кнопок интерфейса
         self._create_buttons(buttons_frame)
-    
+
     def _create_buttons(self, buttons_frame):
         """Создание всех кнопок интерфейса"""
-        
+
         # Кнопки 2: Оптимизация
         UIBuilder.create_double_button_row(
             buttons_frame,
             "2. Запустить оптимизацию", self.app_actions.run_scheduler,
             "2.1. Открыть оптимизированное расписание", self.app_actions.open_optimized_schedule
         )
-        
+
         # Кнопки 3: Веб-приложение
         UIBuilder.create_triple_button_row(
             buttons_frame,
@@ -72,7 +72,41 @@ class ApplicationInterface:
             "3.1. Запустить flask-сервер", self.app_actions.run_flask_server,
             "3.2. Открыть веб-приложение", self.app_actions.open_web_app
         )
-        
+
+        # Фильтр типа занятий (для визуализатора)
+        filter_row = ttk.Frame(buttons_frame)
+        filter_row.pack(fill='x', padx=5, pady=(4, 0))
+
+        ttk.Label(filter_row, text="Фильтр типа занятий:").pack(side='left', padx=(0, 8))
+
+        lesson_type_labels = [
+            "Все",
+            "Только групповые",
+            "Только индивидуальные",
+            "Только наххильфе",
+            "Негрупповые"
+        ]
+        lesson_type_values = ['all', 'group', 'individual', 'nachhilfe', 'non-group']
+
+        self.lesson_type_var = tk.StringVar(value="Все")
+        lesson_type_combo = ttk.Combobox(
+            filter_row,
+            textvariable=self.lesson_type_var,
+            values=lesson_type_labels,
+            state='readonly',
+            width=24
+        )
+        lesson_type_combo.pack(side='left')
+
+        def _on_lesson_type_changed(event=None):
+            selected_label = self.lesson_type_var.get()
+            if selected_label in lesson_type_labels:
+                idx = lesson_type_labels.index(selected_label)
+                value = lesson_type_values[idx]
+                self.app_actions.set_lesson_type_filter(value)
+
+        lesson_type_combo.bind('<<ComboboxSelected>>', _on_lesson_type_changed)
+
         # Кнопки 4: Визуализация
         UIBuilder.create_triple_button_row(
             buttons_frame,
@@ -80,7 +114,7 @@ class ApplicationInterface:
             "4.1. Открыть PDF-визуализацию", self.app_actions.open_pdf_visualization,
             "4.2. Открыть HTML-визуализацию", self.app_actions.open_html_visualization
         )
-        
+
         # Кнопки 7: Работа с новыми предпочтениями
         UIBuilder.create_double_button_row(
             buttons_frame,
@@ -88,12 +122,13 @@ class ApplicationInterface:
             "7. Учесть изменения", self.app_actions.run_scheduler_newpref
         )
 
+
 if __name__ == "__main__":
     # Создаем экземпляр Tk
     root = tk.Tk()
-    
+
     # Создаем приложение
     app = ApplicationInterface(root)
-    
+
     # Запускаем основной цикл
     root.mainloop()

@@ -8,6 +8,7 @@ import colorsys
 import tempfile
 import webbrowser
 from datetime import datetime
+from lesson_type_utils import classify_lesson_type as _classify_lesson_type
 
 class HtmlExportMixin:
     """Миксин с методами для HTML-экспорта"""
@@ -221,6 +222,12 @@ class HtmlExportMixin:
                 .theme-toggle {
                     display: none;
                 }
+            }
+
+            /* Visual indicator for non-group lessons */
+            .lesson-block[data-lesson-type="individual"],
+            .lesson-block[data-lesson-type="nachhilfe"] {
+                box-shadow: inset 4px 0 0 #1976d2, var(--card-shadow, 0 1px 3px rgba(0,0,0,.15));
             }
             ''')
             html.append('    </style>')
@@ -479,7 +486,13 @@ class HtmlExportMixin:
         text_color = '#000000'
         
         # Добавляем атрибут данных для возможности фильтрации
-        data_attributes = f'data-group="{lesson["group"]}" data-teacher="{lesson["teacher"]}" data-building="{lesson["building"]}"'
+        _lesson_type = _classify_lesson_type(lesson.get('subject', '') or '')
+        data_attributes = (
+            f'data-group="{lesson["group"]}" '
+            f'data-teacher="{lesson["teacher"]}" '
+            f'data-building="{lesson["building"]}" '
+            f'data-lesson-type="{_lesson_type}"'
+        )
         
         # Формируем HTML для блока занятия с улучшенным дизайном
         block_html.append(f'            <div class="lesson-block" {data_attributes} style="background-color: {bg_color}; border-color: {border_color}; color: {text_color};">')

@@ -415,5 +415,17 @@ def get_css_styles(cellHeight, dayCellWidth, timeColWidth, borderWidth=1):
          background-color: #e8f0fe;
          color: #1a56db;
       }}
+
+      /* Lesson-type filter: hidden state (NOT display:none to avoid export conflicts) */
+      .activity-block.lesson-type-filter-hidden {{
+         visibility: hidden;
+         pointer-events: none;
+      }}
+
+      /* Visual indicator for non-group lessons */
+      .activity-block[data-lesson-type="individual"],
+      .activity-block[data-lesson-type="nachhilfe"] {{
+         border-left: 3px solid #1976d2;
+      }}
     </style>
     """

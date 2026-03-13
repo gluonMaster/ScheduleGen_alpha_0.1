@@ -499,6 +499,61 @@ function initMenu() {
         if (e.key === 'Escape') closeMenu();
     });
 
+    var lessonFilterMenuStyle = document.getElementById('lessonTypeFilterMenuStyle');
+    if (!lessonFilterMenuStyle) {
+        lessonFilterMenuStyle = document.createElement('style');
+        lessonFilterMenuStyle.id = 'lessonTypeFilterMenuStyle';
+        lessonFilterMenuStyle.textContent = [
+            '.lesson-filter-item.lesson-filter-active {',
+            '    background-color: #e0e8ff;',
+            '    font-weight: bold;',
+            '}'
+        ].join('\n');
+        document.head.appendChild(lessonFilterMenuStyle);
+    }
+
+    // === Lesson type filter section ===
+    var dropdown = document.getElementById('menuDropdown');
+    if (dropdown && !dropdown.querySelector('.lesson-filter-item')) {
+        var separator = document.createElement('div');
+        separator.style.cssText = 'border-top: 1px solid #ccc; margin: 4px 0;';
+        dropdown.appendChild(separator);
+
+        var filterHeader = document.createElement('div');
+        filterHeader.textContent = 'Тип занятий';
+        filterHeader.style.cssText = 'padding: 6px 16px 2px; font-size: 11px; color: #888; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em;';
+        dropdown.appendChild(filterHeader);
+
+        var filterItems = [
+            { label: 'Все занятия', value: 'all' },
+            { label: 'Только групповые', value: 'group' },
+            { label: 'Только индивидуальные', value: 'individual' },
+            { label: 'Только наххильфе', value: 'nachhilfe' },
+            { label: 'Негрупповые', value: 'non-group' }
+        ];
+
+        filterItems.forEach(function(item) {
+            var el = document.createElement('div');
+            el.className = 'menu-item lesson-filter-item';
+            el.setAttribute('data-filter', item.value);
+            el.textContent = item.label;
+            el.style.cssText = 'padding: 8px 16px; cursor: pointer;';
+
+            el.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (typeof applyLessonTypeFilter === 'function') {
+                    applyLessonTypeFilter(item.value);
+                }
+            });
+            dropdown.appendChild(el);
+        });
+
+        var allItem = dropdown.querySelector('.lesson-filter-item[data-filter="all"]');
+        if (allItem) {
+            allItem.classList.add('lesson-filter-active');
+        }
+    }
+
     _menuInitialized = true;
 }
 

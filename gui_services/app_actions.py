@@ -20,6 +20,7 @@ class AppActions:
         self.log_action = log_callback if log_callback else self._dummy_log
         self.program_directory = self._auto_detect_root_directory()
         self.selected_xlsx_file = None
+        self.lesson_type_filter = 'all'
     
     def _dummy_log(self, message):
         """Временная функция логирования для случаев, когда logger еще не инициализирован"""
@@ -28,6 +29,10 @@ class AppActions:
     def set_log_callback(self, log_callback):
         """Устанавливает функцию логирования после инициализации UI"""
         self.log_action = log_callback
+
+    def set_lesson_type_filter(self, value: str):
+        """Sets the lesson type filter forwarded to the visualiser command."""
+        self.lesson_type_filter = value
     
     def _auto_detect_root_directory(self):
         """Автоматическое определение корневого каталога программы"""
@@ -461,7 +466,7 @@ class AppActions:
         self.log_action("Запуск визуализатора...")
         
         visualiser_dir = FileManager.get_file_path(self.program_directory, "visualiser")
-        commands = ["python example_usage_enhanced.py"]
+        commands = [f"python example_usage_enhanced.py --lesson-type {self.lesson_type_filter}"]
         
         def run_in_thread():
             self.process_manager.terminal_process = self.process_manager.execute_in_terminal(
@@ -648,7 +653,7 @@ class AppActions:
 
                 # Шаг 5: Запуск визуализатора
                 self.log_action("Шаг 5: Запуск визуализатора...")
-                visualiser_commands = ["python example_usage_enhanced.py"]
+                visualiser_commands = [f"python example_usage_enhanced.py --lesson-type {self.lesson_type_filter}"]
                 visualiser_dir = FileManager.get_file_path(self.program_directory, "visualiser")
                 visualiser_process = self.process_manager.execute_command_and_wait(visualiser_commands, visualiser_dir)
 

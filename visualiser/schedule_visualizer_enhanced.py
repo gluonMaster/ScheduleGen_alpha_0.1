@@ -15,14 +15,15 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 # Импортируем модули проекта
-from data_processor import load_data, process_schedule_data
+from data_processor import load_data, process_schedule_data, filter_by_lesson_type
 from enhanced_layout_manager import EnhancedScheduleLayout
 from teacher_exporter import export_teacher_schedules
 from group_exporter import export_group_schedules
 from enhanced_export_manager import EnhancedExportManager
 
 
-def main(excel_file_path, output_pdf_path, export_teachers=False, export_groups=False, export_html=False):
+def main(excel_file_path, output_pdf_path, export_teachers=False, export_groups=False, export_html=False,
+         lesson_type_filter='all'):
     """
     Основная функция для генерации PDF с расписанием и дополнительными экспортами
     
@@ -37,6 +38,7 @@ def main(excel_file_path, output_pdf_path, export_teachers=False, export_groups=
     
     # Загружаем данные из Excel-файла
     df = load_data(excel_file_path)
+    df = filter_by_lesson_type(df, lesson_type_filter)
     
     # Обрабатываем данные расписания
     days_of_week, schedule_by_day = process_schedule_data(df)
@@ -54,12 +56,12 @@ def main(excel_file_path, output_pdf_path, export_teachers=False, export_groups=
     
     # Экспорт расписания преподавателей, если выбрано
     if export_teachers:
-        teacher_files = export_teacher_schedules(excel_file_path)
+        teacher_files = export_teacher_schedules(excel_file_path, lesson_type_filter=lesson_type_filter)
         print(f"Создано расписаний преподавателей: {len(teacher_files)}")
     
     # Экспорт расписания групп, если выбрано
     if export_groups:
-        group_files = export_group_schedules(excel_file_path)
+        group_files = export_group_schedules(excel_file_path, lesson_type_filter=lesson_type_filter)
         print(f"Создано расписаний групп: {len(group_files)}")
     
     # Экспорт в HTML, если выбрано

@@ -316,6 +316,14 @@ function openEditDialog(block, origLeft, origTop, building) {
             
             // Обновляем содержимое блока
             block.innerHTML = `<strong>${newSubject}</strong><br>${newTeacher}<br>${newStudents}<br>${newRoom}<br>${newTime}`;
+
+            // Refresh lesson type and re-apply filter after subject may have changed
+            if (typeof updateBlockLessonType === 'function') {
+                updateBlockLessonType(block);
+            }
+            if (typeof reapplyLessonTypeFilter === 'function') {
+                reapplyLessonTypeFilter();
+            }
             
             // Обновляем отображение блока, если изменилось время
             if (newTime !== timeRange) {

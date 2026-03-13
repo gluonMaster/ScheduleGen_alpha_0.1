@@ -3,6 +3,7 @@
 """
 
 import os
+import sys
 import pandas as pd
 import re
 from datetime import datetime
@@ -12,11 +13,23 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 # Импортируем модули проекта
-from data_processor import process_schedule_data
+from data_processor import process_schedule_data, filter_by_lesson_type
 from enhanced_layout_manager import EnhancedScheduleLayout
 
 
-def export_group_schedules(excel_file_path, output_dir="group_schedules"):
+def _configure_stdio_for_unicode_logs():
+    """Prevent Windows console encoding from crashing on group names."""
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if not stream:
+            continue
+        try:
+            stream.reconfigure(errors="backslashreplace")
+        except Exception:
+            pass
+
+
+def export_group_schedules(excel_file_path, output_dir="group_schedules", lesson_type_filter='all'):
     """
     Экспортирует расписание групп в отдельные PDF-файлы
     
@@ -28,6 +41,8 @@ def export_group_schedules(excel_file_path, output_dir="group_schedules"):
         list: Список созданных файлов с расписанием групп
     """
     # Создаем директорию для сохранения файлов, если она не существует
+    _configure_stdio_for_unicode_logs()
+
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     
@@ -55,6 +70,11 @@ def export_group_schedules(excel_file_path, output_dir="group_schedules"):
                 continue
             
             # Обрабатываем данные расписания
+            df = filter_by_lesson_type(df, lesson_type_filter)
+            if df.empty:
+                print(f"Лист {sheet} не содержит данных после фильтрации по типу занятий. Пропускаем.")
+                continue
+
             days_of_week, schedule_by_day = process_schedule_data(df)
             
             if not days_of_week:

@@ -38,6 +38,9 @@ function initializeApplication() {
         if (typeof initMenu === 'function') {
             initMenu(); // Инициализация меню и управления колонками
         }
+        if (typeof initLessonTypeFilter === 'function') {
+            initLessonTypeFilter();
+        }
         if (typeof initColumnDeleteButtons === 'function') {
             initColumnDeleteButtons(); // Инициализация кнопок удаления колонок
         }

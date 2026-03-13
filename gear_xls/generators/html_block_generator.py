@@ -13,6 +13,7 @@ import os
 # Добавляем родительскую директорию в путь для импорта time_utils
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from time_utils import minutes_to_time
+from lesson_type_utils import classify_lesson_type
 # NOTE: ColorService импортируется отложенно для избежания циклических зависимостей
 
 # Настройка логирования
@@ -150,6 +151,7 @@ class HTMLBlockGenerator:
         building = interval.get('building', '')
         start_row = (interval['start'] - grid_start) // self.time_interval
         row_span = (interval['end'] - interval['start']) // self.time_interval
+        lesson_type = classify_lesson_type(interval.get('subject', ''))
 
         # Отладочная информация для диагностики
         logger.debug(f"Генерация блока: день='{day}', колонка={col_index}, здание='{building}'")
@@ -166,6 +168,7 @@ class HTMLBlockGenerator:
             f"data-day='{day}' "
             f"data-col-index='{col_index}' "
             f"data-building='{building}' "
+            f"data-lesson-type='{lesson_type}' "
             f"data-start-row='{start_row}' "
             f"data-row-span='{row_span}' "
             f"style='top:{position['top']}px; left:{position['left']}px; "
