@@ -193,6 +193,16 @@
                 box-shadow: inset 4px 0 0 #1976d2, var(--card-shadow, 0 1px 3px rgba(0,0,0,.15));
             }
             
+            .lesson-subject {
+                font-size: 0.78em;
+                color: #555;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                max-width: 100%;
+                font-style: italic;
+            }
+            
     </style>
 </head>
 <body>
@@ -220,17 +230,17 @@
                 <div class="lesson-teacher">Rusol Elena</div>
                 <div class="lesson-location">1.06, Villa</div>
             </div>
-            <div class="lesson-block" data-group="Theater 10-12" data-teacher="Müller Lüsia" data-building="Villa" data-lesson-type="group" style="background-color: #ffffff; border-color: #8a23b2; color: #000000;">
-                <div class="lesson-time">16:00-17:00</div>
-                <div class="lesson-group">Theater 10-12</div>
-                <div class="lesson-teacher">Müller Lüsia</div>
-                <div class="lesson-location">0.08, Villa</div>
-            </div>
             <div class="lesson-block" data-group="2D" data-teacher="Urich Evgenia" data-building="Villa" data-lesson-type="group" style="background-color: #ccffcc; border-color: #8a23b2; color: #000000;">
                 <div class="lesson-time">16:00-17:15</div>
                 <div class="lesson-group">2D</div>
                 <div class="lesson-teacher">Urich Evgenia</div>
                 <div class="lesson-location">2.09, Villa</div>
+            </div>
+            <div class="lesson-block" data-group="Theater 10-12" data-teacher="Müller Lüsia" data-building="Villa" data-lesson-type="group" style="background-color: #ffffff; border-color: #8a23b2; color: #000000;">
+                <div class="lesson-time">16:00-17:00</div>
+                <div class="lesson-group">Theater 10-12</div>
+                <div class="lesson-teacher">Müller Lüsia</div>
+                <div class="lesson-location">0.08, Villa</div>
             </div>
             <div class="lesson-block" data-group="VSpE_L" data-teacher="Mustafaeva Liliia" data-building="Kolibri" data-lesson-type="group" style="background-color: #ffffff; border-color: #2db223; color: #000000;">
                 <div class="lesson-time">16:00-16:45</div>
@@ -268,6 +278,18 @@
                 <div class="lesson-teacher">Aleiev Oleg</div>
                 <div class="lesson-location">K.07, Villa</div>
             </div>
+            <div class="lesson-block" data-group="Kunst Mo 2D" data-teacher="Stepanova Olesia" data-building="Villa" data-lesson-type="group" style="background-color: #ccf2ff; border-color: #8a23b2; color: #000000;">
+                <div class="lesson-time">17:20-18:05</div>
+                <div class="lesson-group">Kunst Mo 2D</div>
+                <div class="lesson-teacher">Stepanova Olesia</div>
+                <div class="lesson-location">1.05, Villa</div>
+            </div>
+            <div class="lesson-block" data-group="Tanz Mo 10-11J" data-teacher="Rusol Elena" data-building="Villa" data-lesson-type="group" style="background-color: #ffffcc; border-color: #8a23b2; color: #000000;">
+                <div class="lesson-time">17:20-18:50</div>
+                <div class="lesson-group">Tanz Mo 10-11J</div>
+                <div class="lesson-teacher">Rusol Elena</div>
+                <div class="lesson-location">1.06, Villa</div>
+            </div>
             <div class="lesson-block" data-group="6A" data-teacher="Urich Evgenia" data-building="Villa" data-lesson-type="group" style="background-color: #ccffcc; border-color: #8a23b2; color: #000000;">
                 <div class="lesson-time">17:20-18:50</div>
                 <div class="lesson-group">6A</div>
@@ -285,30 +307,6 @@
                 <div class="lesson-group">4A</div>
                 <div class="lesson-teacher">Tchoudnovskaia Anna</div>
                 <div class="lesson-location">2.07, Villa</div>
-            </div>
-            <div class="lesson-block" data-group="Kunst Mo 2D" data-teacher="Stepanova Olesia" data-building="Villa" data-lesson-type="group" style="background-color: #ccf2ff; border-color: #8a23b2; color: #000000;">
-                <div class="lesson-time">17:20-18:05</div>
-                <div class="lesson-group">Kunst Mo 2D</div>
-                <div class="lesson-teacher">Stepanova Olesia</div>
-                <div class="lesson-location">1.05, Villa</div>
-            </div>
-            <div class="lesson-block" data-group="Tanz Mo 10-11J" data-teacher="Rusol Elena" data-building="Villa" data-lesson-type="group" style="background-color: #ffffcc; border-color: #8a23b2; color: #000000;">
-                <div class="lesson-time">17:20-18:50</div>
-                <div class="lesson-group">Tanz Mo 10-11J</div>
-                <div class="lesson-teacher">Rusol Elena</div>
-                <div class="lesson-location">1.06, Villa</div>
-            </div>
-            <div class="lesson-block" data-group="Schevtsova Maria" data-teacher="Gutovskaia Marina" data-building="Villa" data-lesson-type="individual" style="background-color: #ffffff; border-color: #8a23b2; color: #000000;">
-                <div class="lesson-time">18:15-19:45</div>
-                <div class="lesson-group">Schevtsova Maria</div>
-                <div class="lesson-teacher">Gutovskaia Marina</div>
-                <div class="lesson-location">K.07, Villa</div>
-            </div>
-            <div class="lesson-block" data-group="Kapustian Evgen" data-teacher="Olekh Katerina" data-building="Villa" data-lesson-type="nachhilfe" style="background-color: #ffffff; border-color: #8a23b2; color: #000000;">
-                <div class="lesson-time">18:30-19:30</div>
-                <div class="lesson-group">Kapustian Evgen</div>
-                <div class="lesson-teacher">Olekh Katerina</div>
-                <div class="lesson-location">1.03, Villa</div>
             </div>
         </div>
         <div class="day-column">
@@ -931,7 +929,7 @@
         </div>
         </div>
     </div>
-    <div class="footer">Создано: 12.03.2026 19:45</div>
+    <div class="footer">Создано: 16.03.2026 17:15</div>
 
             <script>
                 document.addEventListener('DOMContentLoaded', function() {

@@ -293,12 +293,6 @@ function _handleAddColumnSubmit(overlay, buildingSelect, daySelect, roomInput) {
     var wasNew = (newCount > prevCount);
 
     if (wasNew) {
-        // Update container width.
-        if (container) {
-            var dcw = (typeof dayCellWidth !== 'undefined') ? dayCellWidth : 100;
-            var currentWidth = parseFloat(container.style.width) || 0;
-            container.style.width = (currentWidth + dcw) + 'px';
-        }
         if (typeof updateActivityPositions === 'function') {
             updateActivityPositions();
         }
@@ -351,13 +345,6 @@ function _doCreateNewSchedule() {
 
         var table = _buildFullTable(building, rooms, rowCount);
         container.appendChild(table);
-
-        // Step 5: Update container width
-        var timeTh = table.querySelector('thead th.time-cell');
-        var tw = timeTh ? (parseFloat(window.getComputedStyle(timeTh).width) || 80) : 80;
-        var dcw = (typeof dayCellWidth !== 'undefined') ? dayCellWidth : 100;
-        var totalCols = MENU_DAYS.length * rooms.length;
-        container.style.width = (tw + totalCols * dcw) + 'px';
     });
 
     // Step 6: Finalize

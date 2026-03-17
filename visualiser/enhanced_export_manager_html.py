@@ -229,6 +229,16 @@ class HtmlExportMixin:
             .lesson-block[data-lesson-type="nachhilfe"] {
                 box-shadow: inset 4px 0 0 #1976d2, var(--card-shadow, 0 1px 3px rgba(0,0,0,.15));
             }
+            
+            .lesson-subject {
+                font-size: 0.78em;
+                color: #555;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                max-width: 100%;
+                font-style: italic;
+            }
             ''')
             html.append('    </style>')
             html.append('</head>')
@@ -495,8 +505,11 @@ class HtmlExportMixin:
         )
         
         # Формируем HTML для блока занятия с улучшенным дизайном
+        subject_val = lesson.get('subject', '') or ''
         block_html.append(f'            <div class="lesson-block" {data_attributes} style="background-color: {bg_color}; border-color: {border_color}; color: {text_color};">')
         block_html.append(f'                <div class="lesson-time">{lesson["start_time"]}-{lesson["end_time"]}</div>')
+        if _lesson_type != 'group' and subject_val:
+            block_html.append(f'                <div class="lesson-subject">{subject_val}</div>')
         block_html.append(f'                <div class="lesson-group">{lesson["group"]}</div>')
         block_html.append(f'                <div class="lesson-teacher">{lesson["teacher"]}</div>')
         block_html.append(f'                <div class="lesson-location">{lesson["room"]}, {lesson["building"]}</div>')

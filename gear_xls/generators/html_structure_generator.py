@@ -102,7 +102,7 @@ class HTMLStructureGenerator:
         
         # Кнопки показа/скрытия дней
         for day in days_order:
-            panel_parts.append(f'<button class="toggle-day-button" onclick="toggleDay(this, \'{day}\')">+/- {day}</button>')
+            panel_parts.append(f'<button class="toggle-day-button" data-day="{day}" onclick="toggleDay(this, \'{day}\')">+/- {day}</button>')
         
         # Кнопки управления
         panel_parts.extend([
@@ -148,7 +148,8 @@ class HTMLStructureGenerator:
         Returns:
             str: HTML строка для открытия контейнера
         """
-        return f'<div class="schedule-container" style="width:{container_width}px;" data-building="{building_name}">'
+        # Container width is viewport-bound via CSS so horizontal scrolling stays inside it.
+        return f'<div class="schedule-container" data-building="{building_name}">'
     
     def generate_container_end(self):
         """

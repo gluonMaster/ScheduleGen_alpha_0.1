@@ -197,114 +197,78 @@ function checkServerAvailability(callback) {
     xhr.send();
 }
 
-// Функция для показа диалога подтверждения экспорта
-function showExportConfirmation(callback) {
-    // Создаем модальное окно
-    var modal = document.createElement('div');
-    modal.id = 'exportConfirmModal';
-    modal.style.position = 'fixed';
-    modal.style.top = '0';
-    modal.style.left = '0';
-    modal.style.width = '100%';
-    modal.style.height = '100%';
-    modal.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-    modal.style.zIndex = '10000';
-    modal.style.display = 'flex';
-    modal.style.justifyContent = 'center';
-    modal.style.alignItems = 'center';
-    
-    var modalContent = document.createElement('div');
-    modalContent.style.backgroundColor = 'white';
-    modalContent.style.padding = '20px';
-    modalContent.style.borderRadius = '10px';
-    modalContent.style.boxShadow = '0 4px 10px rgba(0, 0, 0, 0.3)';
-    modalContent.style.maxWidth = '500px';
-    modalContent.style.width = '90%';
-    modalContent.style.textAlign = 'center';
-    
-    modalContent.innerHTML = `
-        <div style="margin-bottom: 20px;">
-            <div style="font-size: 30px; color: #f39c12; margin-bottom: 10px;">⚠️</div>
-            <h3 style="margin: 0 0 10px 0; color: #333;">Внимание!</h3>
-            <p style="margin: 0; color: #666; line-height: 1.5;">
-                При экспорте в Excel будут сохранены данные только из <strong>видимых столбцов</strong> расписания.
-            </p>
-            <p style="margin: 10px 0 0 0; color: #666; line-height: 1.5; font-size: 14px;">
-                Убедитесь, что все нужные столбцы отображаются в таблице перед экспортом.
-            </p>
-        </div>
-        <div style="display: flex; gap: 10px; justify-content: center;">
-            <button id="confirmExport" style="
-                background-color: #28a745;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-                cursor: pointer;
-                font-size: 16px;
-                font-weight: bold;
-            ">Продолжить экспорт</button>
-            <button id="cancelExport" style="
-                background-color: #dc3545;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-                cursor: pointer;
-                font-size: 16px;
-                font-weight: bold;
-            ">Отмена</button>
-        </div>
-    `;
-    
-    modal.appendChild(modalContent);
-    document.body.appendChild(modal);
-    
-    // Добавляем стили при наведении
-    var confirmBtn = modalContent.querySelector('#confirmExport');
-    var cancelBtn = modalContent.querySelector('#cancelExport');
-    
-    confirmBtn.addEventListener('mouseenter', function() {
-        this.style.backgroundColor = '#218838';
-    });
-    confirmBtn.addEventListener('mouseleave', function() {
-        this.style.backgroundColor = '#28a745';
-    });
-    
-    cancelBtn.addEventListener('mouseenter', function() {
-        this.style.backgroundColor = '#c82333';
-    });
-    cancelBtn.addEventListener('mouseleave', function() {
-        this.style.backgroundColor = '#dc3545';
-    });
-    
-    // Обработчики кнопок
-    confirmBtn.addEventListener('click', function() {
-        document.body.removeChild(modal);
-        callback(true);
-    });
-    
-    cancelBtn.addEventListener('click', function() {
-        document.body.removeChild(modal);
-        callback(false);
-    });
-    
-    // Закрытие по Esc
-    document.addEventListener('keydown', function escHandler(event) {
-        if (event.key === 'Escape') {
-            document.body.removeChild(modal);
-            callback(false);
-            document.removeEventListener('keydown', escHandler);
+function _showTemporaryExportToast(message) {
+    var existing = document.getElementById('exportAutoUnhideToast');
+    if (existing) {
+        if (existing._hideTimer) {
+            clearTimeout(existing._hideTimer);
         }
-    });
-    
-    // Закрытие по клику вне модального окна
-    modal.addEventListener('click', function(event) {
-        if (event.target === modal) {
-            document.body.removeChild(modal);
-            callback(false);
+        existing.remove();
+    }
+
+    var toast = document.createElement('div');
+    toast.id = 'exportAutoUnhideToast';
+    toast.textContent = message;
+    toast.style.cssText = [
+        'position: fixed',
+        'right: 20px',
+        'bottom: 20px',
+        'z-index: 9999',
+        'max-width: 360px',
+        'padding: 10px 14px',
+        'border-radius: 8px',
+        'background: rgba(33, 37, 41, 0.92)',
+        'color: #fff',
+        'font-size: 13px',
+        'box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2)',
+        'pointer-events: none'
+    ].join('; ');
+    document.body.appendChild(toast);
+
+    toast._hideTimer = setTimeout(function() {
+        if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
         }
-    });
+    }, 1800);
+}
+
+function _exportWithAutoUnhide() {
+    var hiddenButtons = Array.from(
+        document.querySelectorAll('.toggle-day-button.active')
+    );
+
+    if (hiddenButtons.length > 0) {
+        _showTemporaryExportToast(
+            'Скрытые дни временно раскрываются для полной выгрузки...'
+        );
+        hiddenButtons.forEach(function(btn) {
+            var dayCode = btn.getAttribute('data-day');
+            if (dayCode && typeof toggleDay === 'function') {
+                toggleDay(btn, dayCode);
+            }
+        });
+    }
+
+    var restored = false;
+    function restoreHiddenDays() {
+        if (restored) {
+            return;
+        }
+        restored = true;
+        hiddenButtons.forEach(function(btn) {
+            var dayCode = btn.getAttribute('data-day');
+            if (dayCode && typeof toggleDay === 'function') {
+                toggleDay(btn, dayCode);
+            }
+        });
+    }
+
+    try {
+        exportScheduleToExcel(restoreHiddenDays);
+    } catch (e) {
+        restoreHiddenDays();
+        throw e;
+    }
 }
 
 // Инициализация экспорта в Excel
@@ -319,12 +283,7 @@ function initExcelExport() {
         
         // Добавляем обработчик клика на кнопку
         exportButton.addEventListener('click', function() {
-            // Показываем диалог подтверждения
-            showExportConfirmation(function(confirmed) {
-                if (confirmed) {
-                    exportScheduleToExcel();
-                }
-            });
+            _exportWithAutoUnhide();
         });
         console.log('Инициализирован обработчик экспорта в Excel');
     } else {
@@ -333,7 +292,17 @@ function initExcelExport() {
 }
 
 // Основная функция экспорта расписания в Excel
-function exportScheduleToExcel() {
+function exportScheduleToExcel(onDone) {
+    var _done = (typeof onDone === 'function') ? onDone : function() {};
+    var _doneCalled = false;
+    function _callDone() {
+        if (_doneCalled) {
+            return;
+        }
+        _doneCalled = true;
+        _done();
+    }
+
     try {
         // Проверяем наличие конфликтов перед экспортом
         if (typeof ConflictDetector !== 'undefined' && ConflictDetector.hasConflicts()) {
@@ -345,6 +314,7 @@ function exportScheduleToExcel() {
                 '(При запуске планировщика "Учесть изменения" такое расписание может дать ошибку INFEASIBLE)'
             );
             if (!proceed) {
+                _callDone();
                 return;
             }
         }
@@ -355,6 +325,7 @@ function exportScheduleToExcel() {
             if (!isAvailable) {
                 showExportProgress('Сервер экспорта недоступен!', true);
                 checkServerAndAdvise();
+                _callDone();
                 return;
             }
             
@@ -391,6 +362,7 @@ function exportScheduleToExcel() {
                     // Скрываем индикатор прогресса
                     hideExportProgress();
                     showExportProgress('Excel-файл успешно скачан!', true);
+                    _callDone();
                     // Автоматическое закрытие через 2 секунды (оставляем возможность закрыть вручную)
                     setTimeout(function() {
                         // Проверяем, не закрыл ли пользователь сообщение сам
@@ -403,6 +375,7 @@ function exportScheduleToExcel() {
                     console.error('Ошибка при получении файла:', xhr.status, xhr.statusText);
                     hideExportProgress();
                     showExportProgress('Ошибка при получении файла: ' + xhr.statusText, true);
+                    _callDone();
                 }
             };
             
@@ -414,6 +387,7 @@ function exportScheduleToExcel() {
                 
                 // Проверяем доступность сервера и даем рекомендации
                 checkServerAndAdvise();
+                _callDone();
             };
             
             // Указываем, что нам нужен ответ в виде бинарных данных
@@ -435,6 +409,7 @@ function exportScheduleToExcel() {
         console.error('Ошибка при экспорте в Excel:', error);
         hideExportProgress();
         showExportProgress('Ошибка при экспорте: ' + error.message, true);
+        _callDone();
     }
 }
 

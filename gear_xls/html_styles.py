@@ -40,20 +40,24 @@ def get_css_styles(cellHeight, dayCellWidth, timeColWidth, borderWidth=1):
       /* Контейнер с фиксированной шириной и внутренним отступом */
       .schedule-container {{
          position: relative;
+         width: 100%;
+         max-width: 100%;
          max-height: 700px;
-         overflow: auto;
+         overflow-x: auto;
+         overflow-y: auto;
          border: 1px solid #ccc;
          margin-top: 60px;
-         padding-left: 20px;
          box-shadow: 0 2px 5px rgba(0,0,0,0.1);
          background-color: #fff;
       }}
       
       /* Сетка расписания */
       .schedule-grid {{
-         border-collapse: collapse;
+         border-collapse: separate;
+         border-spacing: 0;
          table-layout: fixed;
          width: auto;
+         min-width: max-content;
       }}
       
       .schedule-grid th, .schedule-grid td {{
@@ -73,6 +77,7 @@ def get_css_styles(cellHeight, dayCellWidth, timeColWidth, borderWidth=1):
          position: sticky;
          left: 0;
          z-index: 3;
+         border-right: 2px solid #aaa;
          font-weight: bold;
          font-size: 12px;
       }}
@@ -87,6 +92,10 @@ def get_css_styles(cellHeight, dayCellWidth, timeColWidth, borderWidth=1):
          border-bottom: 2px solid #aaa;
          white-space: nowrap;
          overflow: hidden;
+      }}
+
+      .schedule-grid thead th.time-cell {{
+         z-index: 5;
       }}
       
       /* Фиксированный блок кнопок */

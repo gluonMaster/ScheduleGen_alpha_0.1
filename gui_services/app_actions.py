@@ -662,23 +662,17 @@ class AppActions:
                     visualiser_process.wait()
                     self.log_action("Визуализатор завершен")
 
-                # Шаг 6: Создание веб-приложения
-                self.log_action("Шаг 6: Создание веб-приложения...")
-                gear_commands = ["python main.py"]
-                gear_dir = FileManager.get_file_path(self.program_directory, "gear_xls")
-                gear_process = self.process_manager.execute_command_and_wait(gear_commands, gear_dir)
-
-                # Ждем завершения создания веб-приложения
-                if gear_process:
-                    gear_process.wait()
-                    self.log_action("Создание веб-приложения завершено")
-
-                # Шаг 7: Копирование файлов визуализации
-                self.log_action("Шаг 7: Копирование файлов визуализации...")
+                # Шаг 6: Копирование файлов визуализации
+                self.log_action("Шаг 6: Копирование файлов визуализации...")
                 self._copy_visualization_files()
 
                 self.log_action("Весь процесс успешно завершен!")
-                messagebox.showinfo("Успех", "Файл newpref.xlsx создан, планировщик выполнен, визуализация и веб-приложение созданы!")
+                messagebox.showinfo(
+                    "Успех",
+                    "Файл newpref.xlsx создан, планировщик выполнен, визуализация обновлена.\n\n"
+                    "Веб-редактор (gear_xls) не обновляется автоматически — "
+                    "запустите его отдельно через соответствующую кнопку, если нужна актуальная версия."
+                )
 
             except Exception as e:
                 self.log_action(f"Ошибка в процессе создания newpref.xlsx и запуска планировщика: {e}")

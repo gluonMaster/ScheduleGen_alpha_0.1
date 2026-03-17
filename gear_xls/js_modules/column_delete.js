@@ -91,16 +91,7 @@ function removeColumn(building, day, colIndex) {
         }
     });
 
-    // Step 10: Update container width.
-    var timeTh = table.querySelector('thead th.time-cell');
-    var tw = timeTh ? (parseFloat(window.getComputedStyle(timeTh).width) || 80) : 80;
-    var dcw = (typeof dayCellWidth !== 'undefined') ? dayCellWidth : 100;
-    var remainingDayCols = 0;
-    var daysOrder = window.daysOrder || ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
-    daysOrder.forEach(function(d) {
-        remainingDayCols += table.querySelectorAll('thead th.day-' + d).length;
-    });
-    container.style.width = (tw + remainingDayCols * dcw) + 'px';
+    // Step 10: No container width sync is needed: horizontal scroll lives inside the container.
 
     // Step 11: Call updateActivityPositions().
     if (typeof updateActivityPositions === 'function') {

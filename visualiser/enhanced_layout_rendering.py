@@ -4,6 +4,8 @@
 """
 
 from color_manager import get_group_color, get_building_color, get_text_color
+from lesson_type_utils import classify_lesson_type as _classify_lesson_type
+
 
 class BlockRenderingMixin:
     """Миксин с методами для рендеринга блоков расписания"""
@@ -44,10 +46,18 @@ class BlockRenderingMixin:
 
         # центр блока по горизонтали
         center_x = x + width / 2
+        max_width = width - 2 * text_padding
 
-        
         # Вычисляем размер шрифта в зависимости от высоты блока
-        font_size = min(10, height / 6)
+        lesson_type_pdf = _classify_lesson_type(lesson.get('subject', '') or '')
+        is_non_group = lesson_type_pdf != 'group'
+        subject_val_pdf = lesson.get('subject', '') or ''
+        has_subject_line = is_non_group and bool(subject_val_pdf)
+
+        if has_subject_line:
+            font_size = min(9, height / 7)
+        else:
+            font_size = min(10, height / 6)
         line_height = font_size + 1
         
         # Рисуем время занятия
@@ -55,22 +65,30 @@ class BlockRenderingMixin:
         time_text = f"{lesson['start_time']}-{lesson['end_time']}"
         canvas.drawCentredString(center_x, text_y - line_height, time_text)
 
-        
+        current_line = 2
+        if has_subject_line:
+            canvas.setFont(font_name, font_size)
+            subject_text = self.truncate_text(subject_val_pdf, max_width, font_name, font_size, canvas)
+            canvas.drawCentredString(center_x, text_y - current_line * line_height, subject_text)
+            current_line += 1
+
         # Рисуем группу
         bold_font = f"{font_name}-Bold"
         canvas.setFont(bold_font, font_size + 1)
-        group_text = self.truncate_text(lesson['group'], width - 2 * text_padding, font_name, font_size + 1, canvas)
-        canvas.drawCentredString(center_x, text_y - 2 * line_height, group_text)
+        group_text = self.truncate_text(lesson['group'], max_width, font_name, font_size + 1, canvas)
+        canvas.drawCentredString(center_x, text_y - current_line * line_height, group_text)
+        current_line += 1
         
         # Рисуем преподавателя
         canvas.setFont(font_name, font_size)
-        teacher_text = self.truncate_text(lesson['teacher'], width - 2 * text_padding, font_name, font_size, canvas)
-        canvas.drawCentredString(center_x, text_y - 3 * line_height, teacher_text)
+        teacher_text = self.truncate_text(lesson['teacher'], max_width, font_name, font_size, canvas)
+        canvas.drawCentredString(center_x, text_y - current_line * line_height, teacher_text)
+        current_line += 1
         
         # Рисуем аудиторию и здание
         location_text = f"{lesson['room']}, {lesson['building']}"
-        location_text = self.truncate_text(location_text, width - 2 * text_padding, font_name, font_size, canvas)
-        canvas.drawCentredString(center_x, text_y - 4 * line_height, location_text)
+        location_text = self.truncate_text(location_text, max_width, font_name, font_size, canvas)
+        canvas.drawCentredString(center_x, text_y - current_line * line_height, location_text)
 
     def draw_rounded_rect(self, canvas, x, y, width, height, radius, fill=1, stroke=1):
         """

@@ -123,6 +123,56 @@ def export_to_excel():
         response = jsonify({"error": str(e)})
         response.headers.add('Access-Control-Allow-Origin', '*')
         return response, 500
+
+
+@app.route('/save_intermediate', methods=['POST'])
+def save_intermediate():
+    """
+    Открывает нативный диалог сохранения файла и записывает HTML.
+    Принимает JSON: {"html_content": "...", "default_filename": "..."}.
+    Возвращает JSON: {"success": true/false, "path": "...", "reason": "..."}.
+    """
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        html_content = data.get('html_content', '')
+        default_filename = data.get('default_filename', 'intermediate_schedule.html')
+
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = None
+        save_path = ''
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes('-topmost', True)
+
+            save_path = filedialog.asksaveasfilename(
+                parent=root,
+                title='Сохранить промежуточный результат',
+                initialfile=default_filename,
+                defaultextension='.html',
+                filetypes=[('HTML files', '*.html'), ('All files', '*.*')]
+            )
+        finally:
+            if root is not None:
+                try:
+                    root.destroy()
+                except Exception:
+                    pass
+
+        if not save_path:
+            return jsonify({'success': False, 'reason': 'cancelled'})
+
+        with open(save_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+
+        logger.info(f'Промежуточный файл сохранён: {save_path}')
+        return jsonify({'success': True, 'path': save_path})
+
+    except Exception as e:
+        logger.error(f'Ошибка при сохранении промежуточного файла: {e}')
+        return jsonify({'success': False, 'reason': str(e)})
         
 @app.route('/api/spiski/add', methods=['POST'])
 def add_spiski_item():

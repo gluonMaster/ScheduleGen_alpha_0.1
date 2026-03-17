@@ -27,20 +27,24 @@
       /* Контейнер с фиксированной шириной и внутренним отступом */
       .schedule-container {
          position: relative;
+         width: 100%;
+         max-width: 100%;
          max-height: 700px;
-         overflow: auto;
+         overflow-x: auto;
+         overflow-y: auto;
          border: 1px solid #ccc;
          margin-top: 60px;
-         padding-left: 20px;
          box-shadow: 0 2px 5px rgba(0,0,0,0.1);
          background-color: #fff;
       }
       
       /* Сетка расписания */
       .schedule-grid {
-         border-collapse: collapse;
+         border-collapse: separate;
+         border-spacing: 0;
          table-layout: fixed;
          width: auto;
+         min-width: max-content;
       }
       
       .schedule-grid th, .schedule-grid td {
@@ -60,6 +64,7 @@
          position: sticky;
          left: 0;
          z-index: 3;
+         border-right: 2px solid #aaa;
          font-weight: bold;
          font-size: 12px;
       }
@@ -74,6 +79,10 @@
          border-bottom: 2px solid #aaa;
          white-space: nowrap;
          overflow: hidden;
+      }
+
+      .schedule-grid thead th.time-cell {
+         z-index: 5;
       }
       
       /* Фиксированный блок кнопок */
@@ -2534,7 +2543,7 @@ function removeColumn(building, day, colIndex) {
     daysOrder.forEach(function(d) {
         remainingDayCols += table.querySelectorAll('thead th.day-' + d).length;
     });
-    container.style.width = (tw + remainingDayCols * dcw) + 'px';
+    // Step 10: No container width sync is needed: horizontal scroll lives inside the container.
 
     // Step 11: Call updateActivityPositions().
     if (typeof updateActivityPositions === 'function') {
@@ -2739,15 +2748,71 @@ window.initColumnDeleteButtons = initColumnDeleteButtons;
 window.initColumnAddButtons = initColumnAddButtons;
 
             
-            // Модуль для сохранения и экспорта расписания
+            // Module for saving and exporting the schedule
 
-// Инициализация функций сохранения
+function getServerBaseUrl() {
+    // Explicit base URL for local Flask server.
+    // Must not use a relative path because the page may be opened via file://.
+    return 'http://localhost:5000';
+}
+
+function _saveIntermediateViaServer(htmlContent, filename, onResult) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', getServerBaseUrl() + '/save_intermediate', true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+
+    xhr.onload = function() {
+        var resp;
+        try {
+            resp = JSON.parse(xhr.responseText);
+        } catch (e) {
+            onResult({ success: false, reason: 'invalid_response', status: xhr.status });
+            return;
+        }
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+            onResult(resp);
+            return;
+        }
+
+        resp.success = false;
+        resp.status = xhr.status;
+        if (!resp.reason) {
+            resp.reason = 'http_' + xhr.status;
+        }
+        onResult(resp);
+    };
+
+    xhr.onerror = function() {
+        onResult({ success: false, reason: 'network_error' });
+    };
+
+    xhr.send(JSON.stringify({
+        html_content: htmlContent,
+        default_filename: filename
+    }));
+}
+
+function _saveIntermediateFallback(htmlContent, filename) {
+    var blob = new Blob([htmlContent], { type: 'text/html' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    alert('Сервер недоступен. Файл скачан в папку загрузок браузера.');
+}
+
+// Initialization of save functions
 function initSaveExport() {
-    // Получаем кнопки
+    // Get buttons
     var saveScheduleButton = document.getElementById('saveSchedule');
     var saveIntermediateButton = document.getElementById('saveIntermediate');
     
-    // Очищаем старые обработчики событий путем клонирования элементов
+    // Clear old event handlers by cloning elements
     if (saveScheduleButton) {
         var newSaveScheduleButton = saveScheduleButton.cloneNode(true);
         saveScheduleButton.parentNode.replaceChild(newSaveScheduleButton, saveScheduleButton);
@@ -2760,12 +2825,12 @@ function initSaveExport() {
         saveIntermediateButton = newSaveIntermediateButton;
     }
     
-    // Обработчик для финального сохранения – сохраняется статичная версия (без drag & drop)
+    // Handler for final save: saves a static version (without drag & drop)
     if (saveScheduleButton) {
         saveScheduleButton.addEventListener('click', function() {
-            // Добавляем класс, чтобы пометить страницу как финальную
+            // Add class to mark the page as final
             document.body.classList.add('static-schedule');
-            // Отключаем интерактивность drag & drop (например, изменяем курсор)
+            // Disable drag & drop interactivity
             document.querySelectorAll('.activity-block').forEach(function(block) {
                 block.style.cursor = 'default';
             });
@@ -2783,25 +2848,49 @@ function initSaveExport() {
         });
     }
 
-    // Обработчик для промежуточного сохранения (интерактивность сохраняется)
+    // Handler for intermediate save (interactivity remains)
     if (saveIntermediateButton) {
         saveIntermediateButton.addEventListener('click', function() {
-            // Запрашиваем имя файла у пользователя
-            var filename = prompt("Введите имя файла для сохранения", "intermediate_schedule.html");
-            if (!filename) return;  // если пользователь отменил, ничего не делаем
-
-            // Здесь не отключаем интерактивность — сохраняется текущее состояние страницы со скриптами
+            var defaultName = 'intermediate_schedule.html';
             var htmlContent = document.documentElement.outerHTML;
-            var blob = new Blob([htmlContent], {type: 'text/html'});
-            var url = URL.createObjectURL(blob);
-            var a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            alert("Промежуточная версия расписания сохранена.");
+
+            // Try native save dialog via Flask; fall back to blob download if unavailable
+            var serverCheckXhr = new XMLHttpRequest();
+            serverCheckXhr.open('GET', getServerBaseUrl() + '/', true);
+            serverCheckXhr.timeout = 2000;
+
+            serverCheckXhr.onload = function() {
+                if (serverCheckXhr.status === 200) {
+                    _saveIntermediateViaServer(htmlContent, defaultName, function(result) {
+                        if (result.success) {
+                            alert('Файл сохранён: ' + result.path);
+                        } else if (result.reason === 'cancelled') {
+                            // User cancelled the dialog — do nothing
+                        } else if (
+                            result.reason === 'network_error' ||
+                            result.reason === 'invalid_response' ||
+                            result.reason === 'http_404' ||
+                            (typeof result.status === 'number' && result.status >= 500)
+                        ) {
+                            _saveIntermediateFallback(htmlContent, defaultName);
+                        } else {
+                            alert('Ошибка при сохранении: ' + (result.reason || 'неизвестная ошибка'));
+                        }
+                    });
+                } else {
+                    _saveIntermediateFallback(htmlContent, defaultName);
+                }
+            };
+
+            serverCheckXhr.onerror = function() {
+                _saveIntermediateFallback(htmlContent, defaultName);
+            };
+
+            serverCheckXhr.ontimeout = function() {
+                _saveIntermediateFallback(htmlContent, defaultName);
+            };
+
+            serverCheckXhr.send();
         });
     }
 }
@@ -3210,114 +3299,78 @@ function checkServerAvailability(callback) {
     xhr.send();
 }
 
-// Функция для показа диалога подтверждения экспорта
-function showExportConfirmation(callback) {
-    // Создаем модальное окно
-    var modal = document.createElement('div');
-    modal.id = 'exportConfirmModal';
-    modal.style.position = 'fixed';
-    modal.style.top = '0';
-    modal.style.left = '0';
-    modal.style.width = '100%';
-    modal.style.height = '100%';
-    modal.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-    modal.style.zIndex = '10000';
-    modal.style.display = 'flex';
-    modal.style.justifyContent = 'center';
-    modal.style.alignItems = 'center';
-    
-    var modalContent = document.createElement('div');
-    modalContent.style.backgroundColor = 'white';
-    modalContent.style.padding = '20px';
-    modalContent.style.borderRadius = '10px';
-    modalContent.style.boxShadow = '0 4px 10px rgba(0, 0, 0, 0.3)';
-    modalContent.style.maxWidth = '500px';
-    modalContent.style.width = '90%';
-    modalContent.style.textAlign = 'center';
-    
-    modalContent.innerHTML = `
-        <div style="margin-bottom: 20px;">
-            <div style="font-size: 30px; color: #f39c12; margin-bottom: 10px;">⚠️</div>
-            <h3 style="margin: 0 0 10px 0; color: #333;">Внимание!</h3>
-            <p style="margin: 0; color: #666; line-height: 1.5;">
-                При экспорте в Excel будут сохранены данные только из <strong>видимых столбцов</strong> расписания.
-            </p>
-            <p style="margin: 10px 0 0 0; color: #666; line-height: 1.5; font-size: 14px;">
-                Убедитесь, что все нужные столбцы отображаются в таблице перед экспортом.
-            </p>
-        </div>
-        <div style="display: flex; gap: 10px; justify-content: center;">
-            <button id="confirmExport" style="
-                background-color: #28a745;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-                cursor: pointer;
-                font-size: 16px;
-                font-weight: bold;
-            ">Продолжить экспорт</button>
-            <button id="cancelExport" style="
-                background-color: #dc3545;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-                cursor: pointer;
-                font-size: 16px;
-                font-weight: bold;
-            ">Отмена</button>
-        </div>
-    `;
-    
-    modal.appendChild(modalContent);
-    document.body.appendChild(modal);
-    
-    // Добавляем стили при наведении
-    var confirmBtn = modalContent.querySelector('#confirmExport');
-    var cancelBtn = modalContent.querySelector('#cancelExport');
-    
-    confirmBtn.addEventListener('mouseenter', function() {
-        this.style.backgroundColor = '#218838';
-    });
-    confirmBtn.addEventListener('mouseleave', function() {
-        this.style.backgroundColor = '#28a745';
-    });
-    
-    cancelBtn.addEventListener('mouseenter', function() {
-        this.style.backgroundColor = '#c82333';
-    });
-    cancelBtn.addEventListener('mouseleave', function() {
-        this.style.backgroundColor = '#dc3545';
-    });
-    
-    // Обработчики кнопок
-    confirmBtn.addEventListener('click', function() {
-        document.body.removeChild(modal);
-        callback(true);
-    });
-    
-    cancelBtn.addEventListener('click', function() {
-        document.body.removeChild(modal);
-        callback(false);
-    });
-    
-    // Закрытие по Esc
-    document.addEventListener('keydown', function escHandler(event) {
-        if (event.key === 'Escape') {
-            document.body.removeChild(modal);
-            callback(false);
-            document.removeEventListener('keydown', escHandler);
+function _showTemporaryExportToast(message) {
+    var existing = document.getElementById('exportAutoUnhideToast');
+    if (existing) {
+        if (existing._hideTimer) {
+            clearTimeout(existing._hideTimer);
         }
-    });
-    
-    // Закрытие по клику вне модального окна
-    modal.addEventListener('click', function(event) {
-        if (event.target === modal) {
-            document.body.removeChild(modal);
-            callback(false);
+        existing.remove();
+    }
+
+    var toast = document.createElement('div');
+    toast.id = 'exportAutoUnhideToast';
+    toast.textContent = message;
+    toast.style.cssText = [
+        'position: fixed',
+        'right: 20px',
+        'bottom: 20px',
+        'z-index: 9999',
+        'max-width: 360px',
+        'padding: 10px 14px',
+        'border-radius: 8px',
+        'background: rgba(33, 37, 41, 0.92)',
+        'color: #fff',
+        'font-size: 13px',
+        'box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2)',
+        'pointer-events: none'
+    ].join('; ');
+    document.body.appendChild(toast);
+
+    toast._hideTimer = setTimeout(function() {
+        if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
         }
-    });
+    }, 1800);
+}
+
+function _exportWithAutoUnhide() {
+    var hiddenButtons = Array.from(
+        document.querySelectorAll('.toggle-day-button.active')
+    );
+
+    if (hiddenButtons.length > 0) {
+        _showTemporaryExportToast(
+            'Скрытые дни временно раскрываются для полной выгрузки...'
+        );
+        hiddenButtons.forEach(function(btn) {
+            var dayCode = btn.getAttribute('data-day');
+            if (dayCode && typeof toggleDay === 'function') {
+                toggleDay(btn, dayCode);
+            }
+        });
+    }
+
+    var restored = false;
+    function restoreHiddenDays() {
+        if (restored) {
+            return;
+        }
+        restored = true;
+        hiddenButtons.forEach(function(btn) {
+            var dayCode = btn.getAttribute('data-day');
+            if (dayCode && typeof toggleDay === 'function') {
+                toggleDay(btn, dayCode);
+            }
+        });
+    }
+
+    try {
+        exportScheduleToExcel(restoreHiddenDays);
+    } catch (e) {
+        restoreHiddenDays();
+        throw e;
+    }
 }
 
 // Инициализация экспорта в Excel
@@ -3332,12 +3385,7 @@ function initExcelExport() {
         
         // Добавляем обработчик клика на кнопку
         exportButton.addEventListener('click', function() {
-            // Показываем диалог подтверждения
-            showExportConfirmation(function(confirmed) {
-                if (confirmed) {
-                    exportScheduleToExcel();
-                }
-            });
+            _exportWithAutoUnhide();
         });
         console.log('Инициализирован обработчик экспорта в Excel');
     } else {
@@ -3346,7 +3394,17 @@ function initExcelExport() {
 }
 
 // Основная функция экспорта расписания в Excel
-function exportScheduleToExcel() {
+function exportScheduleToExcel(onDone) {
+    var _done = (typeof onDone === 'function') ? onDone : function() {};
+    var _doneCalled = false;
+    function _callDone() {
+        if (_doneCalled) {
+            return;
+        }
+        _doneCalled = true;
+        _done();
+    }
+
     try {
         // Проверяем наличие конфликтов перед экспортом
         if (typeof ConflictDetector !== 'undefined' && ConflictDetector.hasConflicts()) {
@@ -3358,6 +3416,7 @@ function exportScheduleToExcel() {
                 '(При запуске планировщика "Учесть изменения" такое расписание может дать ошибку INFEASIBLE)'
             );
             if (!proceed) {
+                _callDone();
                 return;
             }
         }
@@ -3368,6 +3427,7 @@ function exportScheduleToExcel() {
             if (!isAvailable) {
                 showExportProgress('Сервер экспорта недоступен!', true);
                 checkServerAndAdvise();
+                _callDone();
                 return;
             }
             
@@ -3404,6 +3464,7 @@ function exportScheduleToExcel() {
                     // Скрываем индикатор прогресса
                     hideExportProgress();
                     showExportProgress('Excel-файл успешно скачан!', true);
+                    _callDone();
                     // Автоматическое закрытие через 2 секунды (оставляем возможность закрыть вручную)
                     setTimeout(function() {
                         // Проверяем, не закрыл ли пользователь сообщение сам
@@ -3416,6 +3477,7 @@ function exportScheduleToExcel() {
                     console.error('Ошибка при получении файла:', xhr.status, xhr.statusText);
                     hideExportProgress();
                     showExportProgress('Ошибка при получении файла: ' + xhr.statusText, true);
+                    _callDone();
                 }
             };
             
@@ -3427,6 +3489,7 @@ function exportScheduleToExcel() {
                 
                 // Проверяем доступность сервера и даем рекомендации
                 checkServerAndAdvise();
+                _callDone();
             };
             
             // Указываем, что нам нужен ответ в виде бинарных данных
@@ -3448,6 +3511,7 @@ function exportScheduleToExcel() {
         console.error('Ошибка при экспорте в Excel:', error);
         hideExportProgress();
         showExportProgress('Ошибка при экспорте: ' + error.message, true);
+        _callDone();
     }
 }
 
@@ -3887,12 +3951,6 @@ function _handleAddColumnSubmit(overlay, buildingSelect, daySelect, roomInput) {
     var wasNew = (newCount > prevCount);
 
     if (wasNew) {
-        // Update container width.
-        if (container) {
-            var dcw = (typeof dayCellWidth !== 'undefined') ? dayCellWidth : 100;
-            var currentWidth = parseFloat(container.style.width) || 0;
-            container.style.width = (currentWidth + dcw) + 'px';
-        }
         if (typeof updateActivityPositions === 'function') {
             updateActivityPositions();
         }
@@ -3945,13 +4003,6 @@ function _doCreateNewSchedule() {
 
         var table = _buildFullTable(building, rooms, rowCount);
         container.appendChild(table);
-
-        // Step 5: Update container width
-        var timeTh = table.querySelector('thead th.time-cell');
-        var tw = timeTh ? (parseFloat(window.getComputedStyle(timeTh).width) || 80) : 80;
-        var dcw = (typeof dayCellWidth !== 'undefined') ? dayCellWidth : 100;
-        var totalCols = MENU_DAYS.length * rooms.length;
-        container.style.width = (tw + totalCols * dcw) + 'px';
     });
 
     // Step 6: Finalize
@@ -7319,20 +7370,20 @@ function forceReinitializeApplication() {
   <div class="menu-item" id="menuItemNewSchedule" onclick="handleNewSchedule()">Создать новое расписание</div>
   <div class="menu-item" id="menuItemAddColumn" onclick="openAddColumnDialog()">Добавить колонку</div>
 </div>
-<button class="toggle-day-button" onclick="toggleDay(this, 'Mo')">+/- Mo</button>
-<button class="toggle-day-button" onclick="toggleDay(this, 'Di')">+/- Di</button>
-<button class="toggle-day-button" onclick="toggleDay(this, 'Mi')">+/- Mi</button>
-<button class="toggle-day-button" onclick="toggleDay(this, 'Do')">+/- Do</button>
-<button class="toggle-day-button" onclick="toggleDay(this, 'Fr')">+/- Fr</button>
-<button class="toggle-day-button" onclick="toggleDay(this, 'Sa')">+/- Sa</button>
+<button class="toggle-day-button" data-day="Mo" onclick="toggleDay(this, 'Mo')">+/- Mo</button>
+<button class="toggle-day-button" data-day="Di" onclick="toggleDay(this, 'Di')">+/- Di</button>
+<button class="toggle-day-button" data-day="Mi" onclick="toggleDay(this, 'Mi')">+/- Mi</button>
+<button class="toggle-day-button" data-day="Do" onclick="toggleDay(this, 'Do')">+/- Do</button>
+<button class="toggle-day-button" data-day="Fr" onclick="toggleDay(this, 'Fr')">+/- Fr</button>
+<button class="toggle-day-button" data-day="Sa" onclick="toggleDay(this, 'Sa')">+/- Sa</button>
 <button id="saveIntermediate">Сохранить промежуточный результат</button>
 <button id="saveSchedule">Сохранить финальную версию</button>
 <button id="exportToExcel">Экспорт в Excel</button>
-<input type="hidden" id="csrf_token" value="1f449d83-98f3-4b74-b2f5-11085c103355">
+<input type="hidden" id="csrf_token" value="9c395f93-df7e-4428-8b23-11448b85aeaa">
 </div>
 <h1>Расписание занятий</h1>
 <h2>Здание: Villa</h2>
-<div class="schedule-container" style="width:4680px;" data-building="Villa">
+<div class="schedule-container" data-building="Villa">
 <table class="schedule-grid">
 <thead>
 <tr>
@@ -7619,7 +7670,7 @@ function forceReinitializeApplication() {
 <div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='48' data-row-span='18' style='top:789.0px; left:3980px; width:100px; height:274.25px; background-color:#eae197; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa StudioP<br>1.05<br>13:00-14:30</div>
 </div>
 <h2>Здание: Kolibri</h2>
-<div class="schedule-container" style="width:1380px;" data-building="Kolibri">
+<div class="schedule-container" data-building="Kolibri">
 <table class="schedule-grid">
 <thead>
 <tr>
