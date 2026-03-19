@@ -443,20 +443,31 @@ class AppActions:
         threading.Thread(target=run_in_thread, daemon=True).start()
     
     def open_web_app(self):
-        """Обработчик для кнопки 3.2: Открытие веб-приложения"""
+        """Обработчик для кнопки 3.2: Открытие веб-приложения через Flask"""
         if not self._check_directory():
             return
-        
-        html_path = FileManager.get_file_path(self.program_directory, "gear_xls", "html_output", "schedule.html")
-        if FileManager.open_web_file(html_path, "веб-приложение"):
-            self.log_action(f"Открыто веб-приложение: {html_path}")
-            
-            # Проверяем, запущен ли уже Flask-сервер
-            if not self.process_manager.is_process_running(self.process_manager.flask_process):
-                self.log_action("Flask-сервер не запущен. Запускаем автоматически...")
-                self.run_flask_server()
-            else:
-                self.log_action("Flask-сервер уже запущен")
+
+        if not self.process_manager.is_process_running(self.process_manager.flask_process):
+            self.log_action("Flask-сервер не запущен. Запускаем автоматически...")
+            self.run_flask_server()
+            import urllib.request
+            deadline = time.time() + 5.0
+            ready = False
+            while time.time() < deadline:
+                try:
+                    urllib.request.urlopen('http://localhost:5000/', timeout=1)
+                    ready = True
+                    break
+                except Exception:
+                    time.sleep(0.3)
+            if not ready:
+                self.log_action("Предупреждение: Flask-сервер не ответил за 5 секунд, открываем браузер всё равно")
+        else:
+            self.log_action("Flask-сервер уже запущен")
+
+        import webbrowser
+        webbrowser.open('http://localhost:5000/schedule')
+        self.log_action("Открыто веб-приложение: http://localhost:5000/schedule")
     
     def run_visualiser(self):
         """Обработчик для кнопки 4: Запуск визуализатора"""

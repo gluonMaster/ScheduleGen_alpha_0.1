@@ -26,6 +26,25 @@ function closeMenu() {
     if (dropdown) dropdown.classList.remove('open');
 }
 
+function _initPublishMenuItem() {
+    var publishItem = document.getElementById('menu-publish-item');
+    if (!publishItem) return;
+
+    publishItem.style.display = (window.USER_ROLE === 'admin') ? '' : 'none';
+    if (publishItem.__publishBound) return;
+    publishItem.__publishBound = true;
+
+    publishItem.addEventListener('click', function(e) {
+        e.stopPropagation();
+        closeMenu();
+        if (typeof window.publishSchedule === 'function') {
+            window.publishSchedule();
+        } else {
+            console.warn('publishSchedule is not available');
+        }
+    });
+}
+
 // === Confirmation modal helpers ===
 function showMenuConfirmModal(message, onConfirm) {
     hideMenuConfirmModal();
@@ -501,6 +520,7 @@ function initMenu() {
 
     // === Lesson type filter section ===
     var dropdown = document.getElementById('menuDropdown');
+    _initPublishMenuItem();
     if (dropdown && !dropdown.querySelector('.lesson-filter-item')) {
         var separator = document.createElement('div');
         separator.style.cssText = 'border-top: 1px solid #ccc; margin: 4px 0;';
@@ -550,3 +570,19 @@ window.toggleMenu = toggleMenu;
 window.closeMenu = closeMenu;
 window.handleNewSchedule = handleNewSchedule;
 window.openAddColumnDialog = openAddColumnDialog;
+
+(function() {
+    function syncPublishVisibility() {
+        _initPublishMenuItem();
+        var publishItem = document.getElementById('menu-publish-item');
+        if (publishItem && window.USER_ROLE !== 'admin') {
+            publishItem.style.display = 'none';
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', syncPublishVisibility);
+    } else {
+        syncPublishVisibility();
+    }
+})();

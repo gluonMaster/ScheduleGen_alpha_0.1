@@ -97,6 +97,7 @@ class HTMLStructureGenerator:
             '<div id="menuDropdown">',
             '  <div class="menu-item" id="menuItemNewSchedule" onclick="handleNewSchedule()">Создать новое расписание</div>',
             '  <div class="menu-item" id="menuItemAddColumn" onclick="openAddColumnDialog()">Добавить колонку</div>',
+            '  <div class="menu-item" id="menu-publish-item" style="display:none">Опубликовать расписание</div>',
             '</div>',
         ]
         

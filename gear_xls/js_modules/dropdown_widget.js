@@ -313,7 +313,7 @@ window.addRoomToBuildingList = addRoomToBuildingList;
 // Fire-and-forget: does not block UI on network errors.
 function _persistSpiskiToServer(spiskiKey, value) {
     if (!spiskiKey || !value) return;
-    fetch('http://127.0.0.1:5000/api/spiski/add', {
+    fetch('/api/spiski/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: spiskiKey, value: value })

@@ -1,3 +1,8 @@
+# Users
+gear_xls/config/
+*.txt
+*.json
+
 # Prompt drafts and local assistant context
 PROMPTS/
 Prompt-*.md

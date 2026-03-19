@@ -97,7 +97,7 @@ Do NOT add logic that assumes these are interchangeable. See PROJECT_MAP.md for 
 | `resource_constraints.py` | Teacher/room/group conflicts | 194 lines |
 | `time_conflict_constraints.py` | Complex time logic | 306 lines |
 | `objective.py` | Optimization goal | 174 lines |
-| `gui_services/app_actions.py` | Central GUI controller | 651 lines |
+| `gui_services/app_actions.py` | Central GUI controller | 702 lines |
 
 ---
 
@@ -134,7 +134,7 @@ Next afterFix number: check existing PROMPTS/Prompt-Fix-afterFix-*.md (currently
 | File | Lines | Note |
 |------|-------|------|
 | `timewindow_adapter.py` | 946 | HIGH RISK — extra scrutiny on any change |
-| `gui_services/app_actions.py` | 651 | Borderline — avoid adding new logic here |
+| `gui_services/app_actions.py` | 702 | Over limit — avoid adding new logic here |
 | `visualiser/enhanced_export_manager_html.py` | 492 | Monitor |
 | `gear_xls/utils.py` | 301 | OK |
 

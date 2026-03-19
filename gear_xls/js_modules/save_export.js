@@ -1,9 +1,7 @@
 // Module for saving and exporting the schedule
 
 function getServerBaseUrl() {
-    // Explicit base URL for local Flask server.
-    // Must not use a relative path because the page may be opened via file://.
-    return 'http://localhost:5000';
+    return '';
 }
 
 function _saveIntermediateViaServer(htmlContent, filename, onResult) {

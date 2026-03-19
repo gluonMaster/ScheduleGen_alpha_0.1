@@ -1,5 +1,26 @@
 # gear_xls — Interactive Schedule Editor
 
+## ⚠️ Breaking Changes (Multiuser / Auth layer — new major subsystem)
+
+- **`auth.py` added** — bcrypt-based authentication. `authenticate(login, password)` checks `config/users.json`. `login_required` and `role_required(*roles)` Flask decorators guard all mutating routes. `get_or_create_secret_key()` generates and persists `config/secret_key.txt`. Roles: `admin`, `editor`, `viewer`.
+- **`lock_manager.py` added** — optimistic file-based edit lock. Single holder per server instance; 30-minute heartbeat timeout. Operations: `acquire_lock`, `release_lock`, `heartbeat`, `force_release` (admin only). State persisted to `schedule_state/lock.json` via atomic `os.replace`.
+- **`state_manager.py` added** — individual lessons CRUD with file locking. Wraps `base_schedule_manager` and exposes `add_block`, `update_block`, `delete_block`, `delete_column_blocks`, `get_base_revision`, `get_individual_revision`, `publish_base`. Persists to `schedule_state/individual_lessons.json`.
+- **`base_schedule_manager.py` added** — manages the published "base" (group) schedule. `publish_base(blocks, published_by)` filters to `lesson_type == "group"` and writes to `schedule_state/base_schedule.json` atomically. `base_has_group_lessons_in_column` gates editor column-deletion.
+- **`rooms_report.py` added** — computes room availability. `compute_availability()` merges base blocks (from JSON or fallback HTML parse) with individual lessons, derives occupied slots per building/day/room, and returns free windows plus grid bounds.
+- **`rooms_routes.py` added** — Flask Blueprint `rooms_routes.bp`. Routes: `GET /rooms` (rooms availability page), `GET /api/rooms/availability`. Configured via `configure(login_required, current_user, rooms_report)`.
+- **`server_routes.py` rewritten** — now a full multiuser Flask application. Added: `/login`, `/logout`, `/schedule` (serves HTML with injected auth globals), lock API (`/api/lock/status|acquire|release|heartbeat`, `DELETE /api/lock`), schedule API (`/api/status`, `/api/schedule`, `GET /api/individual_lessons`, `POST /api/schedule/publish`), block CRUD (`/api/blocks`, `/api/blocks/<id>` PUT/DELETE), column CRUD (`/api/columns` POST/DELETE), `/api/spiski/add`. Enforces CSRF same-origin check and JSON 401 for lock/API paths. Registers `rooms_routes.bp`.
+- **`config/` directory added** — `users.json` (user accounts with bcrypt hashes), `secret_key.txt` (Flask session key, auto-generated).
+- **`schedule_state/` directory added** — runtime state files: `base_schedule.json`, `individual_lessons.json`, `lock.json` (plus `.lock` files for inter-process locking).
+- **`static/` directory added** — static assets served at `/static/<filename>`. Contains: `nav.css` (top nav bar), `auth_ui.js` (role-based UI gating, nav injection, `SchedGenAuthUI`), `lock_ui.js` (lock banner, heartbeat, `SchedGenLockUI`), `base_sync_ui.js` (base schedule publish/sync, `SchedGenBaseSyncUI`), `individual_ui.js` (individual lessons CRUD bridging DOM and API, `SchedGenIndividualUI`), `rooms_report.js` (client-side rooms availability table).
+- **`scripts/` directory added** — admin utilities. `scripts/set_password.py <login> <password>` hashes and writes a password into `config/users.json`.
+- **`requirements.txt` updated** — `bcrypt>=4.0` added.
+- **`/schedule` route** — injects `window.CURRENT_USER`, `window.USER_ROLE`, `window.DISPLAY_NAME`, `window.PUBLISHED_BASE_AVAILABLE` and loads `auth_ui.js`, `base_sync_ui.js`, `lock_ui.js`, `individual_ui.js` before `</body>`.
+- **`/export_to_excel` now requires `role=admin`** — guarded by `@role_required("admin")`.
+- **`export_to_excel.js` updated** — calls `_refreshIndividualBeforeExport()` before collecting schedule data, so individual lesson layer is current before export.
+- **`menu.js` updated** — `initMenu()` now adds a lesson-type filter section (Все / Только групповые / Только индивидуальные / Только наххильфе / Негрупповые) and a "Опубликовать расписание" item (visible to admin only, calls `window.publishSchedule()`). `openAddColumnDialog()` added — opens a modal to add a room column with building/day/room selects and room autocomplete from `spiskiData`.
+- **`html_structure_generator.py` updated** — `generate_control_panel()` now emits `#menu-publish-item` (hidden by default) and `#menuItemAddColumn` in `#menuDropdown`.
+- **`dropdown_widget.js` added** — reusable autocomplete widget (`createAutocompleteInput`). Supports keyboard navigation, blur-triggered "add new item?" confirmation, and fire-and-forget persistence via `POST /api/spiski/add`. Exports: `createAutocompleteInput`, `sortStringListInPlace`, `getRoomListForBuilding`, `addUniqueToList`, `addRoomToBuildingList`, `_persistSpiskiToServer`.
+
 ## ⚠️ Breaking Changes (Phase 7 — drag-drop interactivity: block content sync + vertical resize)
 
 - **`block_content_sync.js` added** — new plain-function module. `syncBlockContent(block)` reads `data-day`/`data-col-index`/`data-start-row`/`data-row-span`, derives room from column header via `extractRoomFromDayHeader`, computes time from `gridStart + startRow * timeInterval`, and rebuilds block innerHTML preserving the 5-line structure (subject/teacher/students/room/time). Exported as `window.syncBlockContent`. Must load after `column_helpers` (in `base_module_names`) and before `block_positioning`.
@@ -40,10 +61,41 @@
 ---
 
 ## Purpose
-Web-based drag-and-drop schedule editor. User selects a Schedule Excel file, edits it visually in a browser, and exports changes back to Excel.
+Web-based drag-and-drop schedule editor. Multiuser: authenticated users view or edit the schedule in a browser. Admins publish a base (group) schedule; editors manage individual lessons. Changes are exported back to Excel.
 
-## Entry Point
-`gear_xls/main.py` — Tkinter file selector dialog → launches Flask server → opens browser
+## Entry Points
+- `gear_xls/main.py` — Tkinter file selector dialog → launches Flask server → opens browser (single-user / admin mode)
+- `gear_xls/server_routes.py` — Flask application; can be run standalone (`python server_routes.py`) for multiuser server mode
+
+## Authentication Model
+
+```
+/login  →  authenticate(login, password)  [auth.py, config/users.json]
+  ↓
+Flask session (login, display_name, role)
+  ↓
+login_required decorator  →  all protected routes
+role_required("admin")    →  /export_to_excel, /api/schedule/publish, DELETE /api/lock
+role_required("admin","editor") → /api/blocks, /api/columns, /api/lock/acquire
+```
+
+Roles:
+- `viewer` — read-only; cannot acquire lock, cannot edit
+- `editor` — can acquire lock and manage individual/nachhilfe lessons; cannot touch group blocks or publish
+- `admin` — full access including publish, force-release lock, Excel export
+
+## Edit-Lock Model
+
+Only one user may edit at a time. The lock is file-backed (`schedule_state/lock.json`).
+
+```
+POST /api/lock/acquire  →  lock_manager.acquire_lock(login)
+  ↓ heartbeat every 60s via lock_ui.js
+POST /api/lock/heartbeat
+  ↓ auto-expires after 30 min without heartbeat
+POST /api/lock/release  →  lock_manager.release_lock(login, version)
+DELETE /api/lock         →  lock_manager.force_release(login)  [admin only]
+```
 
 ## Data Pipeline
 ```
@@ -64,11 +116,17 @@ html_generator.py  → generators/html_coordinator.py
   │     emits td[data-row][data-col] on every grid cell
   └── html_block_generator.py      (lesson block elements with data-start-row, data-row-span)
   ↓
-HTML file (opened in browser via webbrowser.open)
+HTML file written to html_output/schedule.html
   ↓
-  [User edits: drag, resize, add, delete blocks, delete columns, create new schedule]
+/schedule route (server_routes.py)
+  injects window.CURRENT_USER/USER_ROLE/DISPLAY_NAME/PUBLISHED_BASE_AVAILABLE
+  appends auth_ui.js, base_sync_ui.js, lock_ui.js, individual_ui.js
   ↓
-Flask POST /export_to_excel  (server_routes.py)
+  [User edits: drag, resize, add, delete blocks, delete/add columns, create new schedule]
+  [Individual lessons: synced via /api/schedule ↔ state_manager ↔ schedule_state/]
+  [Base schedule: published via POST /api/schedule/publish, rendered by base_sync_ui.js]
+  ↓
+POST /export_to_excel  (admin only)
   ↓
 excel_exporter.py  (ScheduleExcelExporter)
   ↓
@@ -86,7 +144,13 @@ Excel (Schedule sheet, ⚠️ Russian headers — see Critical Issue)
 | `html_generator.py` | HTML generation facade | 313 |
 | `html_styles.py` | CSS generation; includes menu, col-delete, modal, and resize styles | 357 |
 | `html_javascript.py` | JS module orchestration/injection; accepts `grid_start` param, emits `var gridStart = N`; loads `column_delete`, `menu`, `block_content_sync`, and `block_resize` modules | 198 |
-| `server_routes.py` | Flask: POST `/export_to_excel` | 120 |
+| `server_routes.py` | Flask multiuser application; auth, lock, schedule, block CRUD, rooms, spiski routes | ~655 |
+| `auth.py` | bcrypt auth, `login_required`/`role_required` decorators, session key management | 102 |
+| `lock_manager.py` | File-backed edit lock; acquire/release/heartbeat/force_release | 170 |
+| `state_manager.py` | Individual lessons CRUD + base schedule façade | ~226 |
+| `base_schedule_manager.py` | Published base schedule persistence; atomic JSON writes | 156 |
+| `rooms_report.py` | Room availability computation; merges base + individual blocks | 191 |
+| `rooms_routes.py` | Flask Blueprint: `/rooms` page + `/api/rooms/availability` | 121 |
 | `excel_exporter.py` | Writes edited schedule back to Excel | 284 |
 | `convert_to_xlsm.py` | Converts .xlsx → .xlsm + injects VBA macro | 167 |
 | `utils.py` | Shared utilities | 301 |
@@ -95,17 +159,45 @@ Excel (Schedule sheet, ⚠️ Russian headers — see Critical Issue)
 | File | Role | Lines |
 |------|------|-------|
 | `html_coordinator.py` | Orchestrates all generators; determines `grid_start`/`grid_end` from building data | 274 |
-| `html_structure_generator.py` | Document structure, meta, script tags; `generate_control_panel()` renders `#menuButton` + `#menuDropdown`; passes `grid_start` to `get_javascript()` | 212 |
+| `html_structure_generator.py` | Document structure, meta, script tags; `generate_control_panel()` renders `#menuButton` + `#menuDropdown` (with "Новое расписание", "Добавить колонку", "Опубликовать расписание" items); passes `grid_start` to `get_javascript()` | 214 |
 | `html_table_generator.py` | Time grid, day headers, row structure; emits `td[data-row][data-col]` on every cell | 236 |
 | `html_block_generator.py` | Lesson block `<div>` elements; emits `data-start-row` and `data-row-span` on every block | 361 |
 
-### services/
+### services/ (Python)
 | File | Role | Lines |
 |------|------|-------|
 | `schedule_pipeline.py` | Excel → Structure → HTML pipeline | 174 |
 | `color_service.py` | Color assignment per subject/group | 378 |
 
-## JavaScript Modules (js_modules/, 26 files)
+### config/
+| File | Role |
+|------|------|
+| `config/users.json` | User accounts: `login`, `display_name`, `role`, `password_hash` (bcrypt) |
+| `config/secret_key.txt` | Flask session secret key (auto-generated on first run) |
+
+### schedule_state/
+| File | Role |
+|------|------|
+| `schedule_state/base_schedule.json` | Published base (group) schedule: `published_at`, `published_by`, `blocks[]` |
+| `schedule_state/individual_lessons.json` | Individual/nachhilfe blocks: `last_modified`, `blocks[]` with `id` (UUID) |
+| `schedule_state/lock.json` | Edit lock state: `holder`, `version`, `acquired_at`, `last_heartbeat`, etc. |
+
+### scripts/
+| File | Role |
+|------|------|
+| `scripts/set_password.py` | CLI admin tool: hashes a new password and writes it to `config/users.json` |
+
+### static/ (served at `/static/<filename>`)
+| File | Role |
+|------|------|
+| `static/nav.css` | Top navigation bar styles (`#schedgen-nav`) |
+| `static/auth_ui.js` | Role-based UI gating, nav bar injection, `SchedGenAuthUI` object, editor event guards, read-only block info modal |
+| `static/lock_ui.js` | Lock banner (`#schedgen-lock-banner`), acquire/release/heartbeat, forced-release handling, `SchedGenLockUI` object |
+| `static/base_sync_ui.js` | Base schedule publish (`window.publishSchedule`), revision polling, DOM rendering of base blocks, `SchedGenBaseSyncUI` object |
+| `static/individual_ui.js` | Individual lessons CRUD via API, DOM intercept of create/edit/delete/column events, `SchedGenIndividualUI` object, `window.refreshIndividualLayer` |
+| `static/rooms_report.js` | Client-side rooms availability table rendering; fetches `/api/rooms/availability` |
+
+## JavaScript Modules (js_modules/, 27 files)
 
 ### Root modules
 | File | Role |
@@ -125,13 +217,14 @@ Excel (Schedule sheet, ⚠️ Russian headers — see Critical Issue)
 | `delete_blocks.js` | Block deletion logic |
 | `delete_blocks_observer.js` | MutationObserver for deletion tracking |
 | `save_export.js` | Save state, trigger export |
-| `export_to_excel.js` | Client-side Excel export; primary time source is block text; fallback uses `gridStart + startRow * timeInterval` from `data-start-row`/`data-row-span` (replaces old `data-original-top` formula) |
+| `export_to_excel.js` | Client-side Excel export; calls `_refreshIndividualBeforeExport()` before collecting data; primary time source is block text; fallback uses `gridStart + startRow * timeInterval` from `data-start-row`/`data-row-span` |
+| `dropdown_widget.js` | **NEW** Reusable autocomplete-dropdown widget (`createAutocompleteInput`); supports custom-value confirmation and server persistence via `/api/spiski/add`. Exports: `createAutocompleteInput`, `sortStringListInPlace`, `getRoomListForBuilding`, `addUniqueToList`, `addRoomToBuildingList`, `_persistSpiskiToServer`. |
 | `column_helpers.js` | Column management across multiple buildings; provides `extractRoomFromDayHeader()` used by `block_content_sync.js` |
 | `column_delete.js` | **NEW (Phase 6)** Column-header delete buttons and removal logic. `initColumnDeleteButtons()` attaches `.col-delete-btn` buttons to all existing `<th>` elements and uses a `MutationObserver` to attach them to newly-added headers. `removeColumn(building, day, colIndex)` removes the column `<th>` and all matching `<td>` cells, remaps `data-col` and `data-col-index` on surviving elements using a pre-removal `oldIndexToRoom` map, updates container width, and calls `updateActivityPositions()`. The "×" symbol is rendered via CSS `::before`, not as a DOM text node, to avoid corrupting `extractRoomFromDayHeader()` parsing. |
 | `conflict_detector.js` | Detects and highlights scheduling conflicts |
 | `color_utils.js` | Color manipulation |
 | `adaptive_text_color.js` | Contrast-aware text color |
-| `menu.js` | **NEW (Phase 6)** Hamburger menu dropdown and schedule management. `initMenu()` registers outside-click and Escape handlers (idempotent via `_menuInitialized` flag). `toggleMenu()` / `closeMenu()` operate on `#menuDropdown`. `handleNewSchedule()` shows a `showMenuConfirmModal()` confirmation before calling `_doCreateNewSchedule()`. `_doCreateNewSchedule()` removes all blocks, captures current `rowCount`, removes all `.schedule-grid` tables, rebuilds tables via `_buildFullTable()` for hardcoded room lists (Villa: 16 rooms, Kolibri: 7 rooms), updates container widths, calls `updateActivityPositions()`, resets day-toggle visibility, and shows a notification toast (z-index 10200). Room config constants: `BUILDING_ROOMS = { Villa: [...], Kolibri: [...] }`. |
+| `menu.js` | **NEW (Phase 6, extended in multiuser)** Hamburger menu dropdown and schedule management. `initMenu()` registers outside-click and Escape handlers (idempotent via `_menuInitialized` flag) and injects lesson-type filter items and "Опубликовать расписание" (admin-only). `toggleMenu()` / `closeMenu()` operate on `#menuDropdown`. `handleNewSchedule()` shows a confirmation before calling `_doCreateNewSchedule()`. `openAddColumnDialog(prefillBuilding?, prefillDay?)` opens a modal with room autocomplete. Room config constants: `BUILDING_ROOMS = { Villa: [...16 rooms], Kolibri: [...7 rooms] }`. |
 | `app_initialization.js` | Bootstrap on page load; calls `initMenu()`, `initColumnDeleteButtons()`, and `initBlockResize()` (all with `typeof` guards) after `initExcelExport()` |
 
 ### services/ sub-modules
@@ -150,7 +243,7 @@ Modules are concatenated inside a single `DOMContentLoaded` listener. The order 
 services/building_service  → services/drag_drop_service  → services/grid_snap_service
   → services/block_drop_service  → core  → position  → drag_drop_refactored
   → column_helpers  → column_delete  → save_export  → color_utils
-  → adaptive_text_color  → export_to_excel  → menu
+  → adaptive_text_color  → export_to_excel  → dropdown_widget  → menu
   → add_blocks_main  → block_creation_dialog  → block_utils
   → block_content_sync  → conflict_detector  → block_positioning
   → block_event_handlers  → quick_add_mode  → editing_update
@@ -161,8 +254,22 @@ services/building_service  → services/drag_drop_service  → services/grid_sna
 
 Load order constraints:
 - `column_delete` must load before `menu` because `_doCreateNewSchedule()` in `menu.js` triggers a full table rebuild which fires the `MutationObserver` registered by `initColumnDeleteButtons()`.
+- `dropdown_widget` must load before `menu` (menu's `openAddColumnDialog` calls `createAutocompleteInput`) and before `block_creation_dialog` and `editing_update`.
 - `block_content_sync` must load after `column_helpers` (provides `extractRoomFromDayHeader`) and before `block_positioning` (which calls `syncBlockContent`).
 - `block_resize` must load after `block_content_sync` (calls `syncBlockContent` on mouseup), `position.js` (calls `updateActivityPositions`), and `services/drag_drop_service` (calls `DragDropService.setPreventDrag`); must load before `app_initialization` (calls `initBlockResize`).
+
+## Static Assets Load Order
+
+Injected by `/schedule` route into the served HTML (after `</body>`):
+```
+static/auth_ui.js          (SchedGenAuthUI — must load first)
+  → static/base_sync_ui.js  (SchedGenBaseSyncUI — depends on SchedGenAuthUI)
+  → static/lock_ui.js       (SchedGenLockUI — depends on SchedGenAuthUI, SchedGenBaseSyncUI)
+  → static/individual_ui.js (SchedGenIndividualUI — depends on all three above)
+```
+
+`static/nav.css` is injected into `<head>` (before `</head>`).
+`static/auth_ui.js` and `static/rooms_report.js` are referenced from `rooms_routes.py` template directly.
 
 ## JS Globals
 
@@ -180,6 +287,16 @@ The following variables are emitted by `html_javascript.py` inside `DOMContentLo
 | `measuredTimeColWidth` | number | `html_javascript.py` | Measured width of time column (set at runtime) |
 | `editDialogOpen` | boolean | `html_javascript.py` | Global dialog state guard |
 | `draggedBlock` | element\|null | `html_javascript.py` | Currently dragged block reference |
+| `spiskiData` | object | `html_javascript.py` | Autocomplete lists: `subjects`, `groups`, `teachers`, `rooms_Villa`, `rooms_Kolibri` |
+
+Injected by `/schedule` route (not from `html_javascript.py`):
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `window.CURRENT_USER` | string | Login of the authenticated user |
+| `window.USER_ROLE` | string | `"admin"`, `"editor"`, or `"viewer"` |
+| `window.DISPLAY_NAME` | string | Human-readable display name |
+| `window.PUBLISHED_BASE_AVAILABLE` | boolean | Whether a published base schedule exists |
 
 `gridStart` propagation chain:
 ```
@@ -202,6 +319,8 @@ Every `.activity-block` div carries the following data attributes. All are set a
 | `data-building` | `html_block_generator.py` | — | Building identifier |
 | `data-start-row` | `html_block_generator.py` | `block_positioning.js`, `block_drop_service.js`, `grid_snap_service.js`, `position.js` (backward-compat fallback) | 0-based row index from `gridStart` (= `(startMinutes - gridStart) / timeInterval`) |
 | `data-row-span` | `html_block_generator.py` | `block_positioning.js`, `block_resize.js`, `position.js` (backward-compat fallback) | Number of grid rows spanned (= `durationMinutes / timeInterval`) |
+| `data-lesson-type` | `html_block_generator.py`, `base_sync_ui.js`, `individual_ui.js` | — | `"group"`, `"individual"`, or `"nachhilfe"` |
+| `data-block-id` | `individual_ui.js` (server-assigned UUID) | — | Present only on individual/nachhilfe blocks; used for API CRUD |
 
 `data-start-row` and `data-row-span` are the single source of truth for `updateActivityPositions()`. If either is absent on a legacy HTML file, `deriveStartRowFromBlock()` / `deriveRowSpanFromBlock()` compute the values from the block's time text and write them back.
 
@@ -215,6 +334,7 @@ subject<br>teacher<br>students<br>room<br>time
 
 Where `time` is formatted as `HH:MM-HH:MM`. This structure is:
 - **Written** by `html_block_generator.py` at generation time and by `createNewBlock()` in `block_positioning.js`.
+- **Written** by `base_sync_ui.js` `renderBaseBlock()` and `individual_ui.js` `renderIndividualBlock()` when rendering server-side blocks.
 - **Enforced** by `syncBlockContent(block)` after every drag/drop and after `positionNewBlock()`.
 - **Read** by `export_to_excel.js` (primary time/room source for Excel export).
 - **Preserved** by `editing_update.js` (user edits overwrite individual lines in-place without going through `syncBlockContent`).
@@ -243,7 +363,11 @@ This replaces the previous approach of summing `<th>` widths and applying polyno
 
 `.sticky-buttons` (fixed toolbar, z-index 9999) child order:
 1. `#menuButton` — hamburger `&#9776; Меню` button; `onclick="toggleMenu()"`
-2. `#menuDropdown` — dropdown panel (z-index 10001); contains `.menu-item#menuItemNewSchedule` → `handleNewSchedule()`
+2. `#menuDropdown` — dropdown panel (z-index 10001); items:
+   - `.menu-item#menuItemNewSchedule` → `handleNewSchedule()`
+   - `.menu-item#menuItemAddColumn` → `openAddColumnDialog()`
+   - `.menu-item#menu-publish-item` → `publishSchedule()` (hidden for non-admin; shown by `base_sync_ui.js`)
+   - lesson-type filter separator + items (injected by `initMenu()`)
 3. Six `.toggle-day-button` elements (Mo–Sa)
 4. `#saveIntermediate`, `#saveSchedule`, `#exportToExcel` buttons
 5. `#csrf_token` hidden input
@@ -262,6 +386,37 @@ This replaces the previous approach of summing `<th>` widths and applying polyno
 | `.activity-block.resizing` | Dashed bottom border (`2px dashed #1976d2`), opacity 0.85, applied while resize drag is active | — |
 | `.activity-block[data-resize-hover]` | `cursor: ns-resize` when pointer is near the bottom resize zone | — |
 
+## Flask API Routes
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET/POST | `/login` | — | Login form |
+| POST | `/logout` | session | Clear session, redirect to `/login` |
+| GET | `/schedule` | `login_required` | Serve schedule HTML with injected auth globals |
+| GET | `/rooms` | `login_required` | Room availability page |
+| GET | `/api/rooms/availability` | `login_required` | JSON room availability data |
+| GET | `/api/lock/status` | `login_required` | Current lock state |
+| POST | `/api/lock/acquire` | `admin`/`editor` | Acquire edit lock |
+| POST | `/api/lock/release` | `login_required` | Release own lock (requires `version`) |
+| POST | `/api/lock/heartbeat` | `login_required` | Refresh heartbeat timestamp |
+| DELETE | `/api/lock` | `admin` | Force-release any holder's lock |
+| GET | `/api/status` | `login_required` | Lock + base/individual revision summary |
+| GET | `/api/schedule` | `login_required` | Base blocks + individual blocks + revisions |
+| POST | `/api/schedule/publish` | `admin` | Publish base schedule (filters to `lesson_type=group`) |
+| GET | `/api/individual_lessons` | `login_required` | Current individual lesson state |
+| POST | `/api/blocks` | `admin`/`editor` + lock | Create individual block |
+| PUT | `/api/blocks/<id>` | `admin`/`editor` + lock | Update individual block |
+| DELETE | `/api/blocks/<id>` | `admin`/`editor` + lock | Delete individual block |
+| POST | `/api/columns` | `admin`/`editor` + lock | Register column add (returns ok) |
+| DELETE | `/api/columns` | `admin`/`editor` + lock | Delete column blocks; editor blocked if column has group lessons |
+| POST | `/api/spiski/add` | `login_required` | Append item to a spiski file; natural-sort preserved |
+| POST | `/export_to_excel` | `admin` | Export schedule to Excel file |
+| POST | `/save_intermediate` | `admin` | Save intermediate HTML via Tkinter save dialog |
+
+## CSRF Protection
+
+All mutating requests (`POST`, `PUT`, `DELETE`, `PATCH`) except `/login` are checked for `Origin` header matching the server's own scheme+host. Requests without an `Origin` header (same-origin `sendBeacon` / form submit) are allowed through. Cross-origin requests receive HTTP 403 `{"error":"Forbidden","code":"CSRF_FAILED"}`.
+
 ## ⚠️ Critical Contract Issue
 
 | Direction | Headers |
@@ -273,7 +428,8 @@ This incompatibility means gear_xls exports cannot be directly fed into `visuali
 **Do not silently "fix" this** — it may affect downstream processing. See PROJECT_MAP.md for full context.
 
 ## Dependencies
-- Flask (web server)
+- Flask, flask-cors (web server)
+- bcrypt (password hashing)
 - pandas, openpyxl (Excel I/O)
 - pdfkit (HTML → PDF, requires wkhtmltopdf installed separately)
 - win32com (VBA macro injection — Windows only)
@@ -283,4 +439,6 @@ This incompatibility means gear_xls exports cannot be directly fed into `visuali
 - `gear_xls/html_output/` — generated HTML files (gitignored)
 - `gear_xls/excel_exports/` — exported Excel files (gitignored)
 - `gear_xls/pdfs/` — generated PDFs (gitignored)
+- `gear_xls/schedule_state/` — runtime JSON state (lock, base schedule, individual lessons)
+- `gear_xls/config/` — user accounts and secret key (should not be committed to public repos)
 - `gear_xls/Modul1.bas` — VBA macro source for Plannung generation

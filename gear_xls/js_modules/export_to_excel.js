@@ -121,7 +121,8 @@ function collectScheduleData() {
                 start_time: startTime,  // Строка в формате "HH:MM"
                 end_time: endTime,      // Строка в формате "HH:MM"
                 duration: duration,
-                color: hexColor
+                color: hexColor,
+                lesson_type: block.getAttribute('data-lesson-type') || 'group'
             };
             
             // Добавляем активность в общий список
@@ -171,7 +172,7 @@ function rgbToHex(rgb) {
 // Функция проверки доступности сервера
 function checkServerAvailability(callback) {
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', 'http://localhost:5000/', true);
+    xhr.open('GET', '/', true);
     xhr.timeout = 2000; // 2 секунды на ответ
     
     xhr.onload = function() {
@@ -194,6 +195,53 @@ function checkServerAvailability(callback) {
         callback(false);
     };
     
+    xhr.send();
+}
+
+function _refreshIndividualBeforeExport(onReady, onError) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/api/individual_lessons', true);
+    xhr.setRequestHeader('Accept', 'application/json');
+
+    xhr.onload = function() {
+        var data = null;
+        var refreshResult = null;
+
+        if (xhr.status === 200) {
+            try {
+                data = JSON.parse(xhr.responseText);
+            } catch (e) {
+                onReady();
+                return;
+            }
+
+            if (window.refreshIndividualLayer) {
+                refreshResult = window.refreshIndividualLayer(data);
+                if (refreshResult && typeof refreshResult.then === 'function') {
+                    refreshResult.then(function() {
+                        onReady();
+                    }).catch(function() {
+                        onReady();
+                    });
+                    return;
+                }
+            }
+
+            onReady();
+        } else if (xhr.status === 401) {
+            if (typeof window.handleSessionExpired === 'function') {
+                window.handleSessionExpired();
+            }
+            onError('session_expired');
+        } else {
+            onError('server_error_' + xhr.status);
+        }
+    };
+
+    xhr.onerror = function() {
+        onError('network_error');
+    };
+
     xhr.send();
 }
 
@@ -328,82 +376,88 @@ function exportScheduleToExcel(onDone) {
                 _callDone();
                 return;
             }
-            
-            // Собираем данные расписания
-            var scheduleData = collectScheduleData();
-            console.log('Собрано записей: ' + scheduleData.length);
-            
-            // Показываем индикатор процесса
-            showExportProgress('Подготовка данных для экспорта...');
-            
-            // Получаем CSRF-токен для безопасности
-            var csrfToken = document.getElementById('csrf_token')?.value || '';
-            
-            // Вместо формы используем XMLHttpRequest для прямой отправки и получения ответа
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', 'http://localhost:5000/export_to_excel', true);
-            
-            // Обработка успешного завершения запроса
-            xhr.onload = function() {
-                if (xhr.status === 200) {
-                    console.log('Получен ответ от сервера');
-                    // Создаем временную ссылку для скачивания файла
-                    var blob = new Blob([xhr.response], { 
-                        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-                    });
-                    var link = document.createElement('a');
-                    link.href = window.URL.createObjectURL(blob);
-                    link.download = 'schedule_export.xlsx';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    window.URL.revokeObjectURL(link.href);
-                    
-                    // Скрываем индикатор прогресса
-                    hideExportProgress();
-                    showExportProgress('Excel-файл успешно скачан!', true);
-                    _callDone();
-                    // Автоматическое закрытие через 2 секунды (оставляем возможность закрыть вручную)
-                    setTimeout(function() {
-                        // Проверяем, не закрыл ли пользователь сообщение сам
-                        if (document.getElementById('exportProgress') && 
-                            document.getElementById('exportProgress').style.display !== 'none') {
-                            hideExportProgress();
-                        }
-                    }, 2000);
-                } else {
-                    console.error('Ошибка при получении файла:', xhr.status, xhr.statusText);
-                    hideExportProgress();
-                    showExportProgress('Ошибка при получении файла: ' + xhr.statusText, true);
-                    _callDone();
-                }
-            };
-            
-            // Обработка ошибок сети
-            xhr.onerror = function() {
-                console.error('Ошибка сети при отправке запроса');
-                hideExportProgress();
-                showExportProgress('Ошибка сети! Сервер недоступен.', true);
+
+            _refreshIndividualBeforeExport(function() {
+                // Собираем данные расписания
+                var scheduleData = collectScheduleData();
+                console.log('Собрано записей: ' + scheduleData.length);
                 
-                // Проверяем доступность сервера и даем рекомендации
-                checkServerAndAdvise();
+                // Показываем индикатор процесса
+                showExportProgress('Подготовка данных для экспорта...');
+                
+                // Получаем CSRF-токен для безопасности
+                var csrfToken = document.getElementById('csrf_token')?.value || '';
+                
+                // Вместо формы используем XMLHttpRequest для прямой отправки и получения ответа
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', '/export_to_excel', true);
+                
+                // Обработка успешного завершения запроса
+                xhr.onload = function() {
+                    if (xhr.status === 200) {
+                        console.log('Получен ответ от сервера');
+                        // Создаем временную ссылку для скачивания файла
+                        var blob = new Blob([xhr.response], { 
+                            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+                        });
+                        var link = document.createElement('a');
+                        link.href = window.URL.createObjectURL(blob);
+                        link.download = 'schedule_export.xlsx';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        window.URL.revokeObjectURL(link.href);
+                        
+                        // Скрываем индикатор прогресса
+                        hideExportProgress();
+                        showExportProgress('Excel-файл успешно скачан!', true);
+                        _callDone();
+                        // Автоматическое закрытие через 2 секунды (оставляем возможность закрыть вручную)
+                        setTimeout(function() {
+                            // Проверяем, не закрыл ли пользователь сообщение сам
+                            if (document.getElementById('exportProgress') && 
+                                document.getElementById('exportProgress').style.display !== 'none') {
+                                hideExportProgress();
+                            }
+                        }, 2000);
+                    } else {
+                        console.error('Ошибка при получении файла:', xhr.status, xhr.statusText);
+                        hideExportProgress();
+                        showExportProgress('Ошибка при получении файла: ' + xhr.statusText, true);
+                        _callDone();
+                    }
+                };
+                
+                // Обработка ошибок сети
+                xhr.onerror = function() {
+                    console.error('Ошибка сети при отправке запроса');
+                    hideExportProgress();
+                    showExportProgress('Ошибка сети! Сервер недоступен.', true);
+                    
+                    // Проверяем доступность сервера и даем рекомендации
+                    checkServerAndAdvise();
+                    _callDone();
+                };
+                
+                // Указываем, что нам нужен ответ в виде бинарных данных
+                xhr.responseType = 'arraybuffer';
+                
+                // Устанавливаем заголовки запроса
+                xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                
+                // Формируем данные запроса
+                var formData = 'schedule_data=' + encodeURIComponent(JSON.stringify(scheduleData)) + 
+                              '&csrf_token=' + encodeURIComponent(csrfToken);
+                
+                // Отправляем запрос
+                xhr.send(formData);
+                
+                console.log('Данные отправлены для создания Excel-файла');
+            }, function() {
+                hideExportProgress();
+                alert('Не удалось синхронизировать индивидуальные занятия перед экспортом. Экспорт отменён.');
                 _callDone();
-            };
-            
-            // Указываем, что нам нужен ответ в виде бинарных данных
-            xhr.responseType = 'arraybuffer';
-            
-            // Устанавливаем заголовки запроса
-            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-            
-            // Формируем данные запроса
-            var formData = 'schedule_data=' + encodeURIComponent(JSON.stringify(scheduleData)) + 
-                          '&csrf_token=' + encodeURIComponent(csrfToken);
-            
-            // Отправляем запрос
-            xhr.send(formData);
-            
-            console.log('Данные отправлены для создания Excel-файла');
+            });
         });
     } catch (error) {
         console.error('Ошибка при экспорте в Excel:', error);

@@ -11,38 +11,127 @@ Separates UI construction from business logic using a service-based architecture
 
 | File | Role | Lines |
 |------|------|-------|
-| `app_actions.py` | **Central business logic controller** | 651 |
+| `app_actions.py` | **Central business logic controller** | 702 |
+| `process_manager.py` | Subprocess launch + monitoring + output capture | 225 |
 | `ui_builder.py` | Tkinter component factory | 124 |
-| `process_manager.py` | Subprocess launch + monitoring | 166 |
 | `file_manager.py` | Cross-platform file operations | 74 |
 | `logger.py` | Logging to Tkinter Text widget | 28 |
 | `__init__.py` | Module exports | 18 |
 
 ## AppActions — Central Controller
 
-`app_actions.py` is the most important file. It orchestrates all user actions:
+`app_actions.py` is the most important file. It orchestrates all user actions.
 
-1. **File selection** — validates Plannung Excel, sets working paths
-2. **Optimizer launch** — runs `main_sch.py` via subprocess, captures output
-3. **Visualization launch** — runs `schedule_visualizer_enhanced.py` via subprocess
-4. **Web editor launch** — runs `gear_xls/main.py` via subprocess
-5. **Artifact copying** — copies PDF/HTML to OneDrive if configured
-6. **Error handling** — all user-facing errors and status messages
+### Constructor
+```python
+AppActions(process_manager: ProcessManager, log_callback=None)
+```
+`log_callback` is optional at construction time. `set_log_callback(fn)` binds it later once
+the Tkinter log widget exists (avoiding a circular dependency during GUI setup).
+
+### Instance state
+| Attribute | Type | Purpose |
+|-----------|------|---------|
+| `program_directory` | str | Auto-detected project root (set in `__init__`) |
+| `selected_xlsx_file` | str \| None | Path chosen via the "step 5" file picker |
+| `lesson_type_filter` | str | Filter forwarded to visualiser CLI (`'all'` by default) |
+
+### Action methods (mapped to GUI buttons)
+
+| Method | Button | What it does |
+|--------|--------|-------------|
+| `select_directory()` | 1 | Opens a directory dialog; sets `program_directory` |
+| `run_scheduler()` | 2 | Runs `main_sch.py` in an interactive terminal window |
+| `open_optimized_schedule()` | 2.1 | Opens `visualiser/optimized_schedule.xlsx` |
+| `run_gear_xls()` | 3 | Starts `gear_xls/main.py` in a new terminal |
+| `run_flask_server()` | 3.1 | Writes `start_flask.bat` and launches Flask in a new terminal; guards against double-start |
+| `open_web_app()` | 3.2 | Auto-starts Flask if not running, polls `localhost:5000` (5 s timeout), then opens browser |
+| `run_visualiser()` | 4 | Runs `example_usage_enhanced.py --lesson-type <filter>` in a terminal |
+| `open_pdf_visualization()` | 4.1 | Opens `visualiser/enhanced_schedule_visualization.pdf` |
+| `open_html_visualization()` | 4.2 | Opens `visualiser/enhanced_schedule_visualization.html` in browser |
+| `select_xlsx_file()` | 5 | File-picker dialog; sets `selected_xlsx_file` |
+| `convert_to_xlsm()` | 6 | Runs `convert_to_xlsm.py` in a terminal |
+| `open_xlsm_file()` | 6.1 | Opens the `.xlsm` counterpart of `selected_xlsx_file` |
+| `open_newpref()` | 7.0 | Creates `newpref.xlsx` via Excel COM, then opens it |
+| `run_scheduler_newpref()` | 7 | Full orchestrated pipeline (see below) |
+
+### set_lesson_type_filter()
+```python
+def set_lesson_type_filter(self, value: str)
+```
+Stores a lesson-type string (`'all'`, `'lecture'`, etc.) that is appended as
+`--lesson-type <value>` to every visualiser invocation (`run_visualiser` and
+the step-5 segment of `run_scheduler_newpref`).
+
+## Full Orchestrated Pipeline — run_scheduler_newpref()
+
+Triggered by button 7. Runs entirely in a background daemon thread.
+
+```
+Step 1  _find_latest_xlsx_file()
+          → scans gear_xls/excel_exports/ for newest .xlsx
+
+Step 2  _convert_xlsx_to_xlsm_with_macro()
+          → opens file via Excel COM (win32com + pythoncom)
+          → saves as .xlsm (FileFormat=52)
+          → imports VBA module from gear_xls/Modul1.bas
+
+Step 3  _run_excel_macro("CreateSchedulePlanning")
+          → runs macro inside the .xlsm via Excel COM
+          → macro writes xlsx_initial/newpref.xlsx
+
+Step 4  ProcessManager.execute_command_capture()
+          → runs main_sch.py with newpref.xlsx
+          → stdout/stderr piped back into the GUI log widget line-by-line
+          → checks returncode == 0 AND that optimized_schedule.xlsx mtime changed
+          → on failure: shows error dialog, pipeline stops
+
+Step 5  ProcessManager.execute_command_and_wait()
+          → runs example_usage_enhanced.py --lesson-type <filter>
+          → waits for completion
+
+Step 6  _copy_visualization_files()
+          → reads config.json (copy_destination_path, auto_copy_enabled)
+          → copies enhanced_schedule_visualization.{html,pdf} to destination
+```
+
+If any step fails the pipeline stops immediately and shows an error messagebox.
+
+## Windows COM Automation
+
+`_convert_xlsx_to_xlsm_with_macro()` and `_run_excel_macro()` use:
+- `win32com.client.Dispatch("Excel.Application")` — creates a hidden Excel instance
+- `pythoncom.CoInitialize()` / `CoUninitialize()` — required for COM in non-main threads
+- `VBProject.VBComponents.Import(module_path)` — injects VBA from `Modul1.bas`
+
+These methods are Windows-only and will fail on macOS/Linux.
 
 ## Subprocess Architecture
-All subsystems run as **separate subprocess calls** (not imported as modules):
+
+Three subprocess execution modes are used:
+
 ```
-gui.py  →  AppActions
-               ↓
-           ProcessManager.run(main_sch.py, [args])          → optimizer
-           ProcessManager.run(schedule_visualizer_enhanced.py, [args])  → visualizer
-           ProcessManager.run(gear_xls/main.py, [args])     → web editor
+AppActions
+  ├── ProcessManager.execute_in_terminal(cmds, dir)
+  │     Opens a visible cmd/Terminal window; user sees output.
+  │     Used by: run_scheduler, run_gear_xls, run_visualiser, convert_to_xlsm
+  │
+  ├── ProcessManager.start_new_terminal_with_commands(dir)
+  │     Writes start_flask.bat then opens it in a new cmd window.
+  │     Used by: run_flask_server
+  │
+  ├── ProcessManager.execute_command_capture(cmds, dir, log_cb)
+  │     Headless Popen with stdout/stderr piped; reader thread feeds
+  │     log_cb line-by-line. Returns (process, reader_thread).
+  │     Used by: run_scheduler_newpref step 4 (optimizer)
+  │
+  └── ProcessManager.execute_command_and_wait(cmds, dir)
+        Headless Popen, no output capture; caller calls .wait().
+        Used by: run_scheduler_newpref step 5 (visualiser)
 ```
 
-This design:
-- Isolates crashes (a visualizer crash doesn't kill the GUI)
-- Allows stdout/stderr capture for the log widget
-- Enables progress indication via output monitoring
+All long-running operations are dispatched via `threading.Thread(daemon=True)`
+so the Tkinter event loop is never blocked.
 
 ## UI Structure
 
@@ -51,49 +140,78 @@ gui.py (ApplicationInterface)
   ↓
 UIBuilder (ui_builder.py)
   constructs:
-  ├── File selection area (Entry + Browse button)
-  ├── Action buttons (Optimize, Visualize, Open Editor, ...)
-  ├── Progress indicators
-  └── Log Text widget (receives Logger output)
+  ├── Main window + frame
+  ├── Info labels (working directory)
+  ├── Action buttons (single, double-row, triple-row layouts)
+  ├── Log Text widget (receives Logger output)
+  └── Status bar
 ```
 
 All Tkinter widget creation is delegated to `UIBuilder`.
 `AppActions` only calls `UIBuilder.build_*()` — never creates widgets directly.
 
 ## Logger
-`logger.py` — thin wrapper that writes to a Tkinter `Text` widget.
-Not related to Python's `logging` module.
-Used by AppActions to display status messages to the user.
+`logger.py` — thin wrapper that writes timestamped messages to a Tkinter `Text` widget
+and updates the status bar. Not related to Python's `logging` module.
+`AppActions` receives it as a plain callable (`log_callback`) rather than a typed reference,
+so the Logger can be swapped for a simple `print` fallback during early init.
 
 ## File Manager
 `file_manager.py` — cross-platform file operations:
-- Path normalization for Windows/Mac
-- File existence checks with proper error messages
-- Handles long Windows paths
+- `get_file_path(base, *parts)` — safe `os.path.join` wrapper
+- `open_file` / `open_web_file` — OS-aware file/browser open
+- `select_directory` / `select_xlsx_file` — Tkinter dialog wrappers
+- `check_directory_exists` — existence check
+
+## Configuration (config.json)
+`AppActions._load_config()` / `_save_config()` read/write a JSON file in `program_directory`:
+```json
+{
+    "copy_destination_path": "C:\\Alla\\Datenbank\\Stundenplan\\2025-2026\\",
+    "auto_copy_enabled": true
+}
+```
+If the file is absent a default is created automatically.
 
 ## Data Flow (GUI perspective)
 ```
-User selects Excel file (Plannung)
-  ↓ AppActions.on_file_selected()
-  ↓ AppActions.run_optimizer()
-      ProcessManager runs main_sch.py → writes optimized_schedule.xlsx to visualiser/
-  ↓ AppActions.run_visualizer()
-      ProcessManager runs schedule_visualizer_enhanced.py → writes PDF + HTML
-  ↓ AppActions.copy_artifacts()
-      FileManager copies PDF + HTML to OneDrive (if auto_copy_enabled)
+User triggers button 7 → run_scheduler_newpref() (background thread)
+  │
+  ├─ Excel COM: latest export → .xlsm + VBA macro → newpref.xlsx
+  │
+  ├─ ProcessManager.execute_command_capture
+  │     main_sch.py xlsx_initial/newpref.xlsx
+  │       → visualiser/optimized_schedule.xlsx
+  │       → log lines streamed to GUI widget
+  │
+  ├─ ProcessManager.execute_command_and_wait
+  │     example_usage_enhanced.py --lesson-type <filter>
+  │       → visualiser/enhanced_schedule_visualization.{html,pdf}
+  │
+  └─ FileManager.copy → configured destination (OneDrive etc.)
+
+Independent actions (buttons 2, 3, 4):
+  run_scheduler()   → main_sch.py in interactive terminal
+  run_gear_xls()    → gear_xls/main.py in interactive terminal
+  run_visualiser()  → example_usage_enhanced.py in interactive terminal
 ```
 
 ## Error Handling Pattern
 ```python
+# Inline subprocess result check (run_scheduler_newpref):
+scheduler_ok = (returncode == 0) and output_updated
+if not scheduler_ok:
+    messagebox.showerror("Ошибка оптимизации — изменения не применены", reason)
+    return   # pipeline stops; no further steps run
+
+# File operations:
 try:
-    result = self.process_manager.run(...)
-    if result.returncode != 0:
-        self.logger.error(f"Process failed: {result.stderr}")
+    result = ProcessManager.execute_in_terminal(...)
 except FileNotFoundError:
-    self.logger.error("Executable not found: ...")
+    self.log_action("Executable not found: ...")
 ```
 
-All errors go through `Logger` → displayed in the GUI text widget.
+All errors go through `log_action` → displayed in the GUI text widget.
 No silent failures.
 
 ## See Also

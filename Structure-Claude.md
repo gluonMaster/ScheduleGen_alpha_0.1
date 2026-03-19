@@ -1,6 +1,7 @@
 # SchedGen PreRelease - Project Structure Map
 
 > Auto-generated: 2026-02-17
+> Manual updates: 2026-03-18 — gear_xls multiuser/auth layer added
 
 ## Overview
 
@@ -8,7 +9,7 @@
 
 Система решает задачу оптимального распределения занятий по дням, временным слотам и аудиториям с учётом ограничений (преподаватели, группы, помещения, связанные цепочки уроков, временные окна). Результат визуализируется в виде интерактивного HTML-приложения с drag-and-drop, PDF и Excel.
 
-**Стек:** Python 3, OR-Tools, pandas, openpyxl, Tkinter, Flask, ReportLab, pdfkit, matplotlib
+**Стек:** Python 3, OR-Tools, pandas, openpyxl, Tkinter, Flask, bcrypt, ReportLab, pdfkit, matplotlib
 
 ---
 
@@ -30,7 +31,7 @@
          ▼                 ▼
    ┌───────────┐    ┌──────────────┐
    │ Excel out │    │ HTML + Flask │
-   │ (results) │    │ (editor)     │
+   │ (results) │    │ (multiuser)  │
    └───────────┘    └──────────────┘
 ```
 
@@ -93,24 +94,28 @@
 
 Пакет сервисов для Tkinter-интерфейса. Чистое разделение: gui.py — компоновщик, сервисы — исполнители.
 
+> Manual update 2026-03-19: line counts updated to reflect current code state.
+
 | File                 | Lines | Purpose                                                                                                                                                     |
 | -------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `__init__.py`        | 18    | Экспорт: UIBuilder, FileManager, ProcessManager, AppActions, Logger                                                                                         |
 | `ui_builder.py`      | 124   | **Фабрика UI-компонентов.** Статические методы для создания окон, фреймов, кнопок (1/2/3 в ряд), лога, статусбара                                           |
-| `app_actions.py`     | 651   | **Центральный контроллер.** Бизнес-логика: запуск оптимизатора, gear_xls, Flask, визуализатора; работа с Excel/XLSM/VBA макросами; управление конфигурацией |
+| `app_actions.py`     | 702   | **Центральный контроллер.** Бизнес-логика: запуск оптимизатора, gear_xls, Flask, визуализатора; работа с Excel/XLSM/VBA макросами; управление конфигурацией |
 | `file_manager.py`    | 74    | Кроссплатформенные файловые операции: открытие файлов, диалоги выбора, проверка существования                                                               |
-| `process_manager.py` | 166   | Управление подпроцессами: запуск команд, терминалов, отслеживание состояния (Win/Mac/Linux)                                                                 |
+| `process_manager.py` | 225   | Управление подпроцессами: запуск команд, терминалов, захват вывода, отслеживание состояния (Win/Mac/Linux)                                                  |
 | `logger.py`          | 28    | Логирование в текстовый виджет с таймштампами + обновление статусбара                                                                                       |
 
 **Data Flow:** `Button Click -> AppActions.method() -> ProcessManager/FileManager -> Logger -> UI Update`
 
 ---
 
-## gear_xls/ — Интерактивный HTML-редактор расписания
+## gear_xls/ — Интерактивный HTML-редактор расписания (мультипользовательский)
 
-Конвертирует Excel-файл с результатами оптимизации в интерактивное веб-приложение с drag-and-drop редактированием, экспортом в Excel/PDF.
+Конвертирует Excel-файл с результатами оптимизации в интерактивное веб-приложение с drag-and-drop редактированием. Поддерживает мультипользовательский режим: аутентификация, роли (admin/editor/viewer), блокировка редактирования, публикация базового расписания, индивидуальные занятия.
 
-**Версия:** 1.1.0 | **~4500 строк Python + 21 JS-модуль**
+> Manual update 2026-03-18: added multiuser/auth layer (auth.py, lock_manager.py, state_manager.py, base_schedule_manager.py, rooms_report.py, rooms_routes.py, config/, schedule_state/, static/, scripts/).
+
+**~6200 строк Python + 27 JS-модулей + 5 статических JS/CSS файлов**
 
 ### Data Flow
 
@@ -130,33 +135,67 @@ HTMLCoordinator (generators/)
     └── HTMLBlockGenerator (positioned activity blocks)
     │
     + html_styles.py (CSS)
-    + html_javascript.py (загрузка JS-модулей)
+    + html_javascript.py (загрузка JS-модулей, инъекция spiskiData/gridStart)
     │
     ▼
-schedule.html (interactive web app)
+html_output/schedule.html
     │
-    ├──► Flask Server (server_routes.py) ──► Excel Export (excel_exporter.py)
-    ├──► PDF Generation (pdf_generator.py via pdfkit/wkhtmltopdf)
-    └──► Browser: drag-drop, create/edit/delete blocks, save, export
+    ▼
+Flask Server (server_routes.py) — multiuser
+    ├── /login → auth.py → Flask session
+    ├── /schedule → inject CURRENT_USER/USER_ROLE + static/*.js
+    ├── /api/lock/* → lock_manager.py → schedule_state/lock.json
+    ├── /api/schedule + /api/blocks/* → state_manager.py → schedule_state/*.json
+    ├── /api/schedule/publish → base_schedule_manager.py
+    ├── /rooms + /api/rooms/* → rooms_routes.py + rooms_report.py
+    ├── /api/spiski/add → spiski/*.txt
+    └── /export_to_excel (admin) → excel_exporter.py → Excel
 ```
 
 ### Core Files
 
-| File                    | Lines | Purpose                                                                            |
-| ----------------------- | ----- | ---------------------------------------------------------------------------------- |
-| `main.py`               | 250   | **Точка входа.** Tkinter GUI: выбор файла, валидация, запуск pipeline, старт Flask |
-| `excel_parser.py`       | 189   | Парсинг Excel: извлечение предметов, групп, преподавателей, аудиторий, времени     |
-| `schedule_structure.py` | 169   | Построение иерархической структуры building -> day -> room -> grid position        |
-| `html_generator.py`     | 313   | Фасад HTML-генерации (обратная совместимость, делегирует в generators/)            |
-| `html_styles.py`        | 205   | CSS: sticky headers, flexbox, responsive layout, цветовые схемы кнопок             |
-| `html_javascript.py`    | 185   | Оркестрация загрузки 21 JS-модуля + инъекция глобальных переменных                 |
-| `pdf_generator.py`      | 212   | PDF через pdfkit: A2 landscape, статичные таблицы по зданиям                       |
-| `excel_exporter.py`     | 284   | Создание Excel из данных HTML-редактора (POST -> Flask -> openpyxl)                |
-| `server_routes.py`      | 120   | Flask-сервер: POST /export-to-excel, CORS, CSRF-токен                              |
-| `integration.py`        | 285   | Высокоуровневая интеграция: setup, pipeline, Flask-запуск, автооткрытие браузера   |
-| `time_utils.py`         | 56    | Конвертация времени (отдельный модуль для избежания циклических импортов)          |
-| `utils.py`              | 301   | Утилиты: сортировка аудиторий по этажам, обёртки цветов, валидация                 |
-| `convert_to_xlsm.py`    | 167   | Конвертация XLSX -> XLSM с VBA-макросами (COM/win32com)                            |
+| File                        | Lines | Purpose                                                                                      |
+| --------------------------- | ----- | -------------------------------------------------------------------------------------------- |
+| `main.py`                   | 250   | **Точка входа (single-user).** Tkinter GUI: выбор файла, валидация, запуск pipeline, Flask   |
+| `server_routes.py`          | ~655  | **Flask-приложение (multiuser).** Аутентификация, блокировка, CRUD блоков, rooms, spiski     |
+| `auth.py`                   | 102   | bcrypt-аутентификация; `login_required`/`role_required` декораторы; секрет сессии            |
+| `lock_manager.py`           | 170   | Файловая блокировка редактирования; acquire/release/heartbeat/force_release                   |
+| `state_manager.py`          | ~226  | CRUD индивидуальных занятий + фасад base_schedule_manager                                    |
+| `base_schedule_manager.py`  | 156   | Хранение опубликованного базового (группового) расписания; атомарные JSON-записи             |
+| `rooms_report.py`           | 191   | Вычисление доступности аудиторий; объединяет базовые и индивидуальные блоки                  |
+| `rooms_routes.py`           | 121   | Blueprint: `/rooms` (страница) + `/api/rooms/availability`                                   |
+| `excel_parser.py`           | 189   | Парсинг Excel: извлечение предметов, групп, преподавателей, аудиторий, времени               |
+| `schedule_structure.py`     | 169   | Построение иерархической структуры building -> day -> room -> grid position                  |
+| `html_generator.py`         | 313   | Фасад HTML-генерации (обратная совместимость, делегирует в generators/)                      |
+| `html_styles.py`            | 357   | CSS: sticky headers, flexbox, меню, col-delete, modal, resize-zone стили                     |
+| `html_javascript.py`        | 198   | Оркестрация загрузки 27 JS-модулей + инъекция gridStart, spiskiData                          |
+| `pdf_generator.py`          | 212   | PDF через pdfkit: A2 landscape, статичные таблицы по зданиям                                 |
+| `excel_exporter.py`         | 284   | Создание Excel из данных HTML-редактора (только для admin)                                   |
+| `integration.py`            | 285   | Высокоуровневая интеграция: setup, pipeline, Flask-запуск, автооткрытие браузера             |
+| `time_utils.py`             | 56    | Конвертация времени (отдельный модуль для избежания циклических импортов)                    |
+| `utils.py`                  | 301   | Утилиты: сортировка аудиторий по этажам, обёртки цветов, валидация                           |
+| `convert_to_xlsm.py`        | 167   | Конвертация XLSX -> XLSM с VBA-макросами (COM/win32com)                                      |
+
+### config/ — Конфигурация пользователей
+
+| File                  | Purpose                                                          |
+| --------------------- | ---------------------------------------------------------------- |
+| `config/users.json`   | Учётные записи: `login`, `display_name`, `role`, `password_hash` |
+| `config/secret_key.txt` | Flask session secret key (генерируется автоматически)          |
+
+### schedule_state/ — Состояние расписания (runtime)
+
+| File                                     | Purpose                                                               |
+| ---------------------------------------- | --------------------------------------------------------------------- |
+| `schedule_state/base_schedule.json`      | Опубликованное базовое расписание: `published_at`, `published_by`, `blocks[]` |
+| `schedule_state/individual_lessons.json` | Индивидуальные занятия: `last_modified`, `blocks[]` с UUID `id`       |
+| `schedule_state/lock.json`               | Состояние блокировки: `holder`, `version`, `acquired_at`, `last_heartbeat` |
+
+### scripts/ — Утилиты администратора
+
+| File                       | Purpose                                                     |
+| -------------------------- | ----------------------------------------------------------- |
+| `scripts/set_password.py`  | CLI: хэширует пароль и записывает в `config/users.json`     |
 
 ### generators/ — Рефакторенная HTML-генерация
 
@@ -164,7 +203,7 @@ schedule.html (interactive web app)
 | ----------------------------- | ----- | ------------------------------------------------------------------- |
 | `__init__.py`                 | 121   | Пакет с lazy-loading и обратной совместимостью                      |
 | `html_coordinator.py`         | 274   | Оркестратор: собирает полный HTML из трёх генераторов               |
-| `html_structure_generator.py` | 206   | Структура документа: head, meta, control panel, CSRF-токен          |
+| `html_structure_generator.py` | 214   | Структура документа: head, meta, control panel с меню публикации    |
 | `html_table_generator.py`     | 236   | HTML-таблица сетки: заголовки дней, временные метки (каждые 15 мин) |
 | `html_block_generator.py`     | 361   | Абсолютно позиционированные блоки занятий с CSS и data-атрибутами   |
 
@@ -176,16 +215,29 @@ schedule.html (interactive web app)
 | `schedule_pipeline.py` | 174   | `SchedulePipeline` — оркестрация: parse -> structure -> HTML                        |
 | `color_service.py`     | 378   | Цвета: MD5-хэш для групп, спец.категории (Schach, Tanz, Gitarre, Deutsch), контраст |
 
-### js_modules/ — JavaScript клиентская часть (21 модуль)
+### static/ — Статические ресурсы (мультипользовательский UI)
 
-| Category           | Modules                                                                                                                                                             | Purpose                                                     |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| **Services**       | building_service, drag_drop_service, grid_snap_service, block_drop_service                                                                                          | Сервисы: здания, D&D, привязка к сетке                      |
-| **Core**           | core, position, column_helpers, color_utils, adaptive_text_color                                                                                                    | Ядро: позиционирование, колонки, цвета                      |
-| **UI**             | settings_panel, save_export                                                                                                                                         | Настройки, сохранение                                       |
-| **Features**       | add_blocks_main, block_creation_dialog, block_positioning, block_event_handlers, quick_add_mode, block_utils, editing_update, delete_blocks, delete_blocks_observer | Создание/редактирование/удаление блоков, быстрое добавление |
-| **Initialization** | app_initialization                                                                                                                                                  | Инициализация приложения                                    |
-| **Export**         | export_to_excel (27K)                                                                                                                                               | Экспорт в Excel через HTTP POST                             |
+| File                    | Purpose                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------- |
+| `static/nav.css`        | Стили навигационной панели (`#schedgen-nav`)                                                |
+| `static/auth_ui.js`     | Ролевое управление UI, инъекция nav, `SchedGenAuthUI`, блокировка группового редактирования |
+| `static/lock_ui.js`     | Баннер блокировки, acquire/release/heartbeat, принудительный сброс, `SchedGenLockUI`        |
+| `static/base_sync_ui.js`| Публикация базового расписания, синхронизация ревизий, рендеринг блоков, `SchedGenBaseSyncUI` |
+| `static/individual_ui.js`| CRUD индивидуальных занятий через API, перехват DOM-событий, `SchedGenIndividualUI`         |
+| `static/rooms_report.js`| Клиентская часть страницы аудиторий: таблица занятости, фильтры, свободные окна             |
+
+### js_modules/ — JavaScript клиентская часть (27 модулей)
+
+| Category           | Modules                                                                                                                                                                  | Purpose                                                        |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| **Services**       | building_service, drag_drop_service, grid_snap_service, block_drop_service                                                                                               | Сервисы: здания, D&D, привязка к сетке                         |
+| **Core**           | core, position, column_helpers, color_utils, adaptive_text_color                                                                                                         | Ядро: позиционирование, колонки, цвета                         |
+| **UI**             | save_export, dropdown_widget                                                                                                                                             | Сохранение; autocomplete-виджет с серверной персистентностью   |
+| **Menu/Columns**   | menu, column_delete                                                                                                                                                      | Hamburger-меню (+ фильтр типов, публикация), удаление колонок  |
+| **Features**       | add_blocks_main, block_creation_dialog, block_positioning, block_event_handlers, quick_add_mode, block_utils, editing_update, delete_blocks, delete_blocks_observer      | Создание/редактирование/удаление блоков, быстрое добавление    |
+| **Sync**           | block_content_sync, block_resize, conflict_detector                                                                                                                      | Синхронизация текста блока, resize, конфликты                  |
+| **Initialization** | app_initialization                                                                                                                                                       | Инициализация приложения                                       |
+| **Export**         | export_to_excel                                                                                                                                                          | Экспорт в Excel через HTTP POST (только admin)                 |
 
 ### Key Constants
 
@@ -198,15 +250,17 @@ schedule.html (interactive web app)
 | CELL_HEIGHT    | 15px  | Высота ячейки       |
 | DAYS_ORDER     | Mo-Sa | Дни недели          |
 | SERVER_PORT    | 5000  | Порт Flask          |
+| LOCK_TIMEOUT   | 30 min | Таймаут блокировки редактирования |
 
-### Output Directories
+### Output / State Directories
 
-| Directory          | Contents                     |
-| ------------------ | ---------------------------- |
-| `html_output/`     | Сгенерированные HTML-файлы   |
-| `html_output/web/` | Веб-ресурсы                  |
-| `excel_exports/`   | Экспортированные Excel-файлы |
-| `pdfs/`            | Сгенерированные PDF          |
+| Directory           | Contents                                          |
+| ------------------- | ------------------------------------------------- |
+| `html_output/`      | Сгенерированные HTML-файлы                        |
+| `excel_exports/`    | Экспортированные Excel-файлы                      |
+| `pdfs/`             | Сгенерированные PDF                               |
+| `schedule_state/`   | JSON-состояние: блокировка, базовое и инд. расп.  |
+| `config/`           | Учётные записи и секрет сессии                    |
 
 ---
 
@@ -300,7 +354,7 @@ main_sch.py
  ├── output_utils.py
  └── timewindow_adapter.py
  │
-gear_xls/main.py
+gear_xls/main.py (single-user entry)
  ├── services/schedule_pipeline.py
  │    ├── excel_parser.py
  │    ├── schedule_structure.py
@@ -310,10 +364,24 @@ gear_xls/main.py
  │         └── html_block_generator.py
  ├── html_generator.py (facade)
  ├── html_styles.py
- ├── html_javascript.py ──► js_modules/* (21 files)
+ ├── html_javascript.py ──► js_modules/* (27 files)
  ├── pdf_generator.py
- ├── server_routes.py ──► excel_exporter.py
  └── services/color_service.py
+
+gear_xls/server_routes.py (multiuser Flask app)
+ ├── auth.py ──► config/users.json
+ ├── lock_manager.py ──► schedule_state/lock.json
+ ├── state_manager.py
+ │    ├── base_schedule_manager.py ──► schedule_state/base_schedule.json
+ │    └── schedule_state/individual_lessons.json
+ ├── rooms_routes.py ──► rooms_report.py
+ └── excel_exporter.py
+
+gear_xls/static/*.js (injected into /schedule response)
+ ├── auth_ui.js (SchedGenAuthUI)
+ ├── base_sync_ui.js (SchedGenBaseSyncUI) ──► auth_ui.js
+ ├── lock_ui.js (SchedGenLockUI) ──► auth_ui.js, base_sync_ui.js
+ └── individual_ui.js (SchedGenIndividualUI) ──► all three above
 ```
 
 ---
@@ -324,7 +392,7 @@ gear_xls/main.py
 | ------------- | ------------ | -------- | ---------------- |
 | Root (solver) | 18           | 0        | ~4,200           |
 | gui_services/ | 6            | 0        | ~1,060           |
-| gear_xls/     | 22           | 21       | ~4,500           |
+| gear_xls/     | 28           | 32       | ~6,200           |
 | visualiser/   | 14           | 0        | ~2,400           |
 | visualiserTV/ | 14           | 0        | ~2,800           |
-| **Total**     | **74**       | **21**   | **~15,000**      |
+| **Total**     | **80**       | **32**   | **~16,660**      |

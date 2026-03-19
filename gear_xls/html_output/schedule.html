@@ -2534,15 +2534,6 @@ function removeColumn(building, day, colIndex) {
         }
     });
 
-    // Step 10: Update container width.
-    var timeTh = table.querySelector('thead th.time-cell');
-    var tw = timeTh ? (parseFloat(window.getComputedStyle(timeTh).width) || 80) : 80;
-    var dcw = (typeof dayCellWidth !== 'undefined') ? dayCellWidth : 100;
-    var remainingDayCols = 0;
-    var daysOrder = window.daysOrder || ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
-    daysOrder.forEach(function(d) {
-        remainingDayCols += table.querySelectorAll('thead th.day-' + d).length;
-    });
     // Step 10: No container width sync is needed: horizontal scroll lives inside the container.
 
     // Step 11: Call updateActivityPositions().
@@ -2751,9 +2742,7 @@ window.initColumnAddButtons = initColumnAddButtons;
             // Module for saving and exporting the schedule
 
 function getServerBaseUrl() {
-    // Explicit base URL for local Flask server.
-    // Must not use a relative path because the page may be opened via file://.
-    return 'http://localhost:5000';
+    return '';
 }
 
 function _saveIntermediateViaServer(htmlContent, filename, onResult) {
@@ -3223,7 +3212,8 @@ function collectScheduleData() {
                 start_time: startTime,  // Строка в формате "HH:MM"
                 end_time: endTime,      // Строка в формате "HH:MM"
                 duration: duration,
-                color: hexColor
+                color: hexColor,
+                lesson_type: block.getAttribute('data-lesson-type') || 'group'
             };
             
             // Добавляем активность в общий список
@@ -3273,7 +3263,7 @@ function rgbToHex(rgb) {
 // Функция проверки доступности сервера
 function checkServerAvailability(callback) {
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', 'http://localhost:5000/', true);
+    xhr.open('GET', '/', true);
     xhr.timeout = 2000; // 2 секунды на ответ
     
     xhr.onload = function() {
@@ -3296,6 +3286,53 @@ function checkServerAvailability(callback) {
         callback(false);
     };
     
+    xhr.send();
+}
+
+function _refreshIndividualBeforeExport(onReady, onError) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/api/individual_lessons', true);
+    xhr.setRequestHeader('Accept', 'application/json');
+
+    xhr.onload = function() {
+        var data = null;
+        var refreshResult = null;
+
+        if (xhr.status === 200) {
+            try {
+                data = JSON.parse(xhr.responseText);
+            } catch (e) {
+                onReady();
+                return;
+            }
+
+            if (window.refreshIndividualLayer) {
+                refreshResult = window.refreshIndividualLayer(data);
+                if (refreshResult && typeof refreshResult.then === 'function') {
+                    refreshResult.then(function() {
+                        onReady();
+                    }).catch(function() {
+                        onReady();
+                    });
+                    return;
+                }
+            }
+
+            onReady();
+        } else if (xhr.status === 401) {
+            if (typeof window.handleSessionExpired === 'function') {
+                window.handleSessionExpired();
+            }
+            onError('session_expired');
+        } else {
+            onError('server_error_' + xhr.status);
+        }
+    };
+
+    xhr.onerror = function() {
+        onError('network_error');
+    };
+
     xhr.send();
 }
 
@@ -3430,82 +3467,88 @@ function exportScheduleToExcel(onDone) {
                 _callDone();
                 return;
             }
-            
-            // Собираем данные расписания
-            var scheduleData = collectScheduleData();
-            console.log('Собрано записей: ' + scheduleData.length);
-            
-            // Показываем индикатор процесса
-            showExportProgress('Подготовка данных для экспорта...');
-            
-            // Получаем CSRF-токен для безопасности
-            var csrfToken = document.getElementById('csrf_token')?.value || '';
-            
-            // Вместо формы используем XMLHttpRequest для прямой отправки и получения ответа
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', 'http://localhost:5000/export_to_excel', true);
-            
-            // Обработка успешного завершения запроса
-            xhr.onload = function() {
-                if (xhr.status === 200) {
-                    console.log('Получен ответ от сервера');
-                    // Создаем временную ссылку для скачивания файла
-                    var blob = new Blob([xhr.response], { 
-                        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-                    });
-                    var link = document.createElement('a');
-                    link.href = window.URL.createObjectURL(blob);
-                    link.download = 'schedule_export.xlsx';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    window.URL.revokeObjectURL(link.href);
-                    
-                    // Скрываем индикатор прогресса
-                    hideExportProgress();
-                    showExportProgress('Excel-файл успешно скачан!', true);
-                    _callDone();
-                    // Автоматическое закрытие через 2 секунды (оставляем возможность закрыть вручную)
-                    setTimeout(function() {
-                        // Проверяем, не закрыл ли пользователь сообщение сам
-                        if (document.getElementById('exportProgress') && 
-                            document.getElementById('exportProgress').style.display !== 'none') {
-                            hideExportProgress();
-                        }
-                    }, 2000);
-                } else {
-                    console.error('Ошибка при получении файла:', xhr.status, xhr.statusText);
-                    hideExportProgress();
-                    showExportProgress('Ошибка при получении файла: ' + xhr.statusText, true);
-                    _callDone();
-                }
-            };
-            
-            // Обработка ошибок сети
-            xhr.onerror = function() {
-                console.error('Ошибка сети при отправке запроса');
-                hideExportProgress();
-                showExportProgress('Ошибка сети! Сервер недоступен.', true);
+
+            _refreshIndividualBeforeExport(function() {
+                // Собираем данные расписания
+                var scheduleData = collectScheduleData();
+                console.log('Собрано записей: ' + scheduleData.length);
                 
-                // Проверяем доступность сервера и даем рекомендации
-                checkServerAndAdvise();
+                // Показываем индикатор процесса
+                showExportProgress('Подготовка данных для экспорта...');
+                
+                // Получаем CSRF-токен для безопасности
+                var csrfToken = document.getElementById('csrf_token')?.value || '';
+                
+                // Вместо формы используем XMLHttpRequest для прямой отправки и получения ответа
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', '/export_to_excel', true);
+                
+                // Обработка успешного завершения запроса
+                xhr.onload = function() {
+                    if (xhr.status === 200) {
+                        console.log('Получен ответ от сервера');
+                        // Создаем временную ссылку для скачивания файла
+                        var blob = new Blob([xhr.response], { 
+                            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+                        });
+                        var link = document.createElement('a');
+                        link.href = window.URL.createObjectURL(blob);
+                        link.download = 'schedule_export.xlsx';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        window.URL.revokeObjectURL(link.href);
+                        
+                        // Скрываем индикатор прогресса
+                        hideExportProgress();
+                        showExportProgress('Excel-файл успешно скачан!', true);
+                        _callDone();
+                        // Автоматическое закрытие через 2 секунды (оставляем возможность закрыть вручную)
+                        setTimeout(function() {
+                            // Проверяем, не закрыл ли пользователь сообщение сам
+                            if (document.getElementById('exportProgress') && 
+                                document.getElementById('exportProgress').style.display !== 'none') {
+                                hideExportProgress();
+                            }
+                        }, 2000);
+                    } else {
+                        console.error('Ошибка при получении файла:', xhr.status, xhr.statusText);
+                        hideExportProgress();
+                        showExportProgress('Ошибка при получении файла: ' + xhr.statusText, true);
+                        _callDone();
+                    }
+                };
+                
+                // Обработка ошибок сети
+                xhr.onerror = function() {
+                    console.error('Ошибка сети при отправке запроса');
+                    hideExportProgress();
+                    showExportProgress('Ошибка сети! Сервер недоступен.', true);
+                    
+                    // Проверяем доступность сервера и даем рекомендации
+                    checkServerAndAdvise();
+                    _callDone();
+                };
+                
+                // Указываем, что нам нужен ответ в виде бинарных данных
+                xhr.responseType = 'arraybuffer';
+                
+                // Устанавливаем заголовки запроса
+                xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                
+                // Формируем данные запроса
+                var formData = 'schedule_data=' + encodeURIComponent(JSON.stringify(scheduleData)) + 
+                              '&csrf_token=' + encodeURIComponent(csrfToken);
+                
+                // Отправляем запрос
+                xhr.send(formData);
+                
+                console.log('Данные отправлены для создания Excel-файла');
+            }, function() {
+                hideExportProgress();
+                alert('Не удалось синхронизировать индивидуальные занятия перед экспортом. Экспорт отменён.');
                 _callDone();
-            };
-            
-            // Указываем, что нам нужен ответ в виде бинарных данных
-            xhr.responseType = 'arraybuffer';
-            
-            // Устанавливаем заголовки запроса
-            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-            
-            // Формируем данные запроса
-            var formData = 'schedule_data=' + encodeURIComponent(JSON.stringify(scheduleData)) + 
-                          '&csrf_token=' + encodeURIComponent(csrfToken);
-            
-            // Отправляем запрос
-            xhr.send(formData);
-            
-            console.log('Данные отправлены для создания Excel-файла');
+            });
         });
     } catch (error) {
         console.error('Ошибка при экспорте в Excel:', error);
@@ -3682,6 +3725,25 @@ function toggleMenu() {
 function closeMenu() {
     var dropdown = document.getElementById('menuDropdown');
     if (dropdown) dropdown.classList.remove('open');
+}
+
+function _initPublishMenuItem() {
+    var publishItem = document.getElementById('menu-publish-item');
+    if (!publishItem) return;
+
+    publishItem.style.display = (window.USER_ROLE === 'admin') ? '' : 'none';
+    if (publishItem.__publishBound) return;
+    publishItem.__publishBound = true;
+
+    publishItem.addEventListener('click', function(e) {
+        e.stopPropagation();
+        closeMenu();
+        if (typeof window.publishSchedule === 'function') {
+            window.publishSchedule();
+        } else {
+            console.warn('publishSchedule is not available');
+        }
+    });
 }
 
 // === Confirmation modal helpers ===
@@ -4159,6 +4221,7 @@ function initMenu() {
 
     // === Lesson type filter section ===
     var dropdown = document.getElementById('menuDropdown');
+    _initPublishMenuItem();
     if (dropdown && !dropdown.querySelector('.lesson-filter-item')) {
         var separator = document.createElement('div');
         separator.style.cssText = 'border-top: 1px solid #ccc; margin: 4px 0;';
@@ -4208,6 +4271,22 @@ window.toggleMenu = toggleMenu;
 window.closeMenu = closeMenu;
 window.handleNewSchedule = handleNewSchedule;
 window.openAddColumnDialog = openAddColumnDialog;
+
+(function() {
+    function syncPublishVisibility() {
+        _initPublishMenuItem();
+        var publishItem = document.getElementById('menu-publish-item');
+        if (publishItem && window.USER_ROLE !== 'admin') {
+            publishItem.style.display = 'none';
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', syncPublishVisibility);
+    } else {
+        syncPublishVisibility();
+    }
+})();
 
             
             // Подключение модулей для работы с блоками
@@ -4527,7 +4606,7 @@ window.addRoomToBuildingList = addRoomToBuildingList;
 // Fire-and-forget: does not block UI on network errors.
 function _persistSpiskiToServer(spiskiKey, value) {
     if (!spiskiKey || !value) return;
-    fetch('http://127.0.0.1:5000/api/spiski/add', {
+    fetch('/api/spiski/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: spiskiKey, value: value })
@@ -7369,6 +7448,7 @@ function forceReinitializeApplication() {
 <div id="menuDropdown">
   <div class="menu-item" id="menuItemNewSchedule" onclick="handleNewSchedule()">Создать новое расписание</div>
   <div class="menu-item" id="menuItemAddColumn" onclick="openAddColumnDialog()">Добавить колонку</div>
+  <div class="menu-item" id="menu-publish-item" style="display:none">Опубликовать расписание</div>
 </div>
 <button class="toggle-day-button" data-day="Mo" onclick="toggleDay(this, 'Mo')">+/- Mo</button>
 <button class="toggle-day-button" data-day="Di" onclick="toggleDay(this, 'Di')">+/- Di</button>
@@ -7379,7 +7459,7 @@ function forceReinitializeApplication() {
 <button id="saveIntermediate">Сохранить промежуточный результат</button>
 <button id="saveSchedule">Сохранить финальную версию</button>
 <button id="exportToExcel">Экспорт в Excel</button>
-<input type="hidden" id="csrf_token" value="9c395f93-df7e-4428-8b23-11448b85aeaa">
+<input type="hidden" id="csrf_token" value="ef1240b9-b4a2-4b4b-9674-108eedfe1acc">
 </div>
 <h1>Расписание занятий</h1>
 <h2>Здание: Villa</h2>
