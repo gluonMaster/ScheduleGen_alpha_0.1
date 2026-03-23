@@ -14,6 +14,13 @@ INDIVIDUAL_LESSONS_PATH = os.path.join(
 SCHEDULE_HTML_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "html_output", "schedule.html"
 )
+SPISKI_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "spiski")
+)
+SPISKI_ROOM_FILE_MAP = {
+    "Villa": "kabinets_Villa.txt",
+    "Kolibri": "kabinets_Kolibri.txt",
+}
 DAY_ORDER = {"Mo": 0, "Di": 1, "Mi": 2, "Do": 3, "Fr": 4, "Sa": 5}
 
 
@@ -27,6 +34,42 @@ def _load_json_safe(path: str) -> dict:
     except Exception as exc:
         logging.warning("Failed to read JSON from %s: %s", path, exc)
         return {}
+
+
+def _spiski_sort_key(value: str):
+    parts = re.findall(r"\d+|\D+", (value or "").strip())
+    key = []
+    for part in parts:
+        if part.isdigit():
+            key.append((0, int(part)))
+        else:
+            key.append((1, part.casefold()))
+    return tuple(key)
+
+
+def _load_configured_rooms() -> dict[str, list[str]]:
+    configured = {}
+    for building, filename in SPISKI_ROOM_FILE_MAP.items():
+        path = os.path.join(SPISKI_DIR, filename)
+        seen = set()
+        rooms = []
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    room = line.strip()
+                    if not room:
+                        continue
+                    room_key = room.casefold()
+                    if room_key in seen:
+                        continue
+                    seen.add(room_key)
+                    rooms.append(room)
+        except FileNotFoundError:
+            logging.warning("Configured rooms file not found: %s", path)
+        except Exception as exc:
+            logging.warning("Failed to read configured rooms from %s: %s", path, exc)
+        configured[building] = sorted(rooms, key=_spiski_sort_key)
+    return configured
 
 
 def _parse_time(t: str) -> int:
@@ -136,7 +179,11 @@ def compute_availability() -> dict:
     ind_data = _load_json_safe(INDIVIDUAL_LESSONS_PATH)
     ind_blocks = ind_data.get("blocks", []) if isinstance(ind_data.get("blocks"), list) else []
     combined = list(base_blocks) + list(ind_blocks)
+    configured_rooms = _load_configured_rooms()
     buildings, spans = {}, []
+    for building, rooms in configured_rooms.items():
+        bucket = buildings.setdefault(building, {"rooms": set(), "days": {}})
+        bucket["rooms"].update(rooms)
     for block in combined:
         if not isinstance(block, dict):
             continue
@@ -180,7 +227,7 @@ def compute_availability() -> dict:
                 room_map[room] = sorted(slots, key=lambda slot: _parse_time(slot["start"]))
             day_map[day] = room_map
         sorted_buildings[building] = {
-            "rooms": sorted(buildings[building]["rooms"]),
+            "rooms": sorted(buildings[building]["rooms"], key=_spiski_sort_key),
             "days": day_map,
         }
     return {

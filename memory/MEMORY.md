@@ -26,6 +26,8 @@ Last updated: 2026-03-19
   - an optional event duration filter was added;
   - search now works even if room/building are not specified;
   - the report shows only intervals large enough for the requested duration when duration is set.
+  - room search/autocomplete now uses the full deduplicated room list from `spiski/kabinets_Kolibri.txt` and `spiski/kabinets_Villa.txt`;
+  - a room that exists in `spiski` but has no lessons is now reported as free, not as "room not found".
 - Non-group lessons (`individual` / `nachhilfe`) are now shown in the web editor even when they originally came from `optimized_schedule.xlsx`.
 - Manual QA also uncovered several runtime regressions, and they were fixed:
   - non-group block edit persistence after logout/login;
@@ -33,6 +35,7 @@ Last updated: 2026-03-19
   - group drag/drop and resize in admin edit mode;
   - fallback publish collector when old inline `collectScheduleData()` is unavailable;
   - warning guard when leaving `/schedule` with unpublished group changes.
+  - `/schedule` now refreshes embedded `spiskiData` from the current `spiski/*.txt` files on every request, so newly added teachers/subjects/students survive the next login.
 
 ## Important Current Behavior
 
@@ -96,6 +99,7 @@ Last updated: 2026-03-19
   - do not import if `individual_lessons.json` already has user edits;
   - do not import after the base layer has already been published.
 - This rule exists specifically to avoid overwriting later manual edits by other users.
+- Because of the separate runtime state layer, regenerating the web app from a new Excel file must also reset `gear_xls/schedule_state/base_schedule.json`, `gear_xls/schedule_state/individual_lessons.json`, and `gear_xls/schedule_state/lock.json`; otherwise old persisted model data can overlay the freshly generated HTML.
 
 ### Publish / Navigation Guard
 
@@ -111,13 +115,15 @@ Last updated: 2026-03-19
   - hardcoded `127.0.0.1` API usage removed from `spiski` frontend calls;
   - origin checks added for mutating requests;
   - export route access tightened;
-  - `debug=False`.
+  - `debug=False`;
+  - GUI buttons `3.1` / `3.2` now detect an already running local Flask server by probing `http://127.0.0.1:5000/`, so repeated opens do not spawn duplicate server terminals.
 - Editor layout:
   - sticky offsets of nav / lock banner / update banner were synchronized;
   - editor mode controls moved into the top nav;
   - vertical space usage improved.
 - `/rooms`:
   - duration-aware free-slot filtering was added.
+  - room lookup now distinguishes "known but empty room" from "unknown room", and the search suggestions no longer duplicate plain room names vs `room + building`.
 - Non-group lesson runtime:
   - existing blocks now bind reliably to their persistent `data-block-id`;
   - drag/drop persists;

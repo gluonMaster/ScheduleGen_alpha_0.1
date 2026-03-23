@@ -1,10 +1,10 @@
 {
   "holder": null,
-  "version": 54,
+  "version": 62,
   "acquired_at": null,
   "last_heartbeat": null,
   "last_holder": "alla",
-  "released_at": "2026-03-19T12:13:21.759099",
+  "released_at": "2026-03-19T16:30:00.421135",
   "released_by": "alla",
   "release_reason": "released"
 }

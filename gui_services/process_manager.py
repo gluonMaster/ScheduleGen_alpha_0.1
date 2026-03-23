@@ -3,6 +3,11 @@ import platform
 import os
 import time
 import threading
+import urllib.request
+
+
+FLASK_SERVER_URL = "http://127.0.0.1:5000/"
+FLASK_SERVER_MARKER = "Excel Export Server is running!"
 
 
 class ProcessManager:
@@ -103,6 +108,24 @@ class ProcessManager:
         except:
             return False
     
+    def is_flask_server_running(self, url=FLASK_SERVER_URL, timeout=1.0):
+        """Check whether the expected Flask server responds on localhost."""
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as response:
+                body = response.read(256).decode("utf-8", errors="replace")
+            return FLASK_SERVER_MARKER in body
+        except Exception:
+            return False
+
+    def wait_for_flask_server(self, timeout=5.0, poll_interval=0.3):
+        """Wait for the Flask server to become reachable."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.is_flask_server_running():
+                return True
+            time.sleep(poll_interval)
+        return False
+
     def get_terminal_command(self):
         """Возвращает команду для запуска терминала в зависимости от ОС"""
         if platform.system() == "Windows":

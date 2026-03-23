@@ -428,7 +428,7 @@ class AppActions:
         if not self._check_directory():
             return
         
-        if self.process_manager.is_process_running(self.process_manager.flask_process):
+        if self.process_manager.is_flask_server_running():
             messagebox.showinfo("Информация", "Flask-сервер уже запущен")
             return
         
@@ -447,20 +447,10 @@ class AppActions:
         if not self._check_directory():
             return
 
-        if not self.process_manager.is_process_running(self.process_manager.flask_process):
+        if not self.process_manager.is_flask_server_running():
             self.log_action("Flask-сервер не запущен. Запускаем автоматически...")
             self.run_flask_server()
-            import urllib.request
-            deadline = time.time() + 5.0
-            ready = False
-            while time.time() < deadline:
-                try:
-                    urllib.request.urlopen('http://localhost:5000/', timeout=1)
-                    ready = True
-                    break
-                except Exception:
-                    time.sleep(0.3)
-            if not ready:
+            if not self.process_manager.wait_for_flask_server(timeout=5.0, poll_interval=0.3):
                 self.log_action("Предупреждение: Flask-сервер не ответил за 5 секунд, открываем браузер всё равно")
         else:
             self.log_action("Flask-сервер уже запущен")

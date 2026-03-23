@@ -143,6 +143,59 @@ def _spiski_sort_key(value):
     return tuple(key)
 
 
+def _load_spiski_data():
+    result = {}
+    for key, filename in SPISKI_FILE_MAP.items():
+        filepath = os.path.join(SPISKI_DIR, filename)
+        entries = []
+        seen = set()
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                for line in f:
+                    item = line.strip()
+                    if not item:
+                        continue
+                    item_key = item.casefold()
+                    if item_key in seen:
+                        continue
+                    seen.add(item_key)
+                    entries.append(item)
+        except FileNotFoundError:
+            logger.warning("Spiski file not found (using empty list): %s", filepath)
+        except Exception as exc:
+            logger.warning("Error reading spiski file %s: %s", filepath, exc)
+        result[key] = sorted(entries, key=_spiski_sort_key)
+    return result
+
+
+def _build_spiski_data_js(spiski_data):
+    return (
+        "var spiskiData = {\n"
+        f'    "subjects": {json.dumps(spiski_data.get("subjects", []), ensure_ascii=False)},\n'
+        f'    "groups": {json.dumps(spiski_data.get("groups", []), ensure_ascii=False)},\n'
+        f'    "teachers": {json.dumps(spiski_data.get("teachers", []), ensure_ascii=False)},\n'
+        f'    "rooms_Villa": {json.dumps(spiski_data.get("rooms_Villa", []), ensure_ascii=False)},\n'
+        f'    "rooms_Kolibri": {json.dumps(spiski_data.get("rooms_Kolibri", []), ensure_ascii=False)}\n'
+        "};\n"
+        "window.spiskiData = spiskiData;"
+    )
+
+
+def _inject_latest_spiski_data(html):
+    fresh_spiski_js = _build_spiski_data_js(_load_spiski_data())
+    updated_html, replacements = re.subn(
+        r"var spiskiData = \{.*?\};\s*window\.spiskiData = spiskiData;",
+        fresh_spiski_js,
+        html,
+        count=1,
+        flags=re.S,
+    )
+    if replacements == 0:
+        logger.warning("Failed to replace embedded spiskiData in schedule HTML")
+        return html
+    return updated_html
+
+
 if not os.path.exists(EXCEL_EXPORTS_DIR):
     os.makedirs(EXCEL_EXPORTS_DIR)
     logger.info("Создана директория для экспорта: %s", EXCEL_EXPORTS_DIR)
@@ -202,6 +255,7 @@ def schedule():
 
     with open(html_path, "r", encoding="utf-8") as f:
         html = f.read()
+    html = _inject_latest_spiski_data(html)
 
     user = current_user()
     published_base_available = state_manager.get_base_revision() is not None
