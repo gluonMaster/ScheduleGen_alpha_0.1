@@ -8,10 +8,45 @@ var DragDropService = (function() {
     var offsetX = 0;
     var offsetY = 0;
     var draggedBlock = null;
+
+    function getAuthUi() {
+        return window.SchedGenAuthUI || null;
+    }
+
+    function getCurrentRole() {
+        return window.USER_ROLE || 'viewer';
+    }
+
+    function getBlockLessonType(block) {
+        return block ? (block.getAttribute('data-lesson-type') || 'group') : 'group';
+    }
+
+    function canDragBlock(block) {
+        var authUi = getAuthUi();
+        var role = getCurrentRole();
+        var lessonType = getBlockLessonType(block);
+
+        if (!block || block.getAttribute('data-block-id')) {
+            return false;
+        }
+        if (authUi && typeof authUi.isEditMode === 'function' && !authUi.isEditMode()) {
+            return false;
+        }
+        if (authUi && typeof authUi.canMutateBlock === 'function') {
+            return authUi.canMutateBlock(role, block);
+        }
+        if (role === 'admin') return true;
+        if (role === 'editor') return lessonType !== 'group';
+        if (role === 'organizer') return lessonType === 'trial';
+        return false;
+    }
     
     // Приватные методы
     function initializeBlockEvents() {
         document.querySelectorAll('.activity-block').forEach(function(block) {
+            if (!canDragBlock(block)) {
+                return;
+            }
             // Отслеживаем состояние для определения двойного клика
             let clickTimeout = null;
             let isPotentialDoubleClick = false;

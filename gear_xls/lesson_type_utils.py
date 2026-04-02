@@ -20,3 +20,24 @@ def classify_lesson_type(subject: str) -> str:
     if "Ind." in subject:
         return "individual"
     return "group"
+
+
+def infer_regular_type_from_subject(subject: str) -> str:
+    """
+    Infers the target lesson_type when converting a trial block to a regular one.
+
+    Same rules as classify_lesson_type but returns 'individual' as fallback
+    (never 'group'), since trial blocks are always non-group lessons.
+
+    Args:
+        subject: lesson subject string, may be None or empty.
+
+    Returns:
+        One of: 'individual', 'nachhilfe'
+    """
+    if subject and isinstance(subject, str):
+        if "Nachhilfe" in subject:
+            return "nachhilfe"
+        if "Ind." in subject:
+            return "individual"
+    return "individual"

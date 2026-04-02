@@ -26,6 +26,15 @@ SCHEDULE_HTML_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "html_output", "schedule.html"
 )
 VALID_DAYS = {"Mo", "Di", "Mi", "Do", "Fr", "Sa"}
+_DAY_TO_WEEKDAY = {
+    "Mo": 0,
+    "Di": 1,
+    "Mi": 2,
+    "Do": 3,
+    "Fr": 4,
+    "Sa": 5,
+}
+_ISO_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _ind_mutex = threading.Lock()
 logger = logging.getLogger(__name__)
 _HTML_BLOCK_PATTERN = re.compile(
@@ -154,7 +163,10 @@ def _to_int_or_none(value):
 
 
 def _parse_embedded_individual_block(attrs_text, body):
-    attrs = dict(re.findall(r"data-([\w-]+)=['\"]([^'\"]*)['\"]", attrs_text))
+    attrs = {
+        key: unescape(value)
+        for key, value in re.findall(r"data-([\w-]+)=['\"]([^'\"]*)['\"]", attrs_text)
+    }
     lesson_type = (attrs.get("lesson-type") or "").strip()
     style_match = re.search(r"style=['\"]([^'\"]*)['\"]", attrs_text, re.I)
     color_match = (
@@ -175,7 +187,7 @@ def _parse_embedded_individual_block(attrs_text, body):
     block = None
     error = None
 
-    if lesson_type not in ("individual", "nachhilfe"):
+    if lesson_type not in ("individual", "nachhilfe", "trial"):
         return None
 
     for index in range(len(lines) - 1, -1, -1):
@@ -201,6 +213,20 @@ def _parse_embedded_individual_block(attrs_text, body):
         "students": lines[2] if len(lines) > 2 else "",
         "lesson_type": lesson_type,
     }
+
+    if lesson_type == "trial":
+        raw_trial_dates = attrs.get("trial-dates")
+        if raw_trial_dates:
+            try:
+                parsed_trial_dates = json.loads(raw_trial_dates)
+                if isinstance(parsed_trial_dates, list):
+                    block["trial_dates"] = [str(item) for item in parsed_trial_dates if item is not None]
+                else:
+                    block["trial_dates"] = []
+                    logger.warning("Skip invalid embedded trial-dates payload: %r", raw_trial_dates)
+            except Exception as exc:
+                block["trial_dates"] = []
+                logger.warning("Failed to parse embedded trial-dates JSON: %s", exc)
 
     if color_match:
         block["color"] = color_match.group(1).strip()
@@ -262,14 +288,47 @@ def _bootstrap_individual_from_html_if_needed(state):
     return state
 
 
+_ROLE_ALLOWED_TYPES = {
+    "admin":     {"group", "individual", "nachhilfe", "trial"},
+    "editor":    {"individual", "nachhilfe", "trial"},
+    "organizer": {"trial"},
+}
+
+
 def _validate_block(block, role):
     for field in ("day", "start_time", "end_time", "lesson_type", "subject", "room", "building"):
         if not str(block.get(field, "")).strip():
             return f"{field} required"
     if block["day"] not in VALID_DAYS:
         return "Invalid day"
-    if role == "editor" and block.get("lesson_type") not in ("individual", "nachhilfe"):
+    allowed = _ROLE_ALLOWED_TYPES.get(role)
+    if allowed is not None and block.get("lesson_type") not in allowed:
         return "Forbidden lesson_type"
+    if block.get("lesson_type") == "trial":
+        dates = block.get("trial_dates", [])
+        if not isinstance(dates, list):
+            return "trial_dates must be a list"
+        expected_weekday = _DAY_TO_WEEKDAY[block["day"]]
+        normalized_dates = []
+        seen_dates = set()
+        for d in dates:
+            if not isinstance(d, str) or not _ISO_DATE_PATTERN.fullmatch(d):
+                return "trial_dates entries must be YYYY-MM-DD strings"
+            try:
+                parsed_date = datetime.strptime(d, "%Y-%m-%d")
+            except ValueError:
+                return f"trial_dates contains invalid date: {d}"
+            if parsed_date.weekday() != expected_weekday:
+                return f"trial_dates contains date {d} not matching block day {block['day']}"
+            if d not in seen_dates:
+                seen_dates.add(d)
+                normalized_dates.append(d)
+        if not normalized_dates:
+            return "trial_dates must contain at least one date"
+        block["trial_dates"] = sorted(normalized_dates)
+    else:
+        # Strip trial_dates from non-trial blocks to avoid stale data
+        block.pop("trial_dates", None)
     for name, min_value in (("start_row", 0), ("row_span", 1)):
         value = block.get(name)
         if value is None:
@@ -328,16 +387,51 @@ def update_block(block_id, updates, role):
             return None, "NOT_FOUND"
 
 
-def delete_block(block_id):
+def delete_block(block_id, role=None):
     with _ind_mutex:
         with _locked_individual_file():
             state = _read_individual()
-            remaining = [block for block in state["blocks"] if block.get("id") != block_id]
-            if len(remaining) == len(state["blocks"]):
-                return False
-            state["blocks"] = remaining
+            target = next((b for b in state["blocks"] if b.get("id") == block_id), None)
+            if target is None:
+                return False, None
+            if role == "organizer" and target.get("lesson_type") != "trial":
+                return False, "FORBIDDEN"
+            state["blocks"] = [b for b in state["blocks"] if b.get("id") != block_id]
             _write_individual(state)
-            return True
+            return True, None
+
+
+def convert_block_to_regular(block_id, role):
+    from lesson_type_utils import infer_regular_type_from_subject
+    with _ind_mutex:
+        with _locked_individual_file():
+            state = _read_individual()
+            for index, block in enumerate(state["blocks"]):
+                if block.get("id") != block_id:
+                    continue
+                if block.get("lesson_type") != "trial":
+                    return None, "NOT_TRIAL"
+                if role not in ("admin", "editor", "organizer"):
+                    return None, "FORBIDDEN"
+                merged = dict(block)
+                merged.pop("trial_dates", None)
+                merged["lesson_type"] = infer_regular_type_from_subject(merged.get("subject", ""))
+                state["blocks"][index] = merged
+                _write_individual(state)
+                return merged, None
+            return None, "NOT_FOUND"
+
+
+def individual_column_has_non_trial_blocks(building, day, room):
+    state = get_individual_lessons()
+    return any(
+        block.get("building") == building
+        and block.get("day") == day
+        and block.get("room") == room
+        and block.get("lesson_type") != "trial"
+        for block in state.get("blocks", [])
+        if isinstance(block, dict)
+    )
 
 
 def delete_column_blocks(building, day, room):

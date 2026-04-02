@@ -12,6 +12,35 @@ var resizeOrigSpan = 0;     // data-row-span value at mousedown
 var resizeStartRow = 0;     // data-start-row value at mousedown (read-only during resize)
 var RESIZE_ZONE_PX = 6;     // pixels from bottom edge that trigger resize mode
 
+function getResizeAuthUi() {
+    return window.SchedGenAuthUI || null;
+}
+
+function getResizeRole() {
+    return window.USER_ROLE || 'viewer';
+}
+
+function getResizeLessonType(block) {
+    return block ? (block.getAttribute('data-lesson-type') || 'group') : 'group';
+}
+
+function canResizeBlock(block) {
+    var authUi = getResizeAuthUi();
+    var role = getResizeRole();
+    var lessonType = getResizeLessonType(block);
+
+    if (authUi && typeof authUi.isEditMode === 'function' && !authUi.isEditMode()) {
+        return false;
+    }
+    if (authUi && typeof authUi.canMutateBlock === 'function') {
+        return authUi.canMutateBlock(role, block);
+    }
+    if (role === 'admin') return true;
+    if (role === 'editor') return lessonType !== 'group';
+    if (role === 'organizer') return lessonType === 'trial';
+    return false;
+}
+
 Object.defineProperty(window, 'isResizing', {
     get: function() { return isResizing; },
     configurable: true
@@ -80,7 +109,7 @@ function handleResizeMouseMove(e) {
         if (b !== block) b.removeAttribute('data-resize-hover');
     });
 
-    if (block && !window.editDialogOpen) {
+    if (block && !window.editDialogOpen && canResizeBlock(block)) {
         if (isInResizeZone(block, e.clientY)) {
             block.setAttribute('data-resize-hover', '1');
         } else {
@@ -98,6 +127,7 @@ function handleResizeMouseDown(e) {
     var target = e.target;
     var block = target.closest ? target.closest('.activity-block') : null;
     if (!block) return;
+    if (!canResizeBlock(block)) return;
 
     if (!isInResizeZone(block, e.clientY)) return;
 

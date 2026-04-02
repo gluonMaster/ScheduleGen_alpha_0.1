@@ -9,6 +9,89 @@ from datetime import datetime
 from lesson_type_utils import classify_lesson_type
 
 
+_COLUMN_ALIASES = {
+    'занятие': 'subject',
+    'subject': 'subject',
+    'группа': 'group',
+    'group': 'group',
+    'students': 'group',
+    'преподаватель': 'teacher',
+    'teacher': 'teacher',
+    'кабинет': 'room',
+    'room': 'room',
+    'здание': 'building',
+    'building': 'building',
+    'день': 'day',
+    'day': 'day',
+    'начало': 'start_time',
+    'start_time': 'start_time',
+    'конец': 'end_time',
+    'end_time': 'end_time',
+    'продолжительность': 'duration',
+    'duration': 'duration',
+    'тип занятия': 'lesson_type',
+    'lesson_type': 'lesson_type',
+    'даты (json)': 'trial_dates_json',
+    'trial_dates_json': 'trial_dates_json',
+}
+
+_COLUMN_ORDER = [
+    'subject',
+    'group',
+    'teacher',
+    'room',
+    'building',
+    'day',
+    'start_time',
+    'end_time',
+    'duration',
+    'lesson_type',
+    'trial_dates_json',
+]
+
+
+def _normalize_columns(df):
+    rename_map = {}
+    for col in df.columns:
+        normalized = _COLUMN_ALIASES.get(str(col).strip().lower())
+        if normalized and col != normalized:
+            rename_map[col] = normalized
+    normalized_df = df.rename(columns=rename_map) if rename_map else df
+
+    positional_map = {}
+    normalized_columns = list(normalized_df.columns)
+    for idx, canonical in enumerate(_COLUMN_ORDER[:len(normalized_columns)]):
+        current = normalized_columns[idx]
+        if current == canonical or canonical in normalized_df.columns:
+            continue
+        positional_map[current] = canonical
+
+    return normalized_df.rename(columns=positional_map) if positional_map else normalized_df
+
+
+def _normalize_lesson_type_value(value):
+    if value is None or pd.isna(value):
+        return ''
+    return str(value).strip().lower()
+
+
+def _effective_lesson_types(df):
+    explicit_types = None
+    if 'lesson_type' in df.columns:
+        explicit_types = df['lesson_type'].apply(_normalize_lesson_type_value)
+
+    if 'subject' not in df.columns:
+        return explicit_types
+
+    classified_types = df['subject'].apply(
+        lambda s: classify_lesson_type(str(s) if s is not None else '')
+    )
+
+    if explicit_types is None:
+        return classified_types
+    return explicit_types.where(explicit_types != '', classified_types)
+
+
 def load_data(excel_file_path):
     """
     Загружает данные расписания из Excel-файла
@@ -21,6 +104,7 @@ def load_data(excel_file_path):
     """
     # Загружаем данные с листа Schedule
     df = pd.read_excel(excel_file_path, sheet_name='Schedule')
+    df = _normalize_columns(df)
     
     # Проверяем структуру данных
     required_columns = [
@@ -32,6 +116,9 @@ def load_data(excel_file_path):
     for col in required_columns:
         if col not in df.columns:
             raise ValueError(f"В таблице отсутствует обязательный столбец '{col}'")
+
+    if 'lesson_type' in df.columns:
+        df['lesson_type'] = df['lesson_type'].apply(_normalize_lesson_type_value)
     
     # Убедимся, что start_time и end_time имеют правильный формат времени
     if not pd.api.types.is_datetime64_dtype(df['start_time']):
@@ -52,25 +139,28 @@ def filter_by_lesson_type(df, lesson_type_filter='all'):
     Filters a schedule DataFrame by lesson type.
 
     Args:
-        df: DataFrame with a 'subject' column.
-        lesson_type_filter: one of 'all', 'group', 'individual', 'nachhilfe', 'non-group'.
+        df: DataFrame with a 'subject' column and optional 'lesson_type' column.
+        lesson_type_filter: one of 'all', 'group', 'individual', 'nachhilfe', 'trial', 'non-group'.
 
     Returns:
         Filtered DataFrame (original df returned unchanged for filter='all').
-        If the 'subject' column is absent, returns df unchanged regardless of filter.
+        Trial filtering uses the explicit 'lesson_type' column when present.
+        If filter='trial' and 'lesson_type' is absent, returns an empty DataFrame.
     """
     if lesson_type_filter == 'all':
         return df
-    if 'subject' not in df.columns:
+
+    if lesson_type_filter == 'trial':
+        if 'lesson_type' not in df.columns:
+            return df.iloc[0:0].reset_index(drop=True)
+    effective_types = _effective_lesson_types(df)
+    if effective_types is None:
         return df
+
     if lesson_type_filter == 'non-group':
-        mask = df['subject'].apply(
-            lambda s: classify_lesson_type(str(s) if s is not None else '') in ('individual', 'nachhilfe')
-        )
+        mask = effective_types.isin(('individual', 'nachhilfe', 'trial'))
     else:
-        mask = df['subject'].apply(
-            lambda s: classify_lesson_type(str(s) if s is not None else '') == lesson_type_filter
-        )
+        mask = effective_types == lesson_type_filter
     return df[mask].reset_index(drop=True)
 
 
@@ -125,6 +215,8 @@ def process_schedule_data(df):
                 'start_time_mins': time_to_minutes(row['start_time']),
                 'end_time_mins':   time_to_minutes(row['end_time'])
             }
+            if 'lesson_type' in day_schedule.columns and pd.notna(row['lesson_type']):
+                lesson['lesson_type'] = str(row['lesson_type']).strip().lower()
             lessons.append(lesson)
         
         schedule_by_day[day] = lessons

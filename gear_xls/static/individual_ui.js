@@ -7,6 +7,8 @@
   var pendingDragStart = null;
   var activeDrag = null;
   var pendingResize = null;
+  var hoveredManagedBlock = null;
+  var managedLegacyDragReleaseTimer = null;
 
   function authUi() {
     return window.SchedGenAuthUI || null;
@@ -26,6 +28,42 @@
 
   function isInEditMode() {
     return !!(authUi() && authUi().isEditMode() && isEditableRole());
+  }
+
+  function canRoleMutateBlock(role, block) {
+    var lessonType = getBlockLessonType(block);
+
+    if (role === "admin") {
+      return true;
+    }
+    if (role === "editor") {
+      return lessonType !== "group";
+    }
+    if (role === "organizer") {
+      return lessonType === "trial";
+    }
+    return false;
+  }
+
+  function canCurrentRoleMutateBlock(block) {
+    return canRoleMutateBlock(currentRole(), block);
+  }
+
+  function getMutationDeniedMessage(action, block) {
+    var role = currentRole();
+    var lessonType = getBlockLessonType(block);
+
+    if (role === "organizer") {
+      return action === "delete"
+        ? "Организатор может удалять только пробные/разовые занятия."
+        : "Организатор может редактировать только пробные/разовые занятия.";
+    }
+    if (role === "editor" && lessonType === "group") {
+      return action === "delete"
+        ? "Недостаточно прав для удаления групповых занятий."
+        : "Недостаточно прав для изменения этого типа занятия.";
+    }
+    return "Недостаточно прав для этого действия.";
   }
 
   function handleSessionExpired() {
@@ -73,9 +111,11 @@
     if (!authUi()) {
       return;
     }
+    ensureExplicitLessonTypeUpdater();
     attachOpenEditDialogHook();
     attachGlobalInterceptors();
     attachManagedDragHandlers();
+    attachCreateDialogEnhancer();
     window.refreshIndividualLayer = refreshIndividualLayer;
     window.SchedGenIndividualUI = {
       getIndividualRevision: function () {
@@ -85,6 +125,331 @@
       refreshIndividualLayer: refreshIndividualLayer,
     };
     refreshIndividualLayer();
+  }
+
+  function ensureExplicitLessonTypeUpdater() {
+    var originalUpdate;
+
+    if (window.__schedgenExplicitLessonTypeUpdaterInstalled) {
+      return;
+    }
+
+    originalUpdate =
+      typeof window.updateBlockLessonType === "function"
+        ? window.updateBlockLessonType
+        : null;
+
+    window.updateBlockLessonType = function (block) {
+      var explicitType;
+
+      if (!block) {
+        return;
+      }
+
+      explicitType = (block.getAttribute("data-lesson-type") || "").trim();
+      if (
+        block.getAttribute("data-block-id") &&
+        explicitType &&
+        explicitType !== "group"
+      ) {
+        syncLessonTypeClass(block, explicitType);
+        return explicitType;
+      }
+
+      if (originalUpdate) {
+        originalUpdate(block);
+      } else {
+        block.setAttribute("data-lesson-type", inferLessonType(getBlockSubject(block)));
+      }
+
+      syncLessonTypeClass(
+        block,
+        (block.getAttribute("data-lesson-type") || "").trim() || "group"
+      );
+      return block.getAttribute("data-lesson-type") || "group";
+    };
+
+    window.__schedgenExplicitLessonTypeUpdaterInstalled = true;
+  }
+
+  function syncLessonTypeClass(block, lessonType) {
+    var normalizedType = (lessonType || "group").trim() || "group";
+
+    if (!block) {
+      return;
+    }
+
+    block.className = (block.className || "")
+      .replace(/\slesson-type-(group|individual|nachhilfe|trial)\b/g, "")
+      .trim();
+    block.classList.add("lesson-type-" + normalizedType);
+    block.setAttribute("data-lesson-type", normalizedType);
+  }
+
+  function setLegacyDragPrevention(enabled) {
+    if (
+      typeof window.DragDropService !== "undefined" &&
+      window.DragDropService &&
+      typeof window.DragDropService.setPreventDrag === "function"
+    ) {
+      window.DragDropService.setPreventDrag(!!enabled);
+    }
+  }
+
+  function releaseLegacyDragPrevention(delay) {
+    if (managedLegacyDragReleaseTimer) {
+      clearTimeout(managedLegacyDragReleaseTimer);
+      managedLegacyDragReleaseTimer = null;
+    }
+
+    managedLegacyDragReleaseTimer = window.setTimeout(function () {
+      setLegacyDragPrevention(false);
+      managedLegacyDragReleaseTimer = null;
+    }, typeof delay === "number" ? delay : 0);
+  }
+
+  function cancelLegacyResize(event) {
+    if (typeof handleResizeMouseUp === "function" && window.isResizing) {
+      try {
+        handleResizeMouseUp(event || {});
+      } catch (error) {
+        console.warn("Failed to cancel legacy resize for managed block:", error);
+      }
+    }
+  }
+
+  function applyManagedBlockInteractivity(block, mode) {
+    var canInteract;
+
+    if (!block || !block.getAttribute("data-block-id")) {
+      return;
+    }
+
+    canInteract =
+      isInEditMode() &&
+      !window.editDialogOpen &&
+      !document.body.classList.contains("delete-mode") &&
+      canCurrentRoleMutateBlock(block);
+
+    if (!canInteract) {
+      block.removeAttribute("data-resize-hover");
+      block.classList.remove("resizing");
+      block.style.cursor = "default";
+      return;
+    }
+
+    if (mode === "resize") {
+      block.setAttribute("data-resize-hover", "1");
+      block.style.cursor = "ns-resize";
+      return;
+    }
+
+    block.removeAttribute("data-resize-hover");
+    block.style.cursor = "move";
+  }
+
+  function refreshManagedBlockInteractivity(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+
+    scope.querySelectorAll(".activity-block[data-block-id]").forEach(function (block) {
+      applyManagedBlockInteractivity(block);
+    });
+  }
+
+  function handleManagedPointerMove(event) {
+    var block =
+      event.target && event.target.closest
+        ? event.target.closest(".activity-block[data-block-id]")
+        : null;
+
+    if (hoveredManagedBlock && hoveredManagedBlock !== block) {
+      applyManagedBlockInteractivity(hoveredManagedBlock);
+    }
+
+    hoveredManagedBlock = block || null;
+    if (!block) {
+      return;
+    }
+
+    if (pendingResize && pendingResize.blockId === block.getAttribute("data-block-id")) {
+      applyManagedBlockInteractivity(block, "resize");
+      return;
+    }
+    if (activeDrag && activeDrag.block === block) {
+      applyManagedBlockInteractivity(block, "move");
+      return;
+    }
+
+    applyManagedBlockInteractivity(
+      block,
+      isInManagedResizeZone(block, event.clientY) ? "resize" : "move"
+    );
+  }
+
+  function attachCreateDialogEnhancer() {
+    if (document.body.__trialCreateEnhancerAttached) {
+      return;
+    }
+    document.body.__trialCreateEnhancerAttached = true;
+
+    new MutationObserver(function () {
+      var form = document.getElementById("create-form");
+      if (!form || form.__trialCreateEnhanced || form.__trialCreateEnhancing) {
+        return;
+      }
+      enhanceCreateDialog(form);
+    }).observe(document.body, { childList: true, subtree: true });
+
+    enhanceCreateDialog(document.getElementById("create-form"));
+  }
+
+  function enhanceCreateDialog(form) {
+    var enhancementSucceeded = false;
+    var role;
+    var buttonRow;
+    var columnField;
+    var anchor;
+    var typeWrapper;
+    var typeSelect = form ? form.querySelector("#new-lesson-type") : null;
+    var typeHint = form ? form.querySelector("#create-lesson-type-hint") : null;
+    var datesSection = form ? form.querySelector("#create-trial-dates-section") : null;
+    var trialOption;
+    var autoOption;
+
+    if (!form || !window.TrialUI || form.__trialCreateEnhanced || form.__trialCreateEnhancing) {
+      return;
+    }
+    form.__trialCreateEnhancing = true;
+    form.setAttribute("autocomplete", "off");
+
+    window.TrialUI.injectTrialStyles();
+    role = currentRole();
+
+    if (!typeSelect) {
+      buttonRow = form.querySelector(".button-row");
+      columnField = form.querySelector("#new-column");
+      anchor = columnField && columnField.closest ? columnField.closest("label") : null;
+
+      typeWrapper = document.createElement("label");
+      typeWrapper.id = "create-lesson-type-wrapper";
+      typeWrapper.textContent = "Тип занятия:";
+
+      typeSelect = document.createElement("select");
+      typeSelect.id = "new-lesson-type";
+      typeSelect.style.marginTop = "5px";
+
+      if (role === "organizer") {
+        trialOption = document.createElement("option");
+        trialOption.value = "trial";
+        trialOption.textContent = "Пробное / разовое (trial)";
+        typeSelect.appendChild(trialOption);
+        typeSelect.value = "trial";
+        typeSelect.disabled = true;
+      } else {
+        autoOption = document.createElement("option");
+        autoOption.value = "";
+        autoOption.textContent = "Авто (по предмету)";
+        trialOption = document.createElement("option");
+        trialOption.value = "trial";
+        trialOption.textContent = "Пробное / разовое (trial)";
+        typeSelect.appendChild(autoOption);
+        typeSelect.appendChild(trialOption);
+      }
+
+      typeHint = document.createElement("small");
+      typeHint.id = "create-lesson-type-hint";
+      typeHint.style.marginTop = "6px";
+      typeHint.style.color = "#51606b";
+      typeHint.style.fontSize = "12px";
+      typeHint.style.lineHeight = "1.4";
+
+      typeWrapper.appendChild(typeSelect);
+      typeWrapper.appendChild(typeHint);
+      form.insertBefore(
+        typeWrapper,
+        anchor && anchor.parentNode === form ? anchor.nextSibling : buttonRow
+      );
+    }
+
+    if (!datesSection) {
+      datesSection = window.TrialUI.buildTrialDatesSection([]);
+      datesSection.id = "create-trial-dates-section";
+      form.insertBefore(datesSection, typeSelect.closest("label").nextSibling);
+    }
+
+    try {
+      if (!typeSelect.__trialCreateBound) {
+        typeSelect.__trialCreateBound = true;
+        typeSelect.addEventListener("change", function () {
+          syncCreateDialogTrialUi(form);
+        });
+      }
+
+      syncCreateDialogTrialUi(form, role === "organizer");
+      enhancementSucceeded = true;
+    } finally {
+      form.__trialCreateEnhancing = false;
+      if (enhancementSucceeded) {
+        form.__trialCreateEnhanced = true;
+      }
+    }
+  }
+
+  function syncCreateDialogTrialUi(form, forceTrialColor) {
+    var typeSelect = form ? form.querySelector("#new-lesson-type") : null;
+    var typeHint = form ? form.querySelector("#create-lesson-type-hint") : null;
+    var datesSection = form ? form.querySelector("#create-trial-dates-section") : null;
+    var isTrial = !!(typeSelect && typeSelect.value === "trial");
+
+    if (!form || !typeSelect || !datesSection) {
+      return;
+    }
+
+    datesSection.style.display = isTrial ? "" : "none";
+    if (typeHint) {
+      typeHint.textContent =
+        currentRole() === "organizer"
+          ? "Организатор создаёт только trial-занятия. Ниже обязательно укажите даты проведения."
+          : isTrial
+            ? "Для trial-занятия ниже нужно указать одну или несколько дат проведения."
+            : "Оставьте авто-режим для обычного индивидуального или группового занятия.";
+    }
+
+    if (isTrial) {
+      maybeApplyCreateTrialColor(form, !!forceTrialColor);
+    }
+  }
+
+  function maybeApplyCreateTrialColor(form, force) {
+    var currentColor = (getFieldValue(form, "#color-value") || "").trim().toUpperCase();
+    var regularDefault = defaultColor("group").toUpperCase();
+    var trialDefault = defaultColor("trial").toUpperCase();
+
+    if (!force && currentColor && currentColor !== regularDefault) {
+      return;
+    }
+
+    setCreateDialogColor(form, trialDefault);
+  }
+
+  function setCreateDialogColor(form, color) {
+    var colorValue = form ? form.querySelector("#color-value") : null;
+    var colorPicker = form ? form.querySelector("#custom-color-picker") : null;
+
+    if (colorValue) {
+      colorValue.value = color;
+    }
+    if (colorPicker) {
+      colorPicker.value = color;
+    }
+    if (form) {
+      form.querySelectorAll(".color-option").forEach(function (option) {
+        option.classList.toggle(
+          "selected",
+          (option.getAttribute("data-color") || "").toUpperCase() === color
+        );
+      });
+    }
   }
 
   function attachGlobalInterceptors() {
@@ -151,7 +516,9 @@
       return;
     }
     document.body.__individualManagedDragAttached = true;
-    document.addEventListener("mousedown", handleManagedResizeStart, true);
+    document.addEventListener("mousedown", interceptManagedBlockPointerDown, true);
+    document.addEventListener("dblclick", interceptManagedBlockDoubleClick, true);
+    document.addEventListener("mousemove", handleManagedPointerMove, true);
     document.addEventListener("mousemove", handleManagedDragMove, true);
     document.addEventListener("mouseup", handleManagedDragEnd, true);
     document.addEventListener("mouseup", handleManagedResizeEnd);
@@ -217,12 +584,13 @@
     if (typeof reapplyLessonTypeFilter === "function") {
       reapplyLessonTypeFilter();
     }
+    refreshManagedBlockInteractivity(document);
   }
 
   function removeIndividualBlocks() {
     document
       .querySelectorAll(
-        '.activity-block[data-block-id], .activity-block[data-lesson-type="individual"], .activity-block[data-lesson-type="nachhilfe"]'
+        '.activity-block[data-block-id], .activity-block[data-lesson-type="individual"], .activity-block[data-lesson-type="nachhilfe"], .activity-block[data-lesson-type="trial"]'
       )
       .forEach(function (block) {
         if (activeEditedBlock === block) {
@@ -268,6 +636,7 @@
     element.setAttribute("data-col-index", String(colIndex));
     element.setAttribute("data-building", building);
     element.setAttribute("data-lesson-type", block.lesson_type || "individual");
+    element.setAttribute("data-explicit-lesson-type", block.lesson_type || "individual");
     element.setAttribute("data-room", room);
     element.setAttribute("data-start-time", block.start_time || "");
     element.setAttribute("data-end-time", block.end_time || "");
@@ -280,16 +649,42 @@
       element.style.color = getContrastTextColor(element.style.backgroundColor);
     }
 
-    element.innerHTML = [
+    // Trial-specific: store dates in data attribute, apply expired style
+    if (block.lesson_type === "trial") {
+      var trialDates = Array.isArray(block.trial_dates) ? block.trial_dates : [];
+      element.setAttribute("data-trial-dates", JSON.stringify(trialDates));
+      if (window.TrialUI) {
+        window.TrialUI.injectTrialStyles();
+        if (typeof window.TrialUI.refreshTrialBlockAppearance === "function") {
+          window.TrialUI.refreshTrialBlockAppearance(element);
+        } else {
+          window.TrialUI.applyTrialExpiredStyle(element, window.TrialUI.isTrialExpired(trialDates));
+        }
+      }
+    }
+
+    var contentLines = [
       "<strong>" + escapeHtml(block.subject || "") + "</strong>",
       escapeHtml(block.teacher || ""),
       escapeHtml(block.students || ""),
       escapeHtml(room),
       escapeHtml(timeText),
-    ].join("<br>");
+    ];
+
+    // Show trial dates line in block body
+    if (block.lesson_type === "trial" && Array.isArray(block.trial_dates) && block.trial_dates.length > 0) {
+      var datesDisplay = block.trial_dates.map(function (d) {
+        var p = d.split("-");
+        return p.length === 3 ? p[2] + "." + p[1] + "." + p[0] : d;
+      }).join(", ");
+      contentLines.push("\uD83D\uDCC5 " + escapeHtml(datesDisplay));
+    }
+
+    element.innerHTML = contentLines.join("<br>");
 
     container.appendChild(element);
     attachIndividualBlockInteractions(element);
+    applyManagedBlockInteractivity(element);
 
     if (!deferLayout && typeof updateActivityPositions === "function") {
       updateActivityPositions();
@@ -328,6 +723,9 @@
     if (!isInEditMode()) {
       return;
     }
+    if (!canCurrentRoleMutateBlock(block)) {
+      return;
+    }
 
     rect = block.getBoundingClientRect();
     if (event.clientY >= rect.bottom - 8) {
@@ -336,6 +734,11 @@
 
     clientX = event.clientX;
     clientY = event.clientY;
+    queueManagedDragStart(block, clientX, clientY);
+    event.preventDefault();
+  }
+
+  function queueManagedDragStart(block, clientX, clientY) {
     clearPendingDragStart();
     pendingDragStart = {
       block: block,
@@ -345,7 +748,66 @@
         beginManagedDrag(block, clientX, clientY);
       }, 200),
     };
-    event.preventDefault();
+  }
+
+  function interceptManagedBlockPointerDown(event) {
+    var block =
+      event.target && event.target.closest
+        ? event.target.closest(".activity-block[data-block-id]")
+        : null;
+
+    if (!block || event.button !== 0 || !isInEditMode()) {
+      return;
+    }
+
+    clearPendingDragStart();
+    setLegacyDragPrevention(true);
+    cancelLegacyResize(event);
+    stopDomMutation(event);
+
+    if (
+      !canCurrentRoleMutateBlock(block) ||
+      window.editDialogOpen ||
+      document.body.classList.contains("delete-mode")
+    ) {
+      pendingResize = null;
+      applyManagedBlockInteractivity(block);
+      return;
+    }
+
+    if (isInManagedResizeZone(block, event.clientY)) {
+      pendingResize = {
+        blockId: block.getAttribute("data-block-id") || "",
+        snapshot: captureBlockSnapshot(block),
+      };
+      applyManagedBlockInteractivity(block, "resize");
+      return;
+    }
+
+    applyManagedBlockInteractivity(block, "move");
+    queueManagedDragStart(block, event.clientX, event.clientY);
+  }
+
+  function interceptManagedBlockDoubleClick(event) {
+    var block =
+      event.target && event.target.closest
+        ? event.target.closest(".activity-block[data-block-id]")
+        : null;
+
+    if (!block || !isInEditMode()) {
+      return;
+    }
+
+    setLegacyDragPrevention(true);
+    stopDomMutation(event);
+    clearPendingDragStart();
+    cancelManagedDrag(block);
+    if (document.body.classList.contains("delete-mode")) {
+      releaseLegacyDragPrevention(150);
+      return;
+    }
+    openManagedEditDialog(block);
+    releaseLegacyDragPrevention(300);
   }
 
   function handleIndividualBlockDoubleClick(block, event) {
@@ -376,6 +838,7 @@
       !block ||
       event.button !== 0 ||
       !isInEditMode() ||
+      !canCurrentRoleMutateBlock(block) ||
       window.editDialogOpen ||
       document.body.classList.contains("delete-mode")
     ) {
@@ -399,6 +862,7 @@
 
     if (!resize || !resize.blockId) {
       pendingResize = null;
+      releaseLegacyDragPrevention();
       return;
     }
     pendingResize = null;
@@ -406,6 +870,7 @@
       '.activity-block[data-block-id="' + cssEscape(resize.blockId) + '"]'
     );
     if (!block) {
+      releaseLegacyDragPrevention();
       return;
     }
 
@@ -414,6 +879,11 @@
       resize.snapshot,
       "Не удалось сохранить новую длительность занятия из-за ошибки сети."
     );
+    finalizeManagedResize(block);
+  }
+  function finalizeManagedResize(block) {
+    applyManagedBlockInteractivity(block);
+    releaseLegacyDragPrevention();
   }
 
   function isInManagedResizeZone(block, clientY) {
@@ -424,7 +894,12 @@
   function beginManagedDrag(block, clientX, clientY) {
     var rect;
 
-    if (!block || !block.parentElement || !isInEditMode()) {
+    if (
+      !block ||
+      !block.parentElement ||
+      !isInEditMode() ||
+      !canCurrentRoleMutateBlock(block)
+    ) {
       clearPendingDragStart();
       return;
     }
@@ -471,6 +946,7 @@
       Math.abs(newTop - drag.initialTop) > 1;
     drag.block.style.left = newLeft + "px";
     drag.block.style.top = newTop + "px";
+    applyManagedBlockInteractivity(drag.block, "move");
     event.preventDefault();
   }
 
@@ -479,12 +955,15 @@
 
     if (!drag) {
       clearPendingDragStart();
+      releaseLegacyDragPrevention();
       return;
     }
 
     activeDrag = null;
     drag.block.style.opacity = "1";
     if (!drag.moved) {
+      applyManagedBlockInteractivity(drag.block);
+      releaseLegacyDragPrevention();
       return;
     }
 
@@ -495,6 +974,8 @@
     }
 
     persistDraggedBlock(drag);
+    applyManagedBlockInteractivity(drag.block);
+    releaseLegacyDragPrevention();
     event.preventDefault();
   }
 
@@ -507,11 +988,25 @@
     }
     if (activeDrag.block) {
       activeDrag.block.style.opacity = "1";
+      applyManagedBlockInteractivity(activeDrag.block);
     }
     activeDrag = null;
+    releaseLegacyDragPrevention();
   }
 
   function openManagedEditDialog(block) {
+    if (block && !canCurrentRoleMutateBlock(block)) {
+      alert(getMutationDeniedMessage("edit", block));
+      return;
+    }
+    if (
+      block &&
+      currentRole() === "organizer" &&
+      block.getAttribute("data-lesson-type") !== "trial"
+    ) {
+      alert("Организатор может редактировать только пробные/разовые занятия.");
+      return;
+    }
     if (!block || typeof window.openEditDialog !== "function") {
       return;
     }
@@ -534,6 +1029,7 @@
     }
 
     blockId = block.getAttribute("data-block-id") || "";
+    form.setAttribute("autocomplete", "off");
     form.__editedBlock = block;
     if (blockId) {
       form.setAttribute("data-block-id", blockId);
@@ -572,6 +1068,7 @@
         "data-day": block.getAttribute("data-day"),
         "data-col-index": block.getAttribute("data-col-index"),
         "data-lesson-type": block.getAttribute("data-lesson-type"),
+        "data-trial-dates": block.getAttribute("data-trial-dates"),
         "data-room": block.getAttribute("data-room"),
         "data-start-row": block.getAttribute("data-start-row"),
         "data-row-span": block.getAttribute("data-row-span"),
@@ -635,7 +1132,15 @@
       return null;
     }
 
-    return {
+    var trialDatesRaw = block.getAttribute("data-trial-dates");
+    var trialDates;
+    try {
+      trialDates = trialDatesRaw ? JSON.parse(trialDatesRaw) : undefined;
+    } catch (e) {
+      trialDates = undefined;
+    }
+
+    var payload = {
       building: (block.getAttribute("data-building") || "").trim(),
       day: (block.getAttribute("data-day") || "").trim(),
       room: stripHtml(parts[3] || "").trim(),
@@ -650,6 +1155,10 @@
       color: block.style.backgroundColor || defaultColor(lessonType),
       col_index: colIndex >= 0 ? colIndex : undefined,
     };
+    if (lessonType === "trial" && Array.isArray(trialDates)) {
+      payload.trial_dates = trialDates;
+    }
+    return payload;
   }
 
   function persistDraggedBlock(drag) {
@@ -803,6 +1312,12 @@
       return;
     }
 
+    if (payload.lesson_type !== "trial" && role === "organizer") {
+      stopDomMutation(event);
+      alert("Организатор может создавать только пробные/разовые занятия.");
+      return;
+    }
+
     stopDomMutation(event);
     if (!isInEditMode()) {
       alert(
@@ -860,6 +1375,12 @@
       return;
     }
 
+    if (currentLessonType !== "trial" && currentRole() === "organizer") {
+      stopDomMutation(event);
+      alert("Организатор может редактировать только пробные/разовые занятия.");
+      return;
+    }
+
     if (!blockId && currentLessonType === "group" && payload.lesson_type === "group") {
       return;
     }
@@ -914,11 +1435,23 @@
     blockId = block.getAttribute("data-block-id");
     lessonType = getBlockLessonType(block);
 
+    if (!canCurrentRoleMutateBlock(block)) {
+      stopDomMutation(event);
+      alert(getMutationDeniedMessage("delete", block));
+      return;
+    }
+
     if (!blockId && lessonType === "group") {
       if (currentRole() === "editor") {
         stopDomMutation(event);
         alert("Недостаточно прав для удаления групповых занятий.");
       }
+      return;
+    }
+
+    if (lessonType !== "trial" && currentRole() === "organizer") {
+      stopDomMutation(event);
+      alert("Организатор может удалять только пробные/разовые занятия.");
       return;
     }
 
@@ -1104,6 +1637,15 @@
       return;
     }
 
+    if (currentRole() === "organizer" && columnHasNonTrialBlocks(container, building, day, colIndex)) {
+      alert(
+        "Нельзя удалить кабинет " +
+          room +
+          ": он содержит занятия других типов."
+      );
+      return;
+    }
+
     if (
       !confirm(
         "Удалить колонку " +
@@ -1156,21 +1698,47 @@
       return null;
     }
 
-    return {
+    var resolvedType = resolveCreateLessonType(form);
+
+    var createPayload = {
       building: building,
       day: day,
       room: room,
       subject: subject,
       teacher: teacher,
       students: students,
-      lesson_type: inferLessonType(subject),
+      lesson_type: resolvedType,
       start_time: timeInfo.start_time,
       end_time: timeInfo.end_time,
       start_row: timeInfo.start_row,
       row_span: timeInfo.row_span,
-      color: color || defaultColor(inferLessonType(subject)),
+      color: color || defaultColor(resolvedType),
       col_index: colIndex >= 0 ? colIndex : undefined,
     };
+    if (resolvedType === "trial" && window.TrialUI) {
+      createPayload.trial_dates = collectCreateTrialDates(form);
+    }
+    return createPayload;
+  }
+
+  function resolveCreateLessonType(form) {
+    var typeSelectEl = form ? form.querySelector("#new-lesson-type") : null;
+    var explicitType = typeSelectEl ? typeSelectEl.value : "";
+
+    if (currentRole() === "organizer" || explicitType === "trial") {
+      return "trial";
+    }
+    return inferLessonType(getFieldValue(form, "#new-subject"));
+  }
+
+  function collectCreateTrialDates(form) {
+    var datesSectionEl = form ? form.querySelector("#create-trial-dates-section") : null;
+    return window.TrialUI ? window.TrialUI.collectTrialDates(datesSectionEl || form) : [];
+  }
+
+  function collectEditTrialDates(form) {
+    var datesSectionEl = form ? form.querySelector("#edit-trial-dates-section") : null;
+    return window.TrialUI ? window.TrialUI.collectTrialDates(datesSectionEl || form) : [];
   }
 
   function buildEditPayload(form, block) {
@@ -1191,41 +1759,70 @@
       return null;
     }
 
-    return {
+    var currentType = getBlockLessonType(block);
+    var editResolvedType = currentType === "trial" ? "trial" : inferLessonType(subject);
+
+    var editPayload = {
       building: building,
       day: day,
       room: room,
       subject: subject,
       teacher: teacher,
       students: students,
-      lesson_type: inferLessonType(subject),
+      lesson_type: editResolvedType,
       start_time: timeInfo.start_time,
       end_time: timeInfo.end_time,
       start_row: timeInfo.start_row,
       row_span: timeInfo.row_span,
-      color: block.style.backgroundColor || defaultColor(inferLessonType(subject)),
+      color: block.style.backgroundColor || defaultColor(editResolvedType),
       col_index: colIndex >= 0 ? colIndex : undefined,
     };
+    if (editResolvedType === "trial" && window.TrialUI) {
+      var editDatesSection = form ? form.querySelector("#edit-trial-dates-section") : null;
+      editPayload.trial_dates = window.TrialUI.collectTrialDates(editDatesSection || form);
+    }
+    return editPayload;
   }
 
   function getCreateValidationError(form) {
-    return validateBlockInputs(
+    var error = validateBlockInputs(
       getFieldValue(form, "#new-building"),
       getFieldValue(form, "#new-day"),
       getFieldValue(form, "#new-room").trim(),
       getFieldValue(form, "#new-subject"),
       getFieldValue(form, "#new-time").trim()
     );
+
+    if (error) {
+      return error;
+    }
+    if (resolveCreateLessonType(form) === "trial" && collectCreateTrialDates(form).length === 0) {
+      return "Для trial-занятия нужно указать хотя бы одну дату проведения.";
+    }
+    return null;
   }
 
   function getEditValidationError(form) {
-    return validateBlockInputs(
+    var editedBlock = resolveEditedBlock(form);
+    var error = validateBlockInputs(
       getFieldValue(form, "#edit-building"),
       "x",
       getFieldValue(form, "#edit-room").trim(),
       getFieldValue(form, "#edit-subject"),
       getFieldValue(form, "#edit-time").trim()
     );
+
+    if (error) {
+      return error;
+    }
+    if (
+      editedBlock &&
+      getBlockLessonType(editedBlock) === "trial" &&
+      collectEditTrialDates(form).length === 0
+    ) {
+      return "Для trial-занятия нужно указать хотя бы одну дату проведения.";
+    }
+    return null;
   }
 
   function validateBlockInputs(building, day, room, subject, timeRange) {
@@ -1260,8 +1857,16 @@
       alert(forbiddenMessage);
       return;
     }
+    if (result.status === 400 && error === "Forbidden lesson_type") {
+      alert(forbiddenMessage);
+      return;
+    }
     if (result.status === 403 && code === "COLUMN_HAS_GROUP_LESSONS") {
       alert("Нельзя удалить кабинет: в опубликованном расписании есть групповые занятия.");
+      return;
+    }
+    if (result.status === 403 && code === "COLUMN_HAS_NON_TRIAL_BLOCKS") {
+      alert("Нельзя удалить кабинет: в колонке есть занятия, кроме trial.");
       return;
     }
     if (result.status === 404 && code === "NOT_FOUND") {
@@ -1382,6 +1987,23 @@
     });
   }
 
+  function columnHasNonTrialBlocks(container, building, day, colIndex) {
+    return Array.from(
+      container.querySelectorAll(
+        '.activity-block[data-building="' +
+          cssEscape(building) +
+          '"][data-day="' +
+          cssEscape(day) +
+          '"]'
+      )
+    ).some(function (block) {
+      return (
+        toInteger(block.getAttribute("data-col-index"), -1) === colIndex &&
+        getBlockLessonType(block) !== "trial"
+      );
+    });
+  }
+
   function resolveHeaderDay(th) {
     var dayClass = Array.from(th.classList).find(function (cls) {
       return cls.indexOf("day-") === 0;
@@ -1403,7 +2025,9 @@
   }
 
   function defaultColor(lessonType) {
-    return lessonType === "nachhilfe" ? "#D8F0FF" : "#FFF1BF";
+    if (lessonType === "nachhilfe") return "#D8F0FF";
+    if (lessonType === "trial") return "#E8F5E9";
+    return "#FFF1BF";
   }
 
   function showNotice(message, type, duration) {

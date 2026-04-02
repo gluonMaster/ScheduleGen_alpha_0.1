@@ -76,12 +76,13 @@ Flask session (login, display_name, role)
   ↓
 login_required decorator  →  all protected routes
 role_required("admin")    →  /export_to_excel, /api/schedule/publish, DELETE /api/lock
-role_required("admin","editor") → /api/blocks, /api/columns, /api/lock/acquire
+role_required("admin","editor","organizer") → lock acquisition and non-group editing flows
 ```
 
 Roles:
 - `viewer` — read-only; cannot acquire lock, cannot edit
-- `editor` — can acquire lock and manage individual/nachhilfe lessons; cannot touch group blocks or publish
+- `organizer` — can acquire lock, manage only `trial`, add columns, delete only empty or trial-only columns
+- `editor` — can acquire lock, manage `individual`/`nachhilfe`/`trial`, add columns, delete columns without group blocks; cannot publish
 - `admin` — full access including publish, force-release lock, Excel export
 
 ## Edit-Lock Model
@@ -404,11 +405,11 @@ This replaces the previous approach of summing `<th>` widths and applying polyno
 | GET | `/api/schedule` | `login_required` | Base blocks + individual blocks + revisions |
 | POST | `/api/schedule/publish` | `admin` | Publish base schedule (filters to `lesson_type=group`) |
 | GET | `/api/individual_lessons` | `login_required` | Current individual lesson state |
-| POST | `/api/blocks` | `admin`/`editor` + lock | Create individual block |
-| PUT | `/api/blocks/<id>` | `admin`/`editor` + lock | Update individual block |
-| DELETE | `/api/blocks/<id>` | `admin`/`editor` + lock | Delete individual block |
-| POST | `/api/columns` | `admin`/`editor` + lock | Register column add (returns ok) |
-| DELETE | `/api/columns` | `admin`/`editor` + lock | Delete column blocks; editor blocked if column has group lessons |
+| POST | `/api/blocks` | `admin`/`editor`/`organizer` + lock | Create non-group block; organizer is limited to `trial` |
+| PUT | `/api/blocks/<id>` | `admin`/`editor`/`organizer` + lock | Update non-group block; organizer is limited to `trial` |
+| DELETE | `/api/blocks/<id>` | `admin`/`editor`/`organizer` + lock | Delete non-group block; organizer is limited to `trial` |
+| POST | `/api/columns` | `admin`/`editor`/`organizer` + lock | Register column add (returns ok) |
+| DELETE | `/api/columns` | `admin`/`editor`/`organizer` + lock | Delete column blocks; editor blocked by group lessons, organizer blocked by any non-trial content |
 | POST | `/api/spiski/add` | `login_required` | Append item to a spiski file; natural-sort preserved |
 | POST | `/export_to_excel` | `admin` | Export schedule to Excel file |
 | POST | `/save_intermediate` | `admin` | Save intermediate HTML via Tkinter save dialog |

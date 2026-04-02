@@ -83,6 +83,16 @@ function initBlockEditing() {
 
 // Функция открытия диалога редактирования с поддержкой зданий
 function openEditDialog(block, origLeft, origTop, building) {
+    if (
+        typeof window.USER_ROLE !== 'undefined' &&
+        window.USER_ROLE === 'organizer' &&
+        block &&
+        block.getAttribute('data-lesson-type') !== 'trial'
+    ) {
+        alert("Организатор может редактировать только пробные/разовые занятия.");
+        return;
+    }
+
     console.log("Открытие диалога редактирования");
     
     // Устанавливаем флаг, что диалог открыт
@@ -188,6 +198,42 @@ function openEditDialog(block, origLeft, origTop, building) {
     dialogElement.className = 'dialog-overlay';
     dialogElement.innerHTML = dialogHTML;
     document.body.appendChild(dialogElement);
+
+    // --- Секция дат и кнопка конвертации для trial-блоков ---
+    var _editLessonType = block.getAttribute('data-lesson-type');
+    if (_editLessonType === 'trial' && window.TrialUI) {
+        window.TrialUI.injectTrialStyles();
+        var _editForm = dialogElement.querySelector('#edit-form');
+        var _editButtonRow = _editForm ? _editForm.querySelector('.button-row') : null;
+        if (_editForm && _editButtonRow) {
+            // Парсим trial_dates из data-атрибута блока
+            var _existingDates = [];
+            try {
+                var _raw = block.getAttribute('data-trial-dates');
+                if (_raw) _existingDates = JSON.parse(_raw);
+            } catch (e) { _existingDates = []; }
+
+            // Секция дат перед кнопками
+            var _editDatesSection = window.TrialUI.buildTrialDatesSection(_existingDates);
+            _editDatesSection.id = 'edit-trial-dates-section';
+            _editForm.insertBefore(_editDatesSection, _editButtonRow);
+        }
+
+        // Кнопка «Сделать регулярным» после button-row
+        var _currentRole = typeof window.USER_ROLE !== 'undefined' ? window.USER_ROLE : '';
+        var _allowedConvertRoles = ['admin', 'editor', 'organizer'];
+        if (_editButtonRow && _allowedConvertRoles.indexOf(_currentRole) !== -1) {
+            window.TrialUI.renderConvertButton(block, _currentRole, _editButtonRow.parentNode, function (updatedBlock) {
+                // Закрываем диалог и обновляем блок через refreshIndividualLayer
+                document.body.removeChild(dialogElement);
+                document.body.style.overflow = '';
+                window.editDialogOpen = false;
+                if (typeof window.refreshIndividualLayer === 'function') {
+                    window.refreshIndividualLayer();
+                }
+            });
+        }
+    }
 
     // === Autocomplete dropdowns (spiskiData) ===
     var subjectsList = (typeof spiskiData !== 'undefined' && spiskiData && Array.isArray(spiskiData.subjects)) ? spiskiData.subjects : [];

@@ -423,6 +423,35 @@
       .activity-block[data-lesson-type="nachhilfe"] {
          border-left: 3px solid #1976d2;
       }
+
+      .activity-block[data-lesson-type="trial"] {
+         border: 2px solid #2e7d32 !important;
+         box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 0 1px rgba(46,125,50,0.22);
+         padding-top: 18px !important;
+         overflow: hidden;
+      }
+
+      .activity-block[data-lesson-type="trial"]::before {
+         content: "TRIAL";
+         position: absolute;
+         top: 4px;
+         right: 4px;
+         padding: 2px 6px;
+         border-radius: 999px;
+         background: #1b5e20;
+         color: #fff;
+         font-size: 10px;
+         font-weight: 700;
+         letter-spacing: 0.08em;
+         z-index: 2;
+         pointer-events: none;
+      }
+
+      .activity-block[data-lesson-type="trial"] strong {
+         display: block;
+         width: 100%;
+         margin-bottom: 2px;
+      }
     </style>
     
 
@@ -447,9 +476,9 @@
 
             // Данные списков (предметы, группы, преподаватели, кабинеты)
             var spiskiData = {
-    "subjects": ["3Jahrige", "4Jahrige", "Baby", "Deutsch", "English", "Gitarre", "Ind. Mathe", "Kunst", "Logorithmika", "Mathe", "Musik", "Nachhilfe Deutsch", "Orchester", "Russish", "Schach", "Tanz", "Theater", "Ukr. Mus.", "Ukrainisch", "VSpE"],
-    "groups": ["1A", "1B", "1C", "1D", "2A", "2B", "2C", "2D", "3A", "3B", "3D", "3JA", "3JA_Log", "3JB", "3JB_Log", "4A", "4B", "4C", "4D", "4JA", "4JA_Log", "4JB", "4JB_Log", "4JC", "5A", "5B", "5C", "5D", "5G", "6A", "6B", "7A", "7B", "7C", "8D", "9A", "9B", "9C", "9D", "9G", "10A", "10B", "10C", "11A", "11B", "11E", "12C", "Baby Do", "Baby Mo", "Baby Sa", "Deutsch 5-7kl Do", "Deutsch 7-9kl Do", "Deutsch  3kl Mo", "Deutsch  4kl Mo", "Deutsch ab 5J Di", "Deutsch ab 5J Fr", "Deutsch ab 6J Fr", "Gitarre A Mo", "Gitarre B Mo", "Gitarre C Mo", "Gitarre D Do", "Gitarre E Di", "Gitarre F Di", "Kapustian Evgen", "Kunst Di 2A", "Kunst Di 4B", "Kunst Di 7A+5G", "Kunst Di 11A", "Kunst Do 9B", "Kunst Do 9G+5B", "Kunst Fr 2B", "Kunst Fr 5D+7B", "Kunst Fr 8D", "Kunst Mi 6B", "Kunst Mi 9A", "Kunst Mi StudioO", "Kunst Mi StudioP", "Kunst Mo 1A", "Kunst Mo 2D", "Kunst Mo 3A", "Kunst Mo 4A+6A", "Kunst Sa 1B", "Kunst Sa 2C", "Kunst Sa 3B", "Kunst Sa 3D+2C", "Kunst Sa 4C+10B", "Kunst Sa 4D", "Kunst Sa 5C", "Kunst Sa 7C", "Kunst Sa 9C+7C", "Kunst Sa 9D+9C+7C", "Kunst Sa 10B", "Kunst Sa 11E", "Kunst Sa StudioO", "Kunst Sa StudioP", "Mathe 2A", "Mathe 6B", "Mathe 7C", "Mathe 10B", "Musik 1B", "Musik 2C", "Orchester Fr", "Orchester Sa", "Schach Mi A", "Schach Mi B", "Schach Sa C", "Schach Sa D", "Schach Sa E", "Schach Sa F", "Schevtsova Maria", "Tanz Do 6-7J", "Tanz Do 10-11J", "Tanz Do ab 10J", "Tanz Fr 6-7J", "Tanz Fr 14-15J", "Tanz Jugentliche", "Tanz Mi 14-15J", "Tanz Mi ab 7J", "Tanz Mi ab 11J", "Tanz Mo 6-7J", "Tanz Mo 10-11J", "Tanz Sa 4J", "Tanz Sa 5J", "Tanz Sa 10-11J", "Tanz Sa 12-13J", "Tanz Sa 14-15J", "Tanz Sa Ukr", "Theater 10-12", "Theater 14-18", "Theater ab 6J", "Ukr. Tanz", "Ukrainisch Di 4-5J", "Ukrainisch Di 5-6J", "Ukrainisch Do 4-5J", "Ukrainisch Do 5-6J", "Ukrainisch Fr ab 6J", "Ukrainische Musik Di 4-5J", "Ukrainische Musik Di 5-6J", "Ukrainische Musik Do 4-5J", "Ukrainische Musik Do 5-6J", "VSpE_E", "VSpE_L"],
-    "teachers": ["Aleiev Oleg", "Anishchenko Viktoria", "Antonov Vladimir", "Audzyeenka Swietlana", "Dosenko Evgeniy", "Dykun Lüdmila", "Egorova Jana", "Eichmann Irina", "Fedorez Elena", "Fedorova Galina", "Galustian Joseff", "Gorochovska Olena", "Gutovskaia Marina", "Hans Johan", "Horn Jeny", "Hornung Lübov", "Horochovska Olena", "Karpenkov Daniil", "Khomenko Irina", "Koputska Elena", "Korneva Tatiana", "Kremenchutski Larissa", "Kremenchutski Timur", "Kuskova Viktoria", "Kutz Marina", "Leshenko Tetiana", "Melnikov Olga", "Melnikov Pavel", "Mialyk Irina", "Mustafaeva Liliia", "Müller Albina", "Müller Lüsia", "Naumova Katia", "Nepomnaschi Tatiana", "Nessel Olga", "Olekh Dima", "Olekh Katerina", "Perevoznyk Inna", "Pester Liudmila", "Rigert Nella", "Rosov Boris", "Rusol Elena", "Schadt Elena", "Shik Swetlana", "Sokolovska Natalia", "Starichuk Olha", "Stepanova Olesia", "Sukharau Natalia", "Tatarchuk Tetiana", "Tatarnikova Olha", "Tchoudnovskaia Anna", "Tsymbal Anna", "Urich Evgenia", "Vinogradova Raisa", "Wagner Galina", "Wittmer Irina", "Zelenska Olena"],
+    "subjects": ["3Jahrige", "4Jahrige", "Baby", "Deutsch", "English", "Gitarre", "Ind. Mathe", "Ind. Physik", "Kunst", "Logorithmika", "Mathe", "Musik", "Nachhilfe Deutsch", "Nachhilfe Mathe", "Orchester", "Physik", "Russish", "Schach", "Tanz", "Theater", "Ukr. Mus.", "Ukrainisch", "VSpE"],
+    "groups": ["1A", "1B", "1C", "1D", "2A", "2B", "2C", "2D", "3A", "3B", "3D", "3JA", "3JA_Log", "3JB", "3JB_Log", "4A", "4B", "4C", "4D", "4JA", "4JA_Log", "4JB", "4JB_Log", "4JC", "5A", "5B", "5C", "5D", "5G", "6A", "6B", "7A", "7B", "7C", "8D", "9A", "9B", "9C", "9D", "9G", "10A", "10B", "10C", "11A", "11B", "11E", "12C", "Baby Do", "Baby Mo", "Baby Sa", "Desortzev Oleg", "Deutsch 5-7kl Do", "Deutsch 7-9kl Do", "Deutsch  3kl Mo", "Deutsch  4kl Mo", "Deutsch ab 5J Di", "Deutsch ab 5J Fr", "Deutsch ab 6J Fr", "Gitarre A Mo", "Gitarre B Mo", "Gitarre C Mo", "Gitarre D Do", "Gitarre E Di", "Gitarre F Di", "Kapustian Evgen", "Kunst Di 2A", "Kunst Di 4B", "Kunst Di 7A+5G", "Kunst Di 11A", "Kunst Do 9B", "Kunst Do 9G+5B", "Kunst Fr 2B", "Kunst Fr 5D+7B", "Kunst Fr 8D", "Kunst Mi 6B", "Kunst Mi 9A", "Kunst Mi StudioO", "Kunst Mi StudioP", "Kunst Mo 1A", "Kunst Mo 2D", "Kunst Mo 3A", "Kunst Mo 4A+6A", "Kunst Sa 1B", "Kunst Sa 2C", "Kunst Sa 3B", "Kunst Sa 3D+2C", "Kunst Sa 4C+10B", "Kunst Sa 4D", "Kunst Sa 5C", "Kunst Sa 7C", "Kunst Sa 9C+7C", "Kunst Sa 9D+9C+7C", "Kunst Sa 10B", "Kunst Sa 11E", "Kunst Sa StudioO", "Kunst Sa StudioP", "Mathe 2A", "Mathe 6B", "Mathe 7C", "Mathe 10B", "Musik 1B", "Musik 2C", "Orchester Fr", "Orchester Sa", "Romantzev Oleg", "Schach Mi A", "Schach Mi B", "Schach Sa C", "Schach Sa D", "Schach Sa E", "Schach Sa F", "Schevtsova Maria", "Tanz Do 6-7J", "Tanz Do 10-11J", "Tanz Do ab 10J", "Tanz Fr 6-7J", "Tanz Fr 14-15J", "Tanz Jugentliche", "Tanz Mi 14-15J", "Tanz Mi ab 7J", "Tanz Mi ab 11J", "Tanz Mo 6-7J", "Tanz Mo 10-11J", "Tanz Sa 4J", "Tanz Sa 5J", "Tanz Sa 10-11J", "Tanz Sa 12-13J", "Tanz Sa 14-15J", "Tanz Sa Ukr", "Theater 10-12", "Theater 14-18", "Theater ab 6J", "Ukr. Tanz", "Ukrainisch Di 4-5J", "Ukrainisch Di 5-6J", "Ukrainisch Do 4-5J", "Ukrainisch Do 5-6J", "Ukrainisch Fr ab 6J", "Ukrainische Musik Di 4-5J", "Ukrainische Musik Di 5-6J", "Ukrainische Musik Do 4-5J", "Ukrainische Musik Do 5-6J", "VSpE_E", "VSpE_L"],
+    "teachers": ["Aleiev Oleg", "Anishchenko Viktoria", "Antonov Vladimir", "Audzyeenka Swietlana", "Dosenko Evgeniy", "Dykun Lüdmila", "Egorova Jana", "Eichmann Irina", "Fedorez Elena", "Fedorova Galina", "Galustian Joseff", "Gorochovska Olena", "Gutovskaia Marina", "Hans Johan", "Horn Jeny", "Hornung Lübov", "Horochovska Olena", "Karpenkov Daniil", "Khomenko Irina", "Koputska Elena", "Korneva Tatiana", "Kremenchutski Larissa", "Kremenchutski Timur", "Kuskova Viktoria", "Kutz Marina", "Leshenko Tetiana", "Melnikov Olga", "Melnikov Pavel", "Mialyk Irina", "Mustafaeva Liliia", "Müller Albina", "Müller Lüsia", "Naumova Katia", "Nepomnaschi Tatiana", "Nessel Olga", "Olekh Dima", "Olekh Katerina", "Perevoznyk Inna", "Pester Liudmila", "Rigert Nella", "Rosov Boris", "Rusol Elena", "Schadt Elena", "Shakun Konstantin", "Shik Swetlana", "Sokolovska Natalia", "Starichuk Olha", "Stepanova Olesia", "Sukharau Natalia", "Tatarchuk Tetiana", "Tatarnikova Olha", "Tchoudnovskaia Anna", "Tsymbal Anna", "Urich Evgenia", "Vinogradova Raisa", "Wagner Galina", "Wittmer Irina", "Zelenska Olena"],
     "rooms_Villa": ["0.05", "0.06", "0.08", "1.03", "1.05", "1.06", "1.09", "2.03", "2.04", "2.05", "2.07", "2.09", "K.06", "K.07", "K.07", "K.08", "K.11"],
     "rooms_Kolibri": ["0.3", "2.2", "2.3", "2.4", "2.5", "2.6", "2.7"]
 };
@@ -690,10 +719,45 @@ var DragDropService = (function() {
     var offsetX = 0;
     var offsetY = 0;
     var draggedBlock = null;
+
+    function getAuthUi() {
+        return window.SchedGenAuthUI || null;
+    }
+
+    function getCurrentRole() {
+        return window.USER_ROLE || 'viewer';
+    }
+
+    function getBlockLessonType(block) {
+        return block ? (block.getAttribute('data-lesson-type') || 'group') : 'group';
+    }
+
+    function canDragBlock(block) {
+        var authUi = getAuthUi();
+        var role = getCurrentRole();
+        var lessonType = getBlockLessonType(block);
+
+        if (!block || block.getAttribute('data-block-id')) {
+            return false;
+        }
+        if (authUi && typeof authUi.isEditMode === 'function' && !authUi.isEditMode()) {
+            return false;
+        }
+        if (authUi && typeof authUi.canMutateBlock === 'function') {
+            return authUi.canMutateBlock(role, block);
+        }
+        if (role === 'admin') return true;
+        if (role === 'editor') return lessonType !== 'group';
+        if (role === 'organizer') return lessonType === 'trial';
+        return false;
+    }
     
     // Приватные методы
     function initializeBlockEvents() {
         document.querySelectorAll('.activity-block').forEach(function(block) {
+            if (!canDragBlock(block)) {
+                return;
+            }
             // Отслеживаем состояние для определения двойного клика
             let clickTimeout = null;
             let isPotentialDoubleClick = false;
@@ -3201,6 +3265,23 @@ function collectScheduleData() {
             var hexColor = rgbToHex(blockColor);
             
             // Создаем запись активности для экспорта
+            var lessonType = block.getAttribute('data-lesson-type') || 'group';
+            var trialDatesJson = '';
+
+            if (lessonType === 'trial') {
+                var rawTrialDates = block.getAttribute('data-trial-dates');
+                if (rawTrialDates) {
+                    try {
+                        var parsedTrialDates = JSON.parse(rawTrialDates);
+                        if (Array.isArray(parsedTrialDates)) {
+                            trialDatesJson = JSON.stringify(parsedTrialDates);
+                        }
+                    } catch (error) {
+                        console.warn('Не удалось распарсить data-trial-dates для экспорта:', error);
+                    }
+                }
+            }
+
             var activity = {
                 subject: subject,
                 students: students,
@@ -3213,7 +3294,8 @@ function collectScheduleData() {
                 end_time: endTime,      // Строка в формате "HH:MM"
                 duration: duration,
                 color: hexColor,
-                lesson_type: block.getAttribute('data-lesson-type') || 'group'
+                lesson_type: lessonType,
+                trial_dates_json: trialDatesJson
             };
             
             // Добавляем активность в общий список
@@ -3715,6 +3797,29 @@ var _addColumnAutocompleteCtrl = null; // current autocomplete controller for ro
 var _addColumnRoomItems = []; // mutable list used by the room autocomplete (updated on building change)
 var _addColumnEscHandler = null; // keydown handler for Escape — stored at module level so _closeAddColumnDialog can remove it
 
+function currentMenuRole() {
+    return window.USER_ROLE || 'viewer';
+}
+
+function canManageScheduleStructure() {
+    return currentMenuRole() === 'admin';
+}
+
+function canAddColumn() {
+    return ['admin', 'editor', 'organizer'].indexOf(currentMenuRole()) !== -1;
+}
+
+function _syncStructureMenuVisibility() {
+    var addColItem = document.getElementById('menuItemAddColumn');
+    if (addColItem) {
+        addColItem.style.display = canAddColumn() ? '' : 'none';
+    }
+    var newSchedItem = document.getElementById('menuItemNewSchedule');
+    if (newSchedItem) {
+        newSchedItem.style.display = canManageScheduleStructure() ? '' : 'none';
+    }
+}
+
 // === Menu open/close ===
 function toggleMenu() {
     var dropdown = document.getElementById('menuDropdown');
@@ -3808,6 +3913,10 @@ function hideMenuConfirmModal() {
 // === "Создать новое расписание" entry point ===
 function handleNewSchedule() {
     closeMenu();
+    if (!canManageScheduleStructure()) {
+        alert('Создание нового расписания доступно только администратору.');
+        return;
+    }
     showMenuConfirmModal(
         'Вы уверены, что хотите создать новое расписание? Все текущие данные будут удалены.',
         function() {
@@ -3821,6 +3930,10 @@ function handleNewSchedule() {
 function openAddColumnDialog(prefillBuilding, prefillDay) {
     if (_addColumnDialogOpen) return;
     closeMenu();
+    if (!canAddColumn()) {
+        alert('Добавление колонок недоступно для вашей роли.');
+        return;
+    }
     _addColumnDialogOpen = true;
 
     var overlay = document.createElement('div');
@@ -4222,6 +4335,7 @@ function initMenu() {
     // === Lesson type filter section ===
     var dropdown = document.getElementById('menuDropdown');
     _initPublishMenuItem();
+    _syncStructureMenuVisibility();
     if (dropdown && !dropdown.querySelector('.lesson-filter-item')) {
         var separator = document.createElement('div');
         separator.style.cssText = 'border-top: 1px solid #ccc; margin: 4px 0;';
@@ -4237,6 +4351,7 @@ function initMenu() {
             { label: 'Только групповые', value: 'group' },
             { label: 'Только индивидуальные', value: 'individual' },
             { label: 'Только наххильфе', value: 'nachhilfe' },
+            { label: 'Пробные занятия', value: 'trial' },
             { label: 'Негрупповые', value: 'non-group' }
         ];
 
@@ -4275,6 +4390,7 @@ window.openAddColumnDialog = openAddColumnDialog;
 (function() {
     function syncPublishVisibility() {
         _initPublishMenuItem();
+        _syncStructureMenuVisibility();
         var publishItem = document.getElementById('menu-publish-item');
         if (publishItem && window.USER_ROLE !== 'admin') {
             publishItem.style.display = 'none';
@@ -4302,6 +4418,17 @@ function createAutocompleteInput(inputElement, items, options) {
     var allowCustom = (options.allowCustom !== false); // default true
     if (options.placeholder) {
         inputElement.placeholder = options.placeholder;
+    }
+
+    // Disable native browser history/autofill popups. We keep only the custom dropdown.
+    inputElement.setAttribute('autocomplete', 'off');
+    inputElement.autocomplete = 'off';
+    inputElement.setAttribute('autocorrect', 'off');
+    inputElement.setAttribute('autocapitalize', 'off');
+    inputElement.setAttribute('spellcheck', 'false');
+    inputElement.setAttribute('data-lpignore', 'true');
+    if (inputElement.form) {
+        inputElement.form.setAttribute('autocomplete', 'off');
     }
 
     // Ensure the parent has position:relative so the dropdown can be absolute-positioned below.
@@ -5043,7 +5170,54 @@ function openCreateBlockDialog(e, preselectedDay, preselectedCol, preselectedRow
     
     // Предотвращаем скролл страницы
     document.body.style.overflow = 'hidden';
-    
+
+    // --- Секция типа занятия и дат (trial_ui) ---
+    if (window.TrialUI) {
+        window.TrialUI.injectTrialStyles();
+        var _createForm = dialogElement.querySelector('#create-form');
+        var _createButtonRow = _createForm ? _createForm.querySelector('.button-row') : null;
+        var _currentRole = typeof window.USER_ROLE !== 'undefined' ? window.USER_ROLE : '';
+        if (_createForm && _createButtonRow && (_currentRole === 'admin' || _currentRole === 'editor' || _currentRole === 'organizer')) {
+            // Dropdown выбора типа занятия
+            var _typeWrapper = document.createElement('label');
+            _typeWrapper.id = 'create-lesson-type-wrapper';
+            _typeWrapper.textContent = 'Тип занятия:';
+            var _typeSelect = document.createElement('select');
+            _typeSelect.id = 'new-lesson-type';
+            _typeSelect.style.marginTop = '5px';
+            if (_currentRole === 'organizer') {
+                // Организатор может создавать только пробные/разовые занятия
+                var _optTrial = document.createElement('option');
+                _optTrial.value = 'trial';
+                _optTrial.textContent = 'Пробное/разовое';
+                _typeSelect.appendChild(_optTrial);
+                _typeSelect.disabled = true;
+            } else {
+                var _optAuto = document.createElement('option');
+                _optAuto.value = '';
+                _optAuto.textContent = 'авто (по предмету)';
+                var _optTrial2 = document.createElement('option');
+                _optTrial2.value = 'trial';
+                _optTrial2.textContent = 'Пробное/разовое';
+                _typeSelect.appendChild(_optAuto);
+                _typeSelect.appendChild(_optTrial2);
+            }
+            _typeWrapper.appendChild(_typeSelect);
+            _createForm.insertBefore(_typeWrapper, _createButtonRow);
+
+            // Секция дат (скрыта по умолчанию для не-organizer)
+            var _datesSection = window.TrialUI.buildTrialDatesSection([]);
+            _datesSection.id = 'create-trial-dates-section';
+            _datesSection.style.display = (_currentRole === 'organizer') ? '' : 'none';
+            _createForm.insertBefore(_datesSection, _createButtonRow);
+
+            // Переключение видимости секции дат при смене типа
+            _typeSelect.addEventListener('change', function () {
+                _datesSection.style.display = (_typeSelect.value === 'trial') ? '' : 'none';
+            });
+        }
+    }
+
     // Получаем выбранное здание или используем первое
     var initialBuilding = preselectedBuilding || buildings[0];
 
@@ -5560,6 +5734,12 @@ function updateBlockLessonType(block) {
         return;
     }
 
+    // Preserve explicit 'trial' type — classifyLessonType cannot produce it
+    var explicitType = (block.getAttribute('data-lesson-type') || '').trim();
+    if (block.getAttribute('data-block-id') && explicitType && explicitType !== 'group') {
+        return explicitType;
+    }
+
     var subject = getBlockSubjectText(block);
     var lessonType = classifyLessonType(subject);
     block.setAttribute('data-lesson-type', lessonType);
@@ -5575,7 +5755,7 @@ function applyLessonTypeFilter(filterValue) {
         if (filterValue === 'all') {
             shouldShow = true;
         } else if (filterValue === 'non-group') {
-            shouldShow = lessonType === 'individual' || lessonType === 'nachhilfe';
+            shouldShow = lessonType === 'individual' || lessonType === 'nachhilfe' || lessonType === 'trial';
         } else {
             shouldShow = lessonType === filterValue;
         }
@@ -5687,7 +5867,34 @@ function syncBlockContent(block) {
         );
     }
 
-    block.innerHTML = subject + '<br>' + teacher + '<br>' + students + '<br>' + newRoom + '<br>' + newTimeStr;
+    var newHTML = subject + '<br>' + teacher + '<br>' + students + '<br>' + newRoom + '<br>' + newTimeStr;
+
+    // Restore trial dates line for trial blocks
+    if (block.getAttribute('data-lesson-type') === 'trial') {
+        var rawDates = block.getAttribute('data-trial-dates');
+        if (rawDates) {
+            try {
+                var trialDates = JSON.parse(rawDates);
+                if (Array.isArray(trialDates) && trialDates.length > 0) {
+                    var displayDates = trialDates.map(function(d) {
+                        var parts = d.split('-');
+                        return parts.length === 3 ? parts[2] + '.' + parts[1] + '.' + parts[0] : d;
+                    }).join(', ');
+                    newHTML += '<br>\uD83D\uDCC5 ' + displayDates;
+                }
+            } catch (e) { /* ignore parse errors */ }
+        }
+    }
+
+    block.innerHTML = newHTML;
+
+    if (block.getAttribute('data-lesson-type') === 'trial' && window.TrialUI) {
+        var dates = [];
+        try {
+            dates = JSON.parse(block.getAttribute('data-trial-dates') || '[]');
+        } catch (e) {}
+        window.TrialUI.applyTrialExpiredStyle(block, window.TrialUI.isTrialExpired(dates));
+    }
 
     // Update lesson type attribute and re-apply active filter
     if (typeof updateBlockLessonType === 'function') {
@@ -6379,6 +6586,16 @@ function initBlockEditing() {
 
 // Функция открытия диалога редактирования с поддержкой зданий
 function openEditDialog(block, origLeft, origTop, building) {
+    if (
+        typeof window.USER_ROLE !== 'undefined' &&
+        window.USER_ROLE === 'organizer' &&
+        block &&
+        block.getAttribute('data-lesson-type') !== 'trial'
+    ) {
+        alert("Организатор может редактировать только пробные/разовые занятия.");
+        return;
+    }
+
     console.log("Открытие диалога редактирования");
     
     // Устанавливаем флаг, что диалог открыт
@@ -6484,6 +6701,42 @@ function openEditDialog(block, origLeft, origTop, building) {
     dialogElement.className = 'dialog-overlay';
     dialogElement.innerHTML = dialogHTML;
     document.body.appendChild(dialogElement);
+
+    // --- Секция дат и кнопка конвертации для trial-блоков ---
+    var _editLessonType = block.getAttribute('data-lesson-type');
+    if (_editLessonType === 'trial' && window.TrialUI) {
+        window.TrialUI.injectTrialStyles();
+        var _editForm = dialogElement.querySelector('#edit-form');
+        var _editButtonRow = _editForm ? _editForm.querySelector('.button-row') : null;
+        if (_editForm && _editButtonRow) {
+            // Парсим trial_dates из data-атрибута блока
+            var _existingDates = [];
+            try {
+                var _raw = block.getAttribute('data-trial-dates');
+                if (_raw) _existingDates = JSON.parse(_raw);
+            } catch (e) { _existingDates = []; }
+
+            // Секция дат перед кнопками
+            var _editDatesSection = window.TrialUI.buildTrialDatesSection(_existingDates);
+            _editDatesSection.id = 'edit-trial-dates-section';
+            _editForm.insertBefore(_editDatesSection, _editButtonRow);
+        }
+
+        // Кнопка «Сделать регулярным» после button-row
+        var _currentRole = typeof window.USER_ROLE !== 'undefined' ? window.USER_ROLE : '';
+        var _allowedConvertRoles = ['admin', 'editor', 'organizer'];
+        if (_editButtonRow && _allowedConvertRoles.indexOf(_currentRole) !== -1) {
+            window.TrialUI.renderConvertButton(block, _currentRole, _editButtonRow.parentNode, function (updatedBlock) {
+                // Закрываем диалог и обновляем блок через refreshIndividualLayer
+                document.body.removeChild(dialogElement);
+                document.body.style.overflow = '';
+                window.editDialogOpen = false;
+                if (typeof window.refreshIndividualLayer === 'function') {
+                    window.refreshIndividualLayer();
+                }
+            });
+        }
+    }
 
     // === Autocomplete dropdowns (spiskiData) ===
     var subjectsList = (typeof spiskiData !== 'undefined' && spiskiData && Array.isArray(spiskiData.subjects)) ? spiskiData.subjects : [];
@@ -7189,6 +7442,35 @@ var resizeOrigSpan = 0;     // data-row-span value at mousedown
 var resizeStartRow = 0;     // data-start-row value at mousedown (read-only during resize)
 var RESIZE_ZONE_PX = 6;     // pixels from bottom edge that trigger resize mode
 
+function getResizeAuthUi() {
+    return window.SchedGenAuthUI || null;
+}
+
+function getResizeRole() {
+    return window.USER_ROLE || 'viewer';
+}
+
+function getResizeLessonType(block) {
+    return block ? (block.getAttribute('data-lesson-type') || 'group') : 'group';
+}
+
+function canResizeBlock(block) {
+    var authUi = getResizeAuthUi();
+    var role = getResizeRole();
+    var lessonType = getResizeLessonType(block);
+
+    if (authUi && typeof authUi.isEditMode === 'function' && !authUi.isEditMode()) {
+        return false;
+    }
+    if (authUi && typeof authUi.canMutateBlock === 'function') {
+        return authUi.canMutateBlock(role, block);
+    }
+    if (role === 'admin') return true;
+    if (role === 'editor') return lessonType !== 'group';
+    if (role === 'organizer') return lessonType === 'trial';
+    return false;
+}
+
 Object.defineProperty(window, 'isResizing', {
     get: function() { return isResizing; },
     configurable: true
@@ -7257,7 +7539,7 @@ function handleResizeMouseMove(e) {
         if (b !== block) b.removeAttribute('data-resize-hover');
     });
 
-    if (block && !window.editDialogOpen) {
+    if (block && !window.editDialogOpen && canResizeBlock(block)) {
         if (isInResizeZone(block, e.clientY)) {
             block.setAttribute('data-resize-hover', '1');
         } else {
@@ -7275,6 +7557,7 @@ function handleResizeMouseDown(e) {
     var target = e.target;
     var block = target.closest ? target.closest('.activity-block') : null;
     if (!block) return;
+    if (!canResizeBlock(block)) return;
 
     if (!isInResizeZone(block, e.clientY)) return;
 
@@ -7459,7 +7742,7 @@ function forceReinitializeApplication() {
 <button id="saveIntermediate">Сохранить промежуточный результат</button>
 <button id="saveSchedule">Сохранить финальную версию</button>
 <button id="exportToExcel">Экспорт в Excel</button>
-<input type="hidden" id="csrf_token" value="ef1240b9-b4a2-4b4b-9674-108eedfe1acc">
+<input type="hidden" id="csrf_token" value="d722c0b9-9161-4d4d-81a3-044c67a629ef">
 </div>
 <h1>Расписание занятий</h1>
 <h2>Здание: Villa</h2>
@@ -7649,105 +7932,105 @@ function forceReinitializeApplication() {
 <tr><td class="time-cell" data-row="129" data-col="time">19:45</td><td class="day-Mo" data-row="129" data-col="0"></td><td class="day-Mo" data-row="129" data-col="1"></td><td class="day-Mo" data-row="129" data-col="2"></td><td class="day-Mo" data-row="129" data-col="3"></td><td class="day-Mo" data-row="129" data-col="4"></td><td class="day-Mo" data-row="129" data-col="5"></td><td class="day-Mo" data-row="129" data-col="6"></td><td class="day-Mo" data-row="129" data-col="7"></td><td class="day-Mo" data-row="129" data-col="8"></td><td class="day-Di" data-row="129" data-col="0"></td><td class="day-Di" data-row="129" data-col="1"></td><td class="day-Di" data-row="129" data-col="2"></td><td class="day-Di" data-row="129" data-col="3"></td><td class="day-Di" data-row="129" data-col="4"></td><td class="day-Di" data-row="129" data-col="5"></td><td class="day-Mi" data-row="129" data-col="0"></td><td class="day-Mi" data-row="129" data-col="1"></td><td class="day-Mi" data-row="129" data-col="2"></td><td class="day-Mi" data-row="129" data-col="3"></td><td class="day-Mi" data-row="129" data-col="4"></td><td class="day-Mi" data-row="129" data-col="5"></td><td class="day-Mi" data-row="129" data-col="6"></td><td class="day-Do" data-row="129" data-col="0"></td><td class="day-Do" data-row="129" data-col="1"></td><td class="day-Do" data-row="129" data-col="2"></td><td class="day-Do" data-row="129" data-col="3"></td><td class="day-Do" data-row="129" data-col="4"></td><td class="day-Do" data-row="129" data-col="5"></td><td class="day-Fr" data-row="129" data-col="0"></td><td class="day-Fr" data-row="129" data-col="1"></td><td class="day-Fr" data-row="129" data-col="2"></td><td class="day-Fr" data-row="129" data-col="3"></td><td class="day-Fr" data-row="129" data-col="4"></td><td class="day-Fr" data-row="129" data-col="5"></td><td class="day-Fr" data-row="129" data-col="6"></td><td class="day-Fr" data-row="129" data-col="7"></td><td class="day-Sa" data-row="129" data-col="0"></td><td class="day-Sa" data-row="129" data-col="1"></td><td class="day-Sa" data-row="129" data-col="2"></td><td class="day-Sa" data-row="129" data-col="3"></td><td class="day-Sa" data-row="129" data-col="4"></td><td class="day-Sa" data-row="129" data-col="5"></td><td class="day-Sa" data-row="129" data-col="6"></td><td class="day-Sa" data-row="129" data-col="7"></td><td class="day-Sa" data-row="129" data-col="8"></td><td class="day-Sa" data-row="129" data-col="9"></td></tr>
 </tbody>
 </table>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='8' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='15' style='top:1347.0px; left:880px; width:100px; height:228.5px; background-color:#c309f0; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>2D<br>2.09<br>16:00-17:15</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='100' data-row-span='9' style='top:1595.0px; left:380px; width:100px; height:137.0px; background-color:#c309f0; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Stepanova Olesia<br>Kunst Mo 2D<br>1.05<br>17:20-18:05</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='78' data-row-span='12' style='top:1254.0px; left:580px; width:100px; height:182.75px; background-color:#71d771; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Olekh Katerina<br>Deutsch  4kl Mo<br>2.03<br>15:30-16:30</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='81' data-row-span='18' style='top:1300.5px; left:480px; width:100px; height:274.25px; background-color:#75dbff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Mo 6-7J<br>1.06<br>15:45-17:15</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='100' data-row-span='18' style='top:1595.0px; left:480px; width:100px; height:274.25px; background-color:#68ceff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Mo 10-11J<br>1.06<br>17:20-18:50</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='99' data-row-span='9' style='top:1579.5px; left:80px; width:100px; height:137.0px; background-color:#ffd670; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Gitarre</strong><br>Aleiev Oleg<br>Gitarre A Mo<br>K.07<br>17:15-18:00</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='90' data-row-span='9' style='top:1440.0px; left:280px; width:100px; height:137.0px; background-color:#16003f; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Mo 4A+6A<br>1.03<br>16:30-17:15</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='8' data-building='Villa' data-lesson-type='group' data-start-row='100' data-row-span='18' style='top:1595.0px; left:880px; width:100px; height:274.25px; background-color:#710fb2; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>6A<br>2.09<br>17:20-18:50</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='7' data-building='Villa' data-lesson-type='group' data-start-row='80' data-row-span='12' style='top:1285.0px; left:780px; width:100px; height:182.75px; background-color:#5bd15c; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Karpenkov Daniil<br>3A<br>2.07<br>15:40-16:40</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='100' data-row-span='9' style='top:1595.0px; left:280px; width:100px; height:137.0px; background-color:#5bd15c; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Mo 3A<br>1.03<br>17:20-18:05</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='7' data-building='Villa' data-lesson-type='group' data-start-row='100' data-row-span='12' style='top:1595.0px; left:780px; width:100px; height:182.75px; background-color:#21e1dc; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>4A<br>2.07<br>17:20-18:20</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:180px; width:100px; height:182.75px; background-color:#0aca63; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Theater</strong><br>Müller Lüsia<br>Theater 10-12<br>0.08<br>16:00-17:00</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='98' data-row-span='12' style='top:1564.0px; left:180px; width:100px; height:182.75px; background-color:#ba91cb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Theater</strong><br>Müller Lüsia<br>Theater 14-18<br>0.08<br>17:10-18:10</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='87' data-row-span='9' style='top:1393.5px; left:380px; width:100px; height:137.0px; background-color:#efaa15; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Stepanova Olesia<br>Kunst Mo 1A<br>1.05<br>16:15-17:00</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='6' data-building='Villa' data-lesson-type='group' data-start-row='97' data-row-span='12' style='top:1548.5px; left:680px; width:100px; height:182.75px; background-color:#efaa15; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Wagner Galina<br>1A<br>2.04<br>17:05-18:05</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='0' data-building='Villa' data-lesson-type='individual' data-start-row='111' data-row-span='18' style='top:1765.5px; left:80px; width:100px; height:274.25px; background-color:#ed9150; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ind. Mathe</strong><br>Gutovskaia Marina<br>Schevtsova Maria<br>K.07<br>18:15-19:45</div>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='2' data-building='Villa' data-lesson-type='nachhilfe' data-start-row='114' data-row-span='12' style='top:1812.0px; left:280px; width:100px; height:182.75px; background-color:#1ca889; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Nachhilfe Deutsch</strong><br>Olekh Katerina<br>Kapustian Evgen<br>1.03<br>18:30-19:30</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='94' data-row-span='9' style='top:1502.0px; left:1080px; width:100px; height:137.0px; background-color:#068e46; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Di 7A+5G<br>1.03<br>16:50-17:35</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='104' data-row-span='18' style='top:1657.0px; left:1280px; width:100px; height:274.25px; background-color:#1c222c; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Kremenchutski Larissa<br>11A<br>2.03<br>17:40-19:10</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:1180px; width:100px; height:137.0px; background-color:#3848ad; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Stepanova Olesia<br>Kunst Di 2A<br>1.05<br>16:00-16:45</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='94' data-row-span='15' style='top:1502.0px; left:1380px; width:100px; height:228.5px; background-color:#3848ad; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>2A<br>2.07<br>16:50-18:05</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='110' data-row-span='9' style='top:1750.0px; left:1380px; width:100px; height:137.0px; background-color:#3848ad; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Mathe</strong><br>Tchoudnovskaia Anna<br>Mathe 2A<br>2.07<br>18:10-18:55</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='96' data-row-span='9' style='top:1533.0px; left:980px; width:100px; height:137.0px; background-color:#ffd46e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Gitarre</strong><br>Aleiev Oleg<br>Gitarre E Di<br>K.07<br>17:00-17:45</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='106' data-row-span='9' style='top:1688.0px; left:980px; width:100px; height:137.0px; background-color:#fac761; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Gitarre</strong><br>Aleiev Oleg<br>Gitarre F Di<br>K.07<br>17:50-18:35</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='88' data-row-span='15' style='top:1409.0px; left:1280px; width:100px; height:228.5px; background-color:#b99aeb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>4B<br>2.03<br>16:20-17:35</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='104' data-row-span='9' style='top:1657.0px; left:1080px; width:100px; height:137.0px; background-color:#b99aeb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Di 4B<br>1.03<br>17:40-18:25</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:1380px; width:100px; height:137.0px; background-color:#9bd82f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>5G<br>2.07<br>16:00-16:45</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:1480px; width:100px; height:182.75px; background-color:#53b953; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Eichmann Irina<br>Deutsch ab 5J Di<br>2.09<br>16:00-17:00</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='97' data-row-span='9' style='top:1548.5px; left:1480px; width:100px; height:137.0px; background-color:#1ca0e2; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>12C<br>2.09<br>17:05-17:50</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:1880px; width:100px; height:137.0px; background-color:#d105ae; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Mi 6B<br>1.05<br>16:00-16:45</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='6' data-building='Villa' data-lesson-type='group' data-start-row='96' data-row-span='15' style='top:1533.0px; left:2180px; width:100px; height:228.5px; background-color:#d105ae; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>6B<br>2.07<br>17:00-18:15</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='6' data-building='Villa' data-lesson-type='group' data-start-row='112' data-row-span='9' style='top:1781.0px; left:2180px; width:100px; height:137.0px; background-color:#d105ae; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Mathe</strong><br>Tchoudnovskaia Anna<br>6B<br>2.07<br>18:20-19:05</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:1780px; width:100px; height:137.0px; background-color:#3de20f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Mi 9A<br>1.03<br>16:00-16:45</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='103' data-row-span='12' style='top:1641.5px; left:2080px; width:100px; height:182.75px; background-color:#3de20f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>9A<br>2.03<br>17:35-18:35</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:1580px; width:100px; height:137.0px; background-color:#f55cc2; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Mi A<br>K.11<br>16:00-16:45</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='94' data-row-span='9' style='top:1502.0px; left:1580px; width:100px; height:137.0px; background-color:#ff67cd; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Mi B<br>K.11<br>16:50-17:35</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='96' data-row-span='18' style='top:1533.0px; left:1780px; width:100px; height:274.25px; background-color:#083476; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Mi StudioO<br>1.03<br>17:00-18:30</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:1980px; width:100px; height:182.75px; background-color:#61c7fa; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Mi ab 7J<br>1.06<br>16:00-17:00</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='96' data-row-span='18' style='top:1533.0px; left:1980px; width:100px; height:274.25px; background-color:#55bbee; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Mi ab 11J<br>1.06<br>17:00-18:30</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='93' data-row-span='9' style='top:1486.5px; left:1680px; width:100px; height:137.0px; background-color:#a62c58; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Log</strong><br>Kremenchutski Larissa<br>3JC Log<br>0.08<br>16:45-17:30</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='6' style='top:1347.0px; left:2080px; width:100px; height:91.25px; background-color:#a62c58; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russisch</strong><br>Kremenchutki Larissa<br>3JC<br>2.03<br>16:00-16:30</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='87' data-row-span='9' style='top:1393.5px; left:2380px; width:100px; height:137.0px; background-color:#47f700; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Do 9G+5B<br>1.03<br>16:15-17:00</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='99' data-row-span='18' style='top:1579.5px; left:2680px; width:100px; height:274.25px; background-color:#14ef8a; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>5B<br>2.04<br>17:15-18:45</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:2780px; width:100px; height:182.75px; background-color:#738c83; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>9B<br>2.09<br>16:00-17:00</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='97' data-row-span='9' style='top:1548.5px; left:2380px; width:100px; height:137.0px; background-color:#738c83; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Do 9B<br>1.03<br>17:05-17:50</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='97' data-row-span='12' style='top:1548.5px; left:2780px; width:100px; height:182.75px; background-color:#8fd740; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Urich Evgenia<br>9G<br>2.09<br>17:05-18:05</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='81' data-row-span='18' style='top:1300.5px; left:2480px; width:100px; height:274.25px; background-color:#5fc5f8; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Do 6-7J<br>1.06<br>15:45-17:15</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='101' data-row-span='18' style='top:1610.5px; left:2480px; width:100px; height:274.25px; background-color:#74daff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Do 10-11J<br>1.06<br>17:25-18:55</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='72' data-row-span='9' style='top:1161.0px; left:2680px; width:100px; height:137.0px; background-color:#738aeb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>10C<br>2.04<br>15:00-15:45</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:2280px; width:100px; height:182.75px; background-color:#f54c13; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Baby</strong><br>Kremenchutski Larissa<br>Baby Do<br>0.08<br>16:00-17:00</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:2580px; width:100px; height:182.75px; background-color:#5fc55f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Olekh Katerina<br>Deutsch 5-7kl Do<br>2.03<br>16:00-17:00</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='97' data-row-span='12' style='top:1548.5px; left:2580px; width:100px; height:182.75px; background-color:#6ed46e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Olekh Katerina<br>Deutsch 7-9kl Do<br>2.03<br>17:05-18:05</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='99' data-row-span='9' style='top:1579.5px; left:2280px; width:100px; height:137.0px; background-color:#d93693; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Theater</strong><br>Müller Lüsia<br>Theater ab 6J<br>0.08<br>17:15-18:00</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='81' data-row-span='18' style='top:1300.5px; left:3280px; width:100px; height:274.25px; background-color:#276758; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Wagner Galina<br>7B<br>2.03<br>15:45-17:15</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='100' data-row-span='9' style='top:1595.0px; left:3080px; width:100px; height:137.0px; background-color:#72e9d3; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Fr 5D+7B<br>1.05<br>17:20-18:05</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='6' data-building='Villa' data-lesson-type='group' data-start-row='81' data-row-span='18' style='top:1300.5px; left:3480px; width:100px; height:274.25px; background-color:#1ade4e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Urich Evgenia<br>5D<br>2.07<br>15:45-17:15</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='6' data-building='Villa' data-lesson-type='group' data-start-row='100' data-row-span='15' style='top:1595.0px; left:3480px; width:100px; height:228.5px; background-color:#994076; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>8D<br>2.07<br>17:20-18:35</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='99' data-row-span='12' style='top:1579.5px; left:3380px; width:100px; height:182.75px; background-color:#c309f0; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Kremenchutski Larissa<br>2D<br>2.04<br>17:15-18:15</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='7' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:3580px; width:100px; height:182.75px; background-color:#53b953; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Audzyeenka Swietlana<br>Deutsch ab 5J Fr<br>2.09<br>16:00-17:00</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='7' data-building='Villa' data-lesson-type='group' data-start-row='97' data-row-span='12' style='top:1548.5px; left:3580px; width:100px; height:182.75px; background-color:#79df79; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Eichmann Irina<br>Deutsch ab 6J Fr<br>2.09<br>17:05-18:05</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:2880px; width:100px; height:182.75px; background-color:#5d26c8; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Orchester</strong><br>Nepomnaschi Tatiana<br>Orchester Fr<br>0.08<br>16:00-17:00</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='87' data-row-span='9' style='top:1393.5px; left:2980px; width:100px; height:137.0px; background-color:#f8bc2f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Fr 2B<br>1.03<br>16:15-17:00</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='88' data-row-span='9' style='top:1409.0px; left:3080px; width:100px; height:137.0px; background-color:#994076; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Fr 8D<br>1.05<br>16:20-17:05</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='18' style='top:1347.0px; left:3180px; width:100px; height:274.25px; background-color:#72d8ff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Fr 14-15J<br>1.06<br>16:00-17:30</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:3380px; width:100px; height:137.0px; background-color:#71149d; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>10A<br>2.04<br>16:00-16:45</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='3' data-row-span='9' style='top:91.5px; left:3680px; width:100px; height:137.0px; background-color:#ff79df; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Sa C<br>K.11<br>09:15-10:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='13' data-row-span='9' style='top:246.5px; left:3680px; width:100px; height:137.0px; background-color:#fc63c9; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Sa D<br>K.11<br>10:05-10:50</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='24' data-row-span='9' style='top:417.0px; left:3680px; width:100px; height:137.0px; background-color:#fb62c8; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Sa E<br>K.11<br>11:00-11:45</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='3' data-row-span='12' style='top:91.5px; left:3780px; width:100px; height:182.75px; background-color:#66ccff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Sa 4J<br>0.08<br>09:15-10:15</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='16' data-row-span='15' style='top:293.0px; left:3780px; width:100px; height:228.5px; background-color:#69cfff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Sa 5J<br>0.08<br>10:20-11:35</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='3' data-row-span='18' style='top:91.5px; left:4080px; width:100px; height:274.25px; background-color:#55bbee; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Sa 12-13J<br>1.06<br>09:15-10:45</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='24' data-row-span='18' style='top:417.0px; left:4080px; width:100px; height:274.25px; background-color:#79dfff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Sa 14-15J<br>1.06<br>11:00-12:30</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='44' data-row-span='18' style='top:727.0px; left:4080px; width:100px; height:274.25px; background-color:#76dcff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Sa 10-11J<br>1.06<br>12:40-14:10</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='3' data-row-span='9' style='top:91.5px; left:3880px; width:100px; height:137.0px; background-color:#a35aea; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 1B<br>1.03<br>09:15-10:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='9' data-building='Villa' data-lesson-type='group' data-start-row='15' data-row-span='12' style='top:277.5px; left:4580px; width:100px; height:182.75px; background-color:#a35aea; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>1B<br>2.09<br>10:15-11:15</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='54' data-row-span='18' style='top:882.0px; left:3780px; width:100px; height:274.25px; background-color:#26defa; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Orchester</strong><br>Nepomnaschi Tatiana<br>Orchester Sa<br>0.08<br>13:30-15:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='9' data-building='Villa' data-lesson-type='group' data-start-row='28' data-row-span='18' style='top:479.0px; left:4580px; width:100px; height:274.25px; background-color:#f78518; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Urich Evgenia<br>9C<br>2.09<br>11:20-12:50</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='9' data-building='Villa' data-lesson-type='group' data-start-row='0' data-row-span='12' style='top:45.0px; left:4580px; width:100px; height:182.75px; background-color:#d1052c; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>9D<br>2.09<br>09:00-10:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='14' data-row-span='9' style='top:262.0px; left:3880px; width:100px; height:137.0px; background-color:#a32e42; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 9D+9C+7C<br>1.03<br>10:10-10:55</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='8' data-building='Villa' data-lesson-type='group' data-start-row='26' data-row-span='18' style='top:448.0px; left:4480px; width:100px; height:274.25px; background-color:#d448da; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>7C<br>2.07<br>11:10-12:40</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='8' data-building='Villa' data-lesson-type='group' data-start-row='46' data-row-span='9' style='top:758.0px; left:4480px; width:100px; height:137.0px; background-color:#d448da; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Mathe</strong><br>Tchoudnovskaia Anna<br>Mathe 7C<br>2.07<br>12:50-13:35</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='8' data-building='Villa' data-lesson-type='group' data-start-row='9' data-row-span='15' style='top:184.5px; left:4480px; width:100px; height:228.5px; background-color:#073169; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>2C<br>2.07<br>09:45-11:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='26' data-row-span='9' style='top:448.0px; left:3980px; width:100px; height:137.0px; background-color:#99594c; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa 3D+2C<br>1.05<br>11:10-11:55</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='6' data-building='Villa' data-lesson-type='group' data-start-row='4' data-row-span='18' style='top:107.0px; left:4280px; width:100px; height:274.25px; background-color:#3848ad; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Kremenchutski Larissa<br>4C<br>2.03<br>09:20-10:50</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='14' data-row-span='9' style='top:262.0px; left:3980px; width:100px; height:137.0px; background-color:#6dd949; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa 3B<br>1.05<br>10:10-10:55</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='6' data-building='Villa' data-lesson-type='group' data-start-row='24' data-row-span='18' style='top:417.0px; left:4280px; width:100px; height:274.25px; background-color:#6dd949; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>3B<br>2.03<br>11:00-12:30</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='26' data-row-span='9' style='top:448.0px; left:3880px; width:100px; height:137.0px; background-color:#602caf; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 4C+10B<br>1.03<br>11:10-11:55</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='36' data-row-span='9' style='top:603.0px; left:4180px; width:100px; height:137.0px; background-color:#d28cf0; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Mathe</strong><br>Zelenska Olena<br>Mathe 10B<br>1.09<br>12:00-12:45</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='48' data-row-span='18' style='top:789.0px; left:4180px; width:100px; height:274.25px; background-color:#d28cf0; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Wittmer Irina<br>10B<br>1.09<br>13:00-14:30</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='7' data-building='Villa' data-lesson-type='group' data-start-row='6' data-row-span='18' style='top:138.0px; left:4380px; width:100px; height:274.25px; background-color:#55fac2; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Wagner Galina<br>3D<br>2.04<br>09:30-11:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='15' data-row-span='9' style='top:277.5px; left:4180px; width:100px; height:137.0px; background-color:#033ebf; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Dykun Lüdmila<br>Kunst Sa 4D<br>1.09<br>10:15-11:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='7' data-building='Villa' data-lesson-type='group' data-start-row='26' data-row-span='18' style='top:448.0px; left:4380px; width:100px; height:274.25px; background-color:#033ebf; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Wagner Galina<br>4D<br>2.04<br>11:10-12:40</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='36' data-row-span='9' style='top:603.0px; left:3980px; width:100px; height:137.0px; background-color:#7ad1cb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa 5C<br>1.05<br>12:00-12:45</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='7' data-building='Villa' data-lesson-type='group' data-start-row='46' data-row-span='18' style='top:758.0px; left:4380px; width:100px; height:274.25px; background-color:#7ad1cb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Wagner Galina<br>5C<br>2.04<br>12:50-14:20</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='36' data-row-span='9' style='top:603.0px; left:3880px; width:100px; height:137.0px; background-color:#30ec5e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 11E<br>1.03<br>12:00-12:45</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='6' data-building='Villa' data-lesson-type='group' data-start-row='46' data-row-span='18' style='top:758.0px; left:4280px; width:100px; height:274.25px; background-color:#30ec5e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>11E<br>2.03<br>12:50-14:20</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='48' data-row-span='18' style='top:789.0px; left:3880px; width:100px; height:274.25px; background-color:#4a8e5b; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa StudioO<br>1.03<br>13:00-14:30</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='9' data-building='Villa' data-lesson-type='group' data-start-row='48' data-row-span='12' style='top:789.0px; left:4580px; width:100px; height:182.75px; background-color:#1ca0e2; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>12C<br>2.09<br>13:00-14:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='48' data-row-span='18' style='top:789.0px; left:3980px; width:100px; height:274.25px; background-color:#eae197; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa StudioP<br>1.05<br>13:00-14:30</div>
+<div class='activity-block activity-day-Mo lesson-type-group' data-day='Mo' data-col-index='8' data-building='Villa' data-lesson-type='group' data-start-row='77' data-row-span='15' style='top:1238.5px; left:880px; width:100px; height:228.5px; background-color:#c309f0; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>2D<br>2.09<br>15:25-16:40</div>
+<div class='activity-block activity-day-Mo lesson-type-group' data-day='Mo' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='100' data-row-span='9' style='top:1595.0px; left:380px; width:100px; height:137.0px; background-color:#c309f0; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Stepanova Olesia<br>Kunst Mo 2D<br>1.05<br>17:20-18:05</div>
+<div class='activity-block activity-day-Mo lesson-type-group' data-day='Mo' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:580px; width:100px; height:182.75px; background-color:#71d771; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Olekh Katerina<br>Deutsch  4kl Mo<br>2.03<br>16:00-17:00</div>
+<div class='activity-block activity-day-Mo lesson-type-group' data-day='Mo' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='81' data-row-span='18' style='top:1300.5px; left:480px; width:100px; height:274.25px; background-color:#75dbff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Mo 6-7J<br>1.06<br>15:45-17:15</div>
+<div class='activity-block activity-day-Mo lesson-type-group' data-day='Mo' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='102' data-row-span='18' style='top:1626.0px; left:480px; width:100px; height:274.25px; background-color:#68ceff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Mo 10-11J<br>1.06<br>17:30-19:00</div>
+<div class='activity-block activity-day-Mo lesson-type-group' data-day='Mo' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='99' data-row-span='9' style='top:1579.5px; left:80px; width:100px; height:137.0px; background-color:#ffd670; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Gitarre</strong><br>Aleiev Oleg<br>Gitarre A Mo<br>K.07<br>17:15-18:00</div>
+<div class='activity-block activity-day-Mo lesson-type-group' data-day='Mo' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='90' data-row-span='9' style='top:1440.0px; left:280px; width:100px; height:137.0px; background-color:#16003f; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Mo 4A+6A<br>1.03<br>16:30-17:15</div>
+<div class='activity-block activity-day-Mo lesson-type-group' data-day='Mo' data-col-index='8' data-building='Villa' data-lesson-type='group' data-start-row='100' data-row-span='18' style='top:1595.0px; left:880px; width:100px; height:274.25px; background-color:#710fb2; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>6A<br>2.09<br>17:20-18:50</div>
+<div class='activity-block activity-day-Mo lesson-type-group' data-day='Mo' data-col-index='7' data-building='Villa' data-lesson-type='group' data-start-row='80' data-row-span='8' style='top:1285.0px; left:780px; width:100px; height:121.75px; background-color:#5bd15c; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Karpenkov Daniil<br>3A<br>2.07<br>15:40-16:20</div>
+<div class='activity-block activity-day-Mo lesson-type-group' data-day='Mo' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='100' data-row-span='9' style='top:1595.0px; left:280px; width:100px; height:137.0px; background-color:#5bd15c; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Mo 3A<br>1.03<br>17:20-18:05</div>
+<div class='activity-block activity-day-Mo lesson-type-group' data-day='Mo' data-col-index='7' data-building='Villa' data-lesson-type='group' data-start-row='100' data-row-span='12' style='top:1595.0px; left:780px; width:100px; height:182.75px; background-color:#21e1dc; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>4A<br>2.07<br>17:20-18:20</div>
+<div class='activity-block activity-day-Mo lesson-type-group' data-day='Mo' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:180px; width:100px; height:182.75px; background-color:#0aca63; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Theater</strong><br>Müller Lüsia<br>Theater 10-12<br>0.08<br>16:00-17:00</div>
+<div class='activity-block activity-day-Mo lesson-type-group' data-day='Mo' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='98' data-row-span='12' style='top:1564.0px; left:180px; width:100px; height:182.75px; background-color:#ba91cb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Theater</strong><br>Müller Lüsia<br>Theater 14-18<br>0.08<br>17:10-18:10</div>
+<div class='activity-block activity-day-Mo lesson-type-group' data-day='Mo' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='87' data-row-span='9' style='top:1393.5px; left:380px; width:100px; height:137.0px; background-color:#efaa15; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Stepanova Olesia<br>Kunst Mo 1A<br>1.05<br>16:15-17:00</div>
+<div class='activity-block activity-day-Mo lesson-type-group' data-day='Mo' data-col-index='6' data-building='Villa' data-lesson-type='group' data-start-row='97' data-row-span='12' style='top:1548.5px; left:680px; width:100px; height:182.75px; background-color:#efaa15; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Wagner Galina<br>1A<br>2.04<br>17:05-18:05</div>
+<div class='activity-block activity-day-Mo lesson-type-individual' data-day='Mo' data-col-index='5' data-building='Villa' data-lesson-type='individual' data-start-row='100' data-row-span='9' style='top:1595.0px; left:580px; width:100px; height:137.0px; background-color:#33c28d; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ind. Mathe</strong><br>Tatarchuk Tetiana<br>Desortzev Oleg<br>2.03<br>17:20-18:05</div>
+<div class='activity-block activity-day-Di lesson-type-group' data-day='Di' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='94' data-row-span='9' style='top:1502.0px; left:1080px; width:100px; height:137.0px; background-color:#068e46; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Di 7A+5G<br>1.03<br>16:50-17:35</div>
+<div class='activity-block activity-day-Di lesson-type-group' data-day='Di' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='104' data-row-span='18' style='top:1657.0px; left:1280px; width:100px; height:274.25px; background-color:#1c222c; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Kremenchutski Larissa<br>11A<br>2.03<br>17:40-19:10</div>
+<div class='activity-block activity-day-Di lesson-type-group' data-day='Di' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:1180px; width:100px; height:137.0px; background-color:#3848ad; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Stepanova Olesia<br>Kunst Di 2A<br>1.05<br>16:00-16:45</div>
+<div class='activity-block activity-day-Di lesson-type-group' data-day='Di' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='94' data-row-span='15' style='top:1502.0px; left:1380px; width:100px; height:228.5px; background-color:#3848ad; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>2A<br>2.07<br>16:50-18:05</div>
+<div class='activity-block activity-day-Di lesson-type-group' data-day='Di' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='110' data-row-span='9' style='top:1750.0px; left:1380px; width:100px; height:137.0px; background-color:#3848ad; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Mathe</strong><br>Tchoudnovskaia Anna<br>Mathe 2A<br>2.07<br>18:10-18:55</div>
+<div class='activity-block activity-day-Di lesson-type-group' data-day='Di' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='96' data-row-span='9' style='top:1533.0px; left:980px; width:100px; height:137.0px; background-color:#ffd46e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Gitarre</strong><br>Aleiev Oleg<br>Gitarre E Di<br>K.07<br>17:00-17:45</div>
+<div class='activity-block activity-day-Di lesson-type-group' data-day='Di' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='106' data-row-span='9' style='top:1688.0px; left:980px; width:100px; height:137.0px; background-color:#fac761; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Gitarre</strong><br>Aleiev Oleg<br>Gitarre F Di<br>K.07<br>17:50-18:35</div>
+<div class='activity-block activity-day-Di lesson-type-group' data-day='Di' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='88' data-row-span='15' style='top:1409.0px; left:1280px; width:100px; height:228.5px; background-color:#b99aeb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>4B<br>2.03<br>16:20-17:35</div>
+<div class='activity-block activity-day-Di lesson-type-group' data-day='Di' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='104' data-row-span='9' style='top:1657.0px; left:1080px; width:100px; height:137.0px; background-color:#b99aeb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Di 4B<br>1.03<br>17:40-18:25</div>
+<div class='activity-block activity-day-Di lesson-type-group' data-day='Di' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:1380px; width:100px; height:137.0px; background-color:#9bd82f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>5G<br>2.07<br>16:00-16:45</div>
+<div class='activity-block activity-day-Di lesson-type-group' data-day='Di' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:1480px; width:100px; height:182.75px; background-color:#53b953; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Eichmann Irina<br>Deutsch ab 5J Di<br>2.09<br>16:00-17:00</div>
+<div class='activity-block activity-day-Di lesson-type-group' data-day='Di' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='97' data-row-span='9' style='top:1548.5px; left:1480px; width:100px; height:137.0px; background-color:#1ca0e2; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>12C<br>2.09<br>17:05-17:50</div>
+<div class='activity-block activity-day-Di lesson-type-trial' data-day='Di' data-col-index='2' data-building='Villa' data-lesson-type='trial'  data-trial-dates='[&quot;2026-03-31&quot;]' data-start-row='94' data-row-span='18' style='top:1502.0px; left:1180px; width:100px; height:274.25px; background-color:#E8F5E9; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Physik</strong><br>Shakun Konstantin<br>Desortzev Oleg<br>1.05<br>16:50-18:20<br>&#128197; 31.03.2026</div>
+<div class='activity-block activity-day-Mi lesson-type-group' data-day='Mi' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:1880px; width:100px; height:137.0px; background-color:#d105ae; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Mi 6B<br>1.05<br>16:00-16:45</div>
+<div class='activity-block activity-day-Mi lesson-type-group' data-day='Mi' data-col-index='6' data-building='Villa' data-lesson-type='group' data-start-row='96' data-row-span='15' style='top:1533.0px; left:2180px; width:100px; height:228.5px; background-color:#d105ae; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>6B<br>2.07<br>17:00-18:15</div>
+<div class='activity-block activity-day-Mi lesson-type-group' data-day='Mi' data-col-index='6' data-building='Villa' data-lesson-type='group' data-start-row='112' data-row-span='9' style='top:1781.0px; left:2180px; width:100px; height:137.0px; background-color:#d105ae; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Mathe</strong><br>Tchoudnovskaia Anna<br>6B<br>2.07<br>18:20-19:05</div>
+<div class='activity-block activity-day-Mi lesson-type-group' data-day='Mi' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:1780px; width:100px; height:137.0px; background-color:#3de20f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Mi 9A<br>1.03<br>16:00-16:45</div>
+<div class='activity-block activity-day-Mi lesson-type-group' data-day='Mi' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='103' data-row-span='12' style='top:1641.5px; left:2080px; width:100px; height:182.75px; background-color:#3de20f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>9A<br>2.03<br>17:35-18:35</div>
+<div class='activity-block activity-day-Mi lesson-type-group' data-day='Mi' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:1580px; width:100px; height:137.0px; background-color:#f55cc2; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Mi A<br>K.11<br>16:00-16:45</div>
+<div class='activity-block activity-day-Mi lesson-type-group' data-day='Mi' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='94' data-row-span='9' style='top:1502.0px; left:1580px; width:100px; height:137.0px; background-color:#ff67cd; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Mi B<br>K.11<br>16:50-17:35</div>
+<div class='activity-block activity-day-Mi lesson-type-group' data-day='Mi' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='96' data-row-span='19' style='top:1533.0px; left:1780px; width:100px; height:289.5px; background-color:#083476; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Mi StudioO<br>1.03<br>17:00-18:35</div>
+<div class='activity-block activity-day-Mi lesson-type-group' data-day='Mi' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:1980px; width:100px; height:182.75px; background-color:#61c7fa; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Mi ab 7J<br>1.06<br>16:00-17:00</div>
+<div class='activity-block activity-day-Mi lesson-type-group' data-day='Mi' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='96' data-row-span='18' style='top:1533.0px; left:1980px; width:100px; height:274.25px; background-color:#55bbee; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Mi ab 11J<br>1.06<br>17:00-18:30</div>
+<div class='activity-block activity-day-Mi lesson-type-group' data-day='Mi' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='93' data-row-span='9' style='top:1486.5px; left:1680px; width:100px; height:137.0px; background-color:#a62c58; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Log</strong><br>Kremenchutski Larissa<br>3JC Log<br>0.08<br>16:45-17:30</div>
+<div class='activity-block activity-day-Mi lesson-type-group' data-day='Mi' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='6' style='top:1347.0px; left:2080px; width:100px; height:91.25px; background-color:#a62c58; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russisch</strong><br>Kremenchutki Larissa<br>3JC<br>2.03<br>16:00-16:30</div>
+<div class='activity-block activity-day-Do lesson-type-group' data-day='Do' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='87' data-row-span='9' style='top:1393.5px; left:2380px; width:100px; height:137.0px; background-color:#47f700; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Do 9G+5B<br>1.03<br>16:15-17:00</div>
+<div class='activity-block activity-day-Do lesson-type-group' data-day='Do' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='99' data-row-span='18' style='top:1579.5px; left:2680px; width:100px; height:274.25px; background-color:#14ef8a; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>5B<br>2.04<br>17:15-18:45</div>
+<div class='activity-block activity-day-Do lesson-type-group' data-day='Do' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:2780px; width:100px; height:182.75px; background-color:#738c83; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>9B<br>2.09<br>16:00-17:00</div>
+<div class='activity-block activity-day-Do lesson-type-group' data-day='Do' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='97' data-row-span='9' style='top:1548.5px; left:2380px; width:100px; height:137.0px; background-color:#738c83; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Do 9B<br>1.03<br>17:05-17:50</div>
+<div class='activity-block activity-day-Do lesson-type-group' data-day='Do' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='97' data-row-span='12' style='top:1548.5px; left:2780px; width:100px; height:182.75px; background-color:#8fd740; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Urich Evgenia<br>9G<br>2.09<br>17:05-18:05</div>
+<div class='activity-block activity-day-Do lesson-type-group' data-day='Do' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='81' data-row-span='18' style='top:1300.5px; left:2480px; width:100px; height:274.25px; background-color:#5fc5f8; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Do 6-7J<br>1.06<br>15:45-17:15</div>
+<div class='activity-block activity-day-Do lesson-type-group' data-day='Do' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='101' data-row-span='18' style='top:1610.5px; left:2480px; width:100px; height:274.25px; background-color:#74daff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Do 10-11J<br>1.06<br>17:25-18:55</div>
+<div class='activity-block activity-day-Do lesson-type-group' data-day='Do' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='72' data-row-span='9' style='top:1161.0px; left:2680px; width:100px; height:137.0px; background-color:#738aeb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>10C<br>2.04<br>15:00-15:45</div>
+<div class='activity-block activity-day-Do lesson-type-group' data-day='Do' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:2280px; width:100px; height:182.75px; background-color:#f54c13; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Baby</strong><br>Kremenchutski Larissa<br>Baby Do<br>0.08<br>16:00-17:00</div>
+<div class='activity-block activity-day-Do lesson-type-group' data-day='Do' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:2580px; width:100px; height:182.75px; background-color:#5fc55f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Olekh Katerina<br>Deutsch 5-7kl Do<br>2.03<br>16:00-17:00</div>
+<div class='activity-block activity-day-Do lesson-type-group' data-day='Do' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='97' data-row-span='12' style='top:1548.5px; left:2580px; width:100px; height:182.75px; background-color:#6ed46e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Olekh Katerina<br>Deutsch 7-9kl Do<br>2.03<br>17:05-18:05</div>
+<div class='activity-block activity-day-Do lesson-type-group' data-day='Do' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='99' data-row-span='9' style='top:1579.5px; left:2280px; width:100px; height:137.0px; background-color:#d93693; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Theater</strong><br>Müller Lüsia<br>Theater ab 6J<br>0.08<br>17:15-18:00</div>
+<div class='activity-block activity-day-Fr lesson-type-group' data-day='Fr' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='81' data-row-span='18' style='top:1300.5px; left:3280px; width:100px; height:274.25px; background-color:#276758; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Wagner Galina<br>7B<br>2.03<br>15:45-17:15</div>
+<div class='activity-block activity-day-Fr lesson-type-group' data-day='Fr' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='100' data-row-span='9' style='top:1595.0px; left:3080px; width:100px; height:137.0px; background-color:#72e9d3; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Fr 5D+7B<br>1.05<br>17:20-18:05</div>
+<div class='activity-block activity-day-Fr lesson-type-group' data-day='Fr' data-col-index='6' data-building='Villa' data-lesson-type='group' data-start-row='81' data-row-span='18' style='top:1300.5px; left:3480px; width:100px; height:274.25px; background-color:#1ade4e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Urich Evgenia<br>5D<br>2.07<br>15:45-17:15</div>
+<div class='activity-block activity-day-Fr lesson-type-group' data-day='Fr' data-col-index='6' data-building='Villa' data-lesson-type='group' data-start-row='100' data-row-span='15' style='top:1595.0px; left:3480px; width:100px; height:228.5px; background-color:#994076; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>8D<br>2.07<br>17:20-18:35</div>
+<div class='activity-block activity-day-Fr lesson-type-group' data-day='Fr' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='99' data-row-span='12' style='top:1579.5px; left:3380px; width:100px; height:182.75px; background-color:#c309f0; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Kremenchutski Larissa<br>2D<br>2.04<br>17:15-18:15</div>
+<div class='activity-block activity-day-Fr lesson-type-group' data-day='Fr' data-col-index='7' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:3580px; width:100px; height:182.75px; background-color:#53b953; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Audzyeenka Swietlana<br>Deutsch ab 5J Fr<br>2.09<br>16:00-17:00</div>
+<div class='activity-block activity-day-Fr lesson-type-group' data-day='Fr' data-col-index='7' data-building='Villa' data-lesson-type='group' data-start-row='97' data-row-span='12' style='top:1548.5px; left:3580px; width:100px; height:182.75px; background-color:#79df79; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Deutsch</strong><br>Eichmann Irina<br>Deutsch ab 6J Fr<br>2.09<br>17:05-18:05</div>
+<div class='activity-block activity-day-Fr lesson-type-group' data-day='Fr' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:2880px; width:100px; height:182.75px; background-color:#5d26c8; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Orchester</strong><br>Nepomnaschi Tatiana<br>Orchester Fr<br>0.08<br>16:00-17:00</div>
+<div class='activity-block activity-day-Fr lesson-type-group' data-day='Fr' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='87' data-row-span='9' style='top:1393.5px; left:2980px; width:100px; height:137.0px; background-color:#f8bc2f; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Fr 2B<br>1.03<br>16:15-17:00</div>
+<div class='activity-block activity-day-Fr lesson-type-group' data-day='Fr' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='88' data-row-span='9' style='top:1409.0px; left:3080px; width:100px; height:137.0px; background-color:#994076; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Fr 8D<br>1.05<br>16:20-17:05</div>
+<div class='activity-block activity-day-Fr lesson-type-group' data-day='Fr' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='18' style='top:1347.0px; left:3180px; width:100px; height:274.25px; background-color:#72d8ff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Fr 14-15J<br>1.06<br>16:00-17:30</div>
+<div class='activity-block activity-day-Fr lesson-type-group' data-day='Fr' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:3380px; width:100px; height:137.0px; background-color:#71149d; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>10A<br>2.04<br>16:00-16:45</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='3' data-row-span='9' style='top:91.5px; left:3680px; width:100px; height:137.0px; background-color:#ff79df; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Sa C<br>K.11<br>09:15-10:00</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='13' data-row-span='9' style='top:246.5px; left:3680px; width:100px; height:137.0px; background-color:#fc63c9; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Sa D<br>K.11<br>10:05-10:50</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='0' data-building='Villa' data-lesson-type='group' data-start-row='24' data-row-span='9' style='top:417.0px; left:3680px; width:100px; height:137.0px; background-color:#fb62c8; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Schach</strong><br>Rosov Boris<br>Schach Sa E<br>K.11<br>11:00-11:45</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='3' data-row-span='12' style='top:91.5px; left:3780px; width:100px; height:182.75px; background-color:#66ccff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Sa 4J<br>0.08<br>09:15-10:15</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='16' data-row-span='15' style='top:293.0px; left:3780px; width:100px; height:228.5px; background-color:#69cfff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Rusol Elena<br>Tanz Sa 5J<br>0.08<br>10:20-11:35</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='3' data-row-span='18' style='top:91.5px; left:4080px; width:100px; height:274.25px; background-color:#55bbee; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Sa 12-13J<br>1.06<br>09:15-10:45</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='24' data-row-span='18' style='top:417.0px; left:4080px; width:100px; height:274.25px; background-color:#79dfff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Sa 14-15J<br>1.06<br>11:00-12:30</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='4' data-building='Villa' data-lesson-type='group' data-start-row='44' data-row-span='18' style='top:727.0px; left:4080px; width:100px; height:274.25px; background-color:#76dcff; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Tanz</strong><br>Hornung Lübov<br>Tanz Sa 10-11J<br>1.06<br>12:40-14:10</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='3' data-row-span='9' style='top:91.5px; left:3880px; width:100px; height:137.0px; background-color:#a35aea; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 1B<br>1.03<br>09:15-10:00</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='9' data-building='Villa' data-lesson-type='group' data-start-row='15' data-row-span='12' style='top:277.5px; left:4580px; width:100px; height:182.75px; background-color:#a35aea; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>1B<br>2.09<br>10:15-11:15</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='1' data-building='Villa' data-lesson-type='group' data-start-row='54' data-row-span='18' style='top:882.0px; left:3780px; width:100px; height:274.25px; background-color:#26defa; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Orchester</strong><br>Nepomnaschi Tatiana<br>Orchester Sa<br>0.08<br>13:30-15:00</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='9' data-building='Villa' data-lesson-type='group' data-start-row='28' data-row-span='18' style='top:479.0px; left:4580px; width:100px; height:274.25px; background-color:#f78518; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Urich Evgenia<br>9C<br>2.09<br>11:20-12:50</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='9' data-building='Villa' data-lesson-type='group' data-start-row='0' data-row-span='12' style='top:45.0px; left:4580px; width:100px; height:182.75px; background-color:#d1052c; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>9D<br>2.09<br>09:00-10:00</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='14' data-row-span='9' style='top:262.0px; left:3880px; width:100px; height:137.0px; background-color:#a32e42; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 9D+9C+7C<br>1.03<br>10:10-10:55</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='8' data-building='Villa' data-lesson-type='group' data-start-row='26' data-row-span='18' style='top:448.0px; left:4480px; width:100px; height:274.25px; background-color:#d448da; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>7C<br>2.07<br>11:10-12:40</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='8' data-building='Villa' data-lesson-type='group' data-start-row='46' data-row-span='9' style='top:758.0px; left:4480px; width:100px; height:137.0px; background-color:#d448da; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Mathe</strong><br>Tchoudnovskaia Anna<br>Mathe 7C<br>2.07<br>12:50-13:35</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='8' data-building='Villa' data-lesson-type='group' data-start-row='9' data-row-span='15' style='top:184.5px; left:4480px; width:100px; height:228.5px; background-color:#073169; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>2C<br>2.07<br>09:45-11:00</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='26' data-row-span='9' style='top:448.0px; left:3980px; width:100px; height:137.0px; background-color:#99594c; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa 3D+2C<br>1.05<br>11:10-11:55</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='6' data-building='Villa' data-lesson-type='group' data-start-row='4' data-row-span='18' style='top:107.0px; left:4280px; width:100px; height:274.25px; background-color:#3848ad; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Kremenchutski Larissa<br>4C<br>2.03<br>09:20-10:50</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='14' data-row-span='9' style='top:262.0px; left:3980px; width:100px; height:137.0px; background-color:#6dd949; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa 3B<br>1.05<br>10:10-10:55</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='6' data-building='Villa' data-lesson-type='group' data-start-row='24' data-row-span='18' style='top:417.0px; left:4280px; width:100px; height:274.25px; background-color:#6dd949; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>3B<br>2.03<br>11:00-12:30</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='26' data-row-span='9' style='top:448.0px; left:3880px; width:100px; height:137.0px; background-color:#602caf; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 4C+10B<br>1.03<br>11:10-11:55</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='36' data-row-span='9' style='top:603.0px; left:4180px; width:100px; height:137.0px; background-color:#d28cf0; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Mathe</strong><br>Zelenska Olena<br>Mathe 10B<br>1.09<br>12:00-12:45</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='48' data-row-span='18' style='top:789.0px; left:4180px; width:100px; height:274.25px; background-color:#d28cf0; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Wittmer Irina<br>10B<br>1.09<br>13:00-14:30</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='7' data-building='Villa' data-lesson-type='group' data-start-row='6' data-row-span='18' style='top:138.0px; left:4380px; width:100px; height:274.25px; background-color:#55fac2; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Wagner Galina<br>3D<br>2.04<br>09:30-11:00</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='5' data-building='Villa' data-lesson-type='group' data-start-row='15' data-row-span='9' style='top:277.5px; left:4180px; width:100px; height:137.0px; background-color:#033ebf; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Dykun Lüdmila<br>Kunst Sa 4D<br>1.09<br>10:15-11:00</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='7' data-building='Villa' data-lesson-type='group' data-start-row='26' data-row-span='18' style='top:448.0px; left:4380px; width:100px; height:274.25px; background-color:#033ebf; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Wagner Galina<br>4D<br>2.04<br>11:10-12:40</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='36' data-row-span='9' style='top:603.0px; left:3980px; width:100px; height:137.0px; background-color:#7ad1cb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa 5C<br>1.05<br>12:00-12:45</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='7' data-building='Villa' data-lesson-type='group' data-start-row='46' data-row-span='18' style='top:758.0px; left:4380px; width:100px; height:274.25px; background-color:#7ad1cb; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Wagner Galina<br>5C<br>2.04<br>12:50-14:20</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='36' data-row-span='9' style='top:603.0px; left:3880px; width:100px; height:137.0px; background-color:#30ec5e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa 11E<br>1.03<br>12:00-12:45</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='6' data-building='Villa' data-lesson-type='group' data-start-row='46' data-row-span='18' style='top:758.0px; left:4280px; width:100px; height:274.25px; background-color:#30ec5e; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Kremenchutski Larissa<br>11E<br>2.03<br>12:50-14:20</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='2' data-building='Villa' data-lesson-type='group' data-start-row='48' data-row-span='18' style='top:789.0px; left:3880px; width:100px; height:274.25px; background-color:#4a8e5b; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Kunst</strong><br>Melnikov Olga<br>Kunst Sa StudioO<br>1.03<br>13:00-14:30</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='9' data-building='Villa' data-lesson-type='group' data-start-row='48' data-row-span='12' style='top:789.0px; left:4580px; width:100px; height:182.75px; background-color:#1ca0e2; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Russish</strong><br>Urich Evgenia<br>12C<br>2.09<br>13:00-14:00</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='3' data-building='Villa' data-lesson-type='group' data-start-row='48' data-row-span='18' style='top:789.0px; left:3980px; width:100px; height:274.25px; background-color:#eae197; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Kunst</strong><br>Melnikov Pavel<br>Kunst Sa StudioP<br>1.05<br>13:00-14:30</div>
 </div>
 <h2>Здание: Kolibri</h2>
 <div class="schedule-container" data-building="Kolibri">
@@ -7903,25 +8186,25 @@ function forceReinitializeApplication() {
 <tr><td class="time-cell" data-row="129" data-col="time">19:45</td><td class="day-Mo" data-row="129" data-col="0"></td><td class="day-Di" data-row="129" data-col="0"></td><td class="day-Di" data-row="129" data-col="1"></td><td class="day-Mi" data-row="129" data-col="0"></td><td class="day-Mi" data-row="129" data-col="1"></td><td class="day-Mi" data-row="129" data-col="2"></td><td class="day-Do" data-row="129" data-col="0"></td><td class="day-Do" data-row="129" data-col="1"></td><td class="day-Do" data-row="129" data-col="2"></td><td class="day-Fr" data-row="129" data-col="0"></td><td class="day-Fr" data-row="129" data-col="1"></td><td class="day-Fr" data-row="129" data-col="2"></td><td class="day-Sa" data-row="129" data-col="0"></td></tr>
 </tbody>
 </table>
-<div class='activity-block activity-day-Mo' data-day='Mo' data-col-index='0' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:80px; width:100px; height:137.0px; background-color:#5debf1; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>VSpE</strong><br>Mustafaeva Liliia<br>VSpE_L<br>2.5<br>16:00-16:45</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='0' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:180px; width:100px; height:137.0px; background-color:#f132c9; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Ukr. Mus.</strong><br>Dosenko Evgeniy<br>Ukrainische Musik Di 5-6J<br>2.2<br>16:00-16:45</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='1' data-building='Kolibri' data-lesson-type='group' data-start-row='96' data-row-span='9' style='top:1533.0px; left:280px; width:100px; height:137.0px; background-color:#f132c9; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Ukrainisch</strong><br>Perevoznyk Inna<br>Ukrainisch Di 5-6J<br>2.4<br>17:00-17:45</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='1' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:280px; width:100px; height:137.0px; background-color:#c78a5b; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukrainisch</strong><br>Perevoznyk Inna<br>Ukrainisch Di 4-5J<br>2.4<br>16:00-16:45</div>
-<div class='activity-block activity-day-Di' data-day='Di' data-col-index='0' data-building='Kolibri' data-lesson-type='group' data-start-row='96' data-row-span='9' style='top:1533.0px; left:180px; width:100px; height:137.0px; background-color:#c78a5b; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukr. Mus.</strong><br>Dosenko Evgeniy<br>Ukrainische Musik Di 4-5J<br>2.2<br>17:00-17:45</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='2' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='6' style='top:1347.0px; left:580px; width:100px; height:91.25px; background-color:#65a3e7; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>VSpE</strong><br>Koputska Elena<br>VSpE_E<br>2.4<br>16:00-16:30</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='1' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:480px; width:100px; height:137.0px; background-color:#e2353c; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>4Jahrige</strong><br>Tchoudnovskaia Anna<br>4JA<br>2.3<br>16:00-16:45</div>
-<div class='activity-block activity-day-Mi' data-day='Mi' data-col-index='0' data-building='Kolibri' data-lesson-type='group' data-start-row='96' data-row-span='9' style='top:1533.0px; left:380px; width:100px; height:137.0px; background-color:#baa827; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Logorithmika</strong><br>Shik Swetlana<br>4JA_Log<br>2.2<br>17:00-17:45</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='0' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:680px; width:100px; height:137.0px; background-color:#f132c9; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Ukr. Mus.</strong><br>Dosenko Evgeniy<br>Ukrainische Musik Do 5-6J<br>2.2<br>16:00-16:45</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='1' data-building='Kolibri' data-lesson-type='group' data-start-row='96' data-row-span='9' style='top:1533.0px; left:780px; width:100px; height:137.0px; background-color:#f132c9; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Ukrainisch</strong><br>Perevoznyk Inna<br>Ukrainisch Do 5-6J<br>2.4<br>17:00-17:45</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='1' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:780px; width:100px; height:137.0px; background-color:#c78a5b; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukrainisch</strong><br>Perevoznyk Inna<br>Ukrainisch Do 4-5J<br>2.4<br>16:00-16:45</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='0' data-building='Kolibri' data-lesson-type='group' data-start-row='96' data-row-span='9' style='top:1533.0px; left:680px; width:100px; height:137.0px; background-color:#c78a5b; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukr. Mus.</strong><br>Dosenko Evgeniy<br>Ukrainische Musik Do 4-5J<br>2.2<br>17:00-17:45</div>
-<div class='activity-block activity-day-Do' data-day='Do' data-col-index='2' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:880px; width:100px; height:182.75px; background-color:#d1a45a; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>4Jahrige</strong><br>Wagner Galina<br>4JC<br>2.7<br>16:00-17:00</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='1' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:1080px; width:100px; height:137.0px; background-color:#1bbf7e; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>4Jahrige</strong><br>Kremenchutski Larissa<br>4JB<br>2.3<br>16:00-16:45</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='1' data-building='Kolibri' data-lesson-type='group' data-start-row='99' data-row-span='6' style='top:1579.5px; left:1080px; width:100px; height:91.25px; background-color:#efa9bc; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>3JA<br>2.3<br>17:15-17:45</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='0' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:980px; width:100px; height:182.75px; background-color:#ee69ca; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Logorithmika</strong><br>Shik Swetlana<br>3JB_Log<br>2.2<br>16:00-17:00</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='0' data-building='Kolibri' data-lesson-type='group' data-start-row='96' data-row-span='9' style='top:1533.0px; left:980px; width:100px; height:137.0px; background-color:#fed1d5; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Logorithmika</strong><br>Shik Swetlana<br>4JB_Log<br>2.2<br>17:00-17:45</div>
-<div class='activity-block activity-day-Fr' data-day='Fr' data-col-index='2' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:1180px; width:100px; height:182.75px; background-color:#dae8bf; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukrainisch</strong><br>Gorochovska Olena<br>Ukrainisch Fr ab 6J<br>2.4<br>16:00-17:00</div>
-<div class='activity-block activity-day-Sa' data-day='Sa' data-col-index='0' data-building='Kolibri' data-lesson-type='group' data-start-row='12' data-row-span='12' style='top:231.0px; left:1280px; width:100px; height:182.75px; background-color:#463f4b; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Baby</strong><br>Shik Swetlana<br>Baby Sa<br>2.2<br>10:00-11:00</div>
+<div class='activity-block activity-day-Mo lesson-type-group' data-day='Mo' data-col-index='0' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:80px; width:100px; height:137.0px; background-color:#5debf1; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>VSpE</strong><br>Mustafaeva Liliia<br>VSpE_L<br>2.5<br>16:00-16:45</div>
+<div class='activity-block activity-day-Di lesson-type-group' data-day='Di' data-col-index='0' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:180px; width:100px; height:137.0px; background-color:#f132c9; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Ukr. Mus.</strong><br>Dosenko Evgeniy<br>Ukrainische Musik Di 5-6J<br>2.2<br>16:00-16:45</div>
+<div class='activity-block activity-day-Di lesson-type-group' data-day='Di' data-col-index='1' data-building='Kolibri' data-lesson-type='group' data-start-row='96' data-row-span='9' style='top:1533.0px; left:280px; width:100px; height:137.0px; background-color:#f132c9; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Ukrainisch</strong><br>Perevoznyk Inna<br>Ukrainisch Di 5-6J<br>2.4<br>17:00-17:45</div>
+<div class='activity-block activity-day-Di lesson-type-group' data-day='Di' data-col-index='1' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:280px; width:100px; height:137.0px; background-color:#c78a5b; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukrainisch</strong><br>Perevoznyk Inna<br>Ukrainisch Di 4-5J<br>2.4<br>16:00-16:45</div>
+<div class='activity-block activity-day-Di lesson-type-group' data-day='Di' data-col-index='0' data-building='Kolibri' data-lesson-type='group' data-start-row='96' data-row-span='9' style='top:1533.0px; left:180px; width:100px; height:137.0px; background-color:#c78a5b; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukr. Mus.</strong><br>Dosenko Evgeniy<br>Ukrainische Musik Di 4-5J<br>2.2<br>17:00-17:45</div>
+<div class='activity-block activity-day-Mi lesson-type-group' data-day='Mi' data-col-index='2' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='6' style='top:1347.0px; left:580px; width:100px; height:91.25px; background-color:#65a3e7; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>VSpE</strong><br>Koputska Elena<br>VSpE_E<br>2.4<br>16:00-16:30</div>
+<div class='activity-block activity-day-Mi lesson-type-group' data-day='Mi' data-col-index='1' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:480px; width:100px; height:137.0px; background-color:#e2353c; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>4Jahrige</strong><br>Tchoudnovskaia Anna<br>4JA<br>2.3<br>16:00-16:45</div>
+<div class='activity-block activity-day-Mi lesson-type-group' data-day='Mi' data-col-index='0' data-building='Kolibri' data-lesson-type='group' data-start-row='96' data-row-span='9' style='top:1533.0px; left:380px; width:100px; height:137.0px; background-color:#baa827; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Logorithmika</strong><br>Shik Swetlana<br>4JA_Log<br>2.2<br>17:00-17:45</div>
+<div class='activity-block activity-day-Do lesson-type-group' data-day='Do' data-col-index='0' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:680px; width:100px; height:137.0px; background-color:#f132c9; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Ukr. Mus.</strong><br>Dosenko Evgeniy<br>Ukrainische Musik Do 5-6J<br>2.2<br>16:00-16:45</div>
+<div class='activity-block activity-day-Do lesson-type-group' data-day='Do' data-col-index='1' data-building='Kolibri' data-lesson-type='group' data-start-row='96' data-row-span='9' style='top:1533.0px; left:780px; width:100px; height:137.0px; background-color:#f132c9; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Ukrainisch</strong><br>Perevoznyk Inna<br>Ukrainisch Do 5-6J<br>2.4<br>17:00-17:45</div>
+<div class='activity-block activity-day-Do lesson-type-group' data-day='Do' data-col-index='1' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:780px; width:100px; height:137.0px; background-color:#c78a5b; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukrainisch</strong><br>Perevoznyk Inna<br>Ukrainisch Do 4-5J<br>2.4<br>16:00-16:45</div>
+<div class='activity-block activity-day-Do lesson-type-group' data-day='Do' data-col-index='0' data-building='Kolibri' data-lesson-type='group' data-start-row='96' data-row-span='9' style='top:1533.0px; left:680px; width:100px; height:137.0px; background-color:#c78a5b; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukr. Mus.</strong><br>Dosenko Evgeniy<br>Ukrainische Musik Do 4-5J<br>2.2<br>17:00-17:45</div>
+<div class='activity-block activity-day-Do lesson-type-group' data-day='Do' data-col-index='2' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:880px; width:100px; height:182.75px; background-color:#d1a45a; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>4Jahrige</strong><br>Wagner Galina<br>4JC<br>2.7<br>16:00-17:00</div>
+<div class='activity-block activity-day-Fr lesson-type-group' data-day='Fr' data-col-index='1' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='9' style='top:1347.0px; left:1080px; width:100px; height:137.0px; background-color:#1bbf7e; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>4Jahrige</strong><br>Kremenchutski Larissa<br>4JB<br>2.3<br>16:00-16:45</div>
+<div class='activity-block activity-day-Fr lesson-type-group' data-day='Fr' data-col-index='1' data-building='Kolibri' data-lesson-type='group' data-start-row='99' data-row-span='6' style='top:1579.5px; left:1080px; width:100px; height:91.25px; background-color:#efa9bc; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Russish</strong><br>Tchoudnovskaia Anna<br>3JA<br>2.3<br>17:15-17:45</div>
+<div class='activity-block activity-day-Fr lesson-type-group' data-day='Fr' data-col-index='0' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:980px; width:100px; height:182.75px; background-color:#ee69ca; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Logorithmika</strong><br>Shik Swetlana<br>3JB_Log<br>2.2<br>16:00-17:00</div>
+<div class='activity-block activity-day-Fr lesson-type-group' data-day='Fr' data-col-index='0' data-building='Kolibri' data-lesson-type='group' data-start-row='96' data-row-span='9' style='top:1533.0px; left:980px; width:100px; height:137.0px; background-color:#fed1d5; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Logorithmika</strong><br>Shik Swetlana<br>4JB_Log<br>2.2<br>17:00-17:45</div>
+<div class='activity-block activity-day-Fr lesson-type-group' data-day='Fr' data-col-index='2' data-building='Kolibri' data-lesson-type='group' data-start-row='84' data-row-span='12' style='top:1347.0px; left:1180px; width:100px; height:182.75px; background-color:#dae8bf; color:#000000; text-shadow:0 0 1px rgba(255, 255, 255, 0.5);'><strong>Ukrainisch</strong><br>Gorochovska Olena<br>Ukrainisch Fr ab 6J<br>2.4<br>16:00-17:00</div>
+<div class='activity-block activity-day-Sa lesson-type-group' data-day='Sa' data-col-index='0' data-building='Kolibri' data-lesson-type='group' data-start-row='12' data-row-span='12' style='top:231.0px; left:1280px; width:100px; height:182.75px; background-color:#463f4b; color:#FFFFFF; text-shadow:0 0 1px rgba(0, 0, 0, 0.7);'><strong>Baby</strong><br>Shik Swetlana<br>Baby Sa<br>2.2<br>10:00-11:00</div>
 </div>
 </body>
 </html>

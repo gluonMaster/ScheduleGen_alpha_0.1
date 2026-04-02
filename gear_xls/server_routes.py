@@ -277,6 +277,7 @@ def schedule():
         '<script src="/static/auth_ui.js"></script>\n'
         '<script src="/static/base_sync_ui.js"></script>\n'
         '<script src="/static/lock_ui.js"></script>\n'
+        '<script src="/js_modules/trial_ui.js"></script>\n'
         '<script src="/static/individual_ui.js"></script>\n'
     )
     if "</body>" in html:
@@ -307,7 +308,7 @@ def api_lock_status():
 @login_required
 def api_lock_acquire():
     user = current_user()
-    if user["role"] not in ("admin", "editor"):
+    if user["role"] not in ("admin", "editor", "organizer"):
         return jsonify({"ok": False, "error": "Forbidden", "code": "FORBIDDEN"}), 403
     result = lock_manager.acquire_lock(user["login"])
     return jsonify(result)
@@ -422,7 +423,7 @@ def api_publish_schedule():
 @login_required
 def api_create_block():
     user = current_user()
-    if user["role"] not in ("admin", "editor"):
+    if user["role"] not in ("admin", "editor", "organizer"):
         return jsonify({"ok": False, "error": "Forbidden", "code": "FORBIDDEN"}), 403
     err = _require_lock(user["login"])
     if err:
@@ -444,7 +445,7 @@ def api_create_block():
 @login_required
 def api_update_block(block_id):
     user = current_user()
-    if user["role"] not in ("admin", "editor"):
+    if user["role"] not in ("admin", "editor", "organizer"):
         return jsonify({"ok": False, "error": "Forbidden", "code": "FORBIDDEN"}), 403
     err = _require_lock(user["login"])
     if err:
@@ -468,12 +469,15 @@ def api_update_block(block_id):
 @login_required
 def api_delete_block(block_id):
     user = current_user()
-    if user["role"] not in ("admin", "editor"):
+    if user["role"] not in ("admin", "editor", "organizer"):
         return jsonify({"ok": False, "error": "Forbidden", "code": "FORBIDDEN"}), 403
     err = _require_lock(user["login"])
     if err:
         return jsonify(err), 403
-    if not state_manager.delete_block(block_id):
+    deleted, del_err = state_manager.delete_block(block_id, user["role"])
+    if del_err == "FORBIDDEN":
+        return jsonify({"ok": False, "error": "Forbidden lesson_type", "code": "FORBIDDEN"}), 403
+    if not deleted:
         return jsonify({"ok": False, "error": "Block not found", "code": "NOT_FOUND"}), 404
     return jsonify(
         {
@@ -483,11 +487,38 @@ def api_delete_block(block_id):
     )
 
 
+@app.route("/api/blocks/<block_id>/convert", methods=["POST"])
+@login_required
+def api_convert_block(block_id):
+    user = current_user()
+    if user["role"] not in ("admin", "editor", "organizer"):
+        return jsonify({"ok": False, "error": "Forbidden", "code": "FORBIDDEN"}), 403
+    err = _require_lock(user["login"])
+    if err:
+        return jsonify(err), 403
+    block, error = state_manager.convert_block_to_regular(block_id, user["role"])
+    if error == "NOT_FOUND":
+        return jsonify({"ok": False, "error": "Block not found", "code": "NOT_FOUND"}), 404
+    if error == "NOT_TRIAL":
+        return jsonify({"ok": False, "error": "Block is not a trial lesson", "code": "NOT_TRIAL"}), 400
+    if error == "FORBIDDEN":
+        return jsonify({"ok": False, "error": "Forbidden", "code": "FORBIDDEN"}), 403
+    if error:
+        return jsonify({"ok": False, "error": error}), 400
+    return jsonify(
+        {
+            "ok": True,
+            "block": block,
+            "individual_revision": state_manager.get_individual_revision(),
+        }
+    )
+
+
 @app.route("/api/columns", methods=["POST"])
 @login_required
 def api_add_column():
     user = current_user()
-    if user["role"] not in ("admin", "editor"):
+    if user["role"] not in ("admin", "editor", "organizer"):
         return jsonify({"ok": False, "error": "Forbidden", "code": "FORBIDDEN"}), 403
     err = _require_lock(user["login"])
     if err:
@@ -505,7 +536,7 @@ def api_add_column():
 @login_required
 def api_delete_column():
     user = current_user()
-    if user["role"] not in ("admin", "editor"):
+    if user["role"] not in ("admin", "editor", "organizer"):
         return jsonify({"ok": False, "error": "Forbidden", "code": "FORBIDDEN"}), 403
     err = _require_lock(user["login"])
     if err:
@@ -526,6 +557,23 @@ def api_delete_column():
                 "code": "COLUMN_HAS_GROUP_LESSONS",
             }
         ), 403
+    if user["role"] == "organizer":
+        if state_manager.base_has_group_lessons_in_column(building, day, room):
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": "Column contains group lessons",
+                    "code": "COLUMN_HAS_GROUP_LESSONS",
+                }
+            ), 403
+        if state_manager.individual_column_has_non_trial_blocks(building, day, room):
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": "Column contains non-trial lessons",
+                    "code": "COLUMN_HAS_NON_TRIAL_BLOCKS",
+                }
+            ), 403
     count = state_manager.delete_column_blocks(building, day, room)
     return jsonify(
         {

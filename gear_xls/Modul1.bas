@@ -7,6 +7,7 @@ Sub CreateSchedulePlanning()
     Dim wbTarget As Workbook
     Dim wsSource As Worksheet
     Dim wsTarget As Worksheet
+    Dim wsMetadata As Worksheet
     Dim lastRow As Long
     Dim i As Long
     Dim targetRow As Long
@@ -23,6 +24,12 @@ Sub CreateSchedulePlanning()
     Dim lastUsedRow As Long
     Dim blockCount As Long
     Dim blockRange As Range
+    Dim metadataRow As Long
+    Dim blockIndex As Long
+    Dim targetColumn As Long
+    Dim targetColumnLetter As String
+    Dim lessonTypeValue As String
+    Dim trialDatesJsonValue As String
     
     ' Optimize performance
     Application.ScreenUpdating = False
@@ -52,6 +59,14 @@ Sub CreateSchedulePlanning()
     ' Rename the first sheet to "Plannung"
     Set wsTarget = wbTarget.Sheets(1)
     wsTarget.Name = "Plannung"
+
+    ' Create hidden sheet for service metadata
+    Set wsMetadata = wbTarget.Worksheets.Add(After:=wsTarget)
+    wsMetadata.Name = "__service_metadata"
+    wsMetadata.Cells(1, 1).Value = "section_index"
+    wsMetadata.Cells(1, 2).Value = "column_letter"
+    wsMetadata.Cells(1, 3).Value = "lesson_type"
+    wsMetadata.Cells(1, 4).Value = "trial_dates_json"
     
     ' 1. Add headers and formatting to the first row
     ' 1a. Add header titles
@@ -63,14 +78,21 @@ Sub CreateSchedulePlanning()
     wsTarget.Range("B1:D1").Interior.Color = RGB(255, 230, 230)
     
     ' 1c. Freeze the first row
+    ' wsTarget must be activated before .Select; Worksheets.Add above left wsMetadata active
+    wsTarget.Activate
     wsTarget.Range("A2").Select
     ActiveWindow.FreezePanes = True
     
     ' Initialize target row counter
     targetRow = 2
+    targetColumn = 2
+    metadataRow = 2
+    blockIndex = 0
     
     ' Process each row of data from source
     For i = 2 To lastRow
+        ' All lesson types including trial are now written to Plannung and metadata sheet
+
         ' Get room and building values
         roomValue = CStr(wsSource.Cells(i, 4).Value)
         buildingValue = CStr(wsSource.Cells(i, 5).Value)
@@ -85,34 +107,51 @@ Sub CreateSchedulePlanning()
         ' Transfer data according to the new structure
         
         ' 1st row of section: Subject
-        wsTarget.Cells(targetRow, 2).Value = wsSource.Cells(i, 1).Value
+        wsTarget.Cells(targetRow, targetColumn).Value = wsSource.Cells(i, 1).Value
         
         ' 2nd row of section: Group
-        wsTarget.Cells(targetRow + 1, 2).Value = wsSource.Cells(i, 2).Value
+        wsTarget.Cells(targetRow + 1, targetColumn).Value = wsSource.Cells(i, 2).Value
         
         ' 3rd row of section: Teacher
-        wsTarget.Cells(targetRow + 2, 2).Value = wsSource.Cells(i, 3).Value
+        wsTarget.Cells(targetRow + 2, targetColumn).Value = wsSource.Cells(i, 3).Value
         
         ' 4th row of section: Room - with building first letter prefix
         ' Format as text to preserve format like "2.09"
-        wsTarget.Cells(targetRow + 3, 2).NumberFormat = "@"
-        wsTarget.Cells(targetRow + 3, 2).Value = buildingFirstLetter & roomValue
+        wsTarget.Cells(targetRow + 3, targetColumn).NumberFormat = "@"
+        wsTarget.Cells(targetRow + 3, targetColumn).Value = buildingFirstLetter & roomValue
         
         ' 8th row of section: Building
-        wsTarget.Cells(targetRow + 7, 2).Value = buildingValue
+        wsTarget.Cells(targetRow + 7, targetColumn).Value = buildingValue
         
         ' 9th row of section: Duration
-        wsTarget.Cells(targetRow + 8, 2).Value = wsSource.Cells(i, 9).Value
+        wsTarget.Cells(targetRow + 8, targetColumn).Value = wsSource.Cells(i, 9).Value
         
         ' 10th row of section: Day of week
-        wsTarget.Cells(targetRow + 9, 2).Value = wsSource.Cells(i, 6).Value
+        wsTarget.Cells(targetRow + 9, targetColumn).Value = wsSource.Cells(i, 6).Value
         
         ' 11th row of section: Start time
-        wsTarget.Cells(targetRow + 10, 2).Value = wsSource.Cells(i, 7).Value
+        wsTarget.Cells(targetRow + 10, targetColumn).Value = wsSource.Cells(i, 7).Value
+
+        lessonTypeValue = Trim$(CStr(wsSource.Cells(i, 10).Value))
+        If LCase$(lessonTypeValue) = "trial" Then
+            trialDatesJsonValue = CStr(wsSource.Cells(i, 11).Value)
+        Else
+            trialDatesJsonValue = ""
+        End If
+
+        targetColumnLetter = Replace(wsTarget.Cells(1, targetColumn).Address(False, False), "1", "")
+        wsMetadata.Cells(metadataRow, 1).Value = blockIndex
+        wsMetadata.Cells(metadataRow, 2).Value = targetColumnLetter
+        wsMetadata.Cells(metadataRow, 3).Value = lessonTypeValue
+        wsMetadata.Cells(metadataRow, 4).Value = trialDatesJsonValue
+        metadataRow = metadataRow + 1
+        blockIndex = blockIndex + 1
         
         ' Move to the next section (increment by 14 rows)
         targetRow = targetRow + 14
     Next i
+
+    wsMetadata.Visible = xlSheetVeryHidden
     
     ' Get the last used row for formatting
     lastUsedRow = wsTarget.Cells(wsTarget.Rows.Count, 2).End(xlUp).Row
@@ -241,6 +280,7 @@ Sub CreateSchedulePlanning()
     
     ' Clean up
     Set wsTarget = Nothing
+    Set wsMetadata = Nothing
     Set wsSource = Nothing
     Set wbTarget = Nothing
     Set wbSource = Nothing

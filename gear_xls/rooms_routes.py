@@ -7,7 +7,7 @@ ROOMS_PAGE_TEMPLATE = """<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<title>Аудитории — SchedGen</title>
+<title>Аудитории - SchedGen</title>
 <link rel="stylesheet" href="/static/nav.css">
 <style>
 body { font-family: sans-serif; margin: 0; padding-top: calc(var(--schedgen-nav-height) + 4px); background: #fafafa; }
@@ -15,10 +15,12 @@ body { font-family: sans-serif; margin: 0; padding-top: calc(var(--schedgen-nav-
     display: flex; flex-wrap: wrap; gap: 10px; align-items: center; position: sticky;
     top: var(--schedgen-nav-height); z-index: 8000; }
 #rooms-controls label { font-size: 13px; }
-#rooms-controls select, #rooms-controls input[type=text], #rooms-controls input[type=number] {
+#rooms-controls select, #rooms-controls input[type=text], #rooms-controls input[type=number], #rooms-controls input[type=time] {
     padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
-#search-box { width: 200px; }
+#search-mode { width: 220px; }
+#search-box { width: 220px; }
 #duration-minutes { width: 110px; }
+#time-from, #time-to { width: 120px; }
 #rooms-table-wrap { overflow-x: auto; padding: 12px 16px; }
 table.rooms-table { border-collapse: collapse; font-size: 12px; min-width: 600px; }
 table.rooms-table th, table.rooms-table td {
@@ -29,7 +31,18 @@ td.slot-busy-ind { background: #c8e6c9; cursor: default; }
 td.slot-free { background: #fff; }
 #free-windows { padding: 12px 16px; font-size: 13px; }
 #free-windows h3 { margin: 0 0 8px; }
+#free-windows h4 { margin: 12px 0 6px; font-size: 13px; color: #355; }
 #free-windows ul { margin: 0; padding-left: 20px; }
+.report-summary { margin-bottom: 12px; color: #223; }
+.available-report-building {
+    margin: 14px 0; padding: 12px 14px; background: #fff; border: 1px solid #dde4ec; border-radius: 8px;
+}
+.available-report-building h3 { margin: 0 0 8px; }
+.available-report-floor + .available-report-floor {
+    border-top: 1px solid #eef2f6; margin-top: 10px; padding-top: 10px;
+}
+.available-report-room-list { margin: 0; padding-left: 20px; }
+.available-report-room { margin: 4px 0; }
 .day-toggle { display: inline-block; margin: 0 2px; }
 .day-toggle input { display: none; }
 .day-toggle label { display: inline-block; padding: 3px 8px; border: 1px solid #aaa;
@@ -44,17 +57,23 @@ td.slot-free { background: #fff; }
   window.DISPLAY_NAME = {{ display_name }};
 </script>
 <div id="rooms-controls">
+  <label>Режим:
+    <select id="search-mode">
+      <option value="room">По конкретной аудитории</option>
+      <option value="available">Свободные аудитории</option>
+    </select>
+  </label>
   <label>Здание:
     <select id="filter-building">
       <option value="">Все</option>
     </select>
   </label>
-  <label>Аудитория:
+  <label id="filter-room-wrap">Аудитория:
     <select id="filter-room">
       <option value="">Все</option>
     </select>
   </label>
-  <span>День:
+  <span>Дни:
     <span class="day-toggle"><input type="checkbox" id="d-all" checked><label for="d-all">Все</label></span>
     <span class="day-toggle"><input type="checkbox" id="d-Mo"><label for="d-Mo">Mo</label></span>
     <span class="day-toggle"><input type="checkbox" id="d-Di"><label for="d-Di">Di</label></span>
@@ -63,12 +82,18 @@ td.slot-free { background: #fff; }
     <span class="day-toggle"><input type="checkbox" id="d-Fr"><label for="d-Fr">Fr</label></span>
     <span class="day-toggle"><input type="checkbox" id="d-Sa"><label for="d-Sa">Sa</label></span>
   </span>
-  <label>Поиск:
+  <label id="search-box-wrap">Поиск кабинета:
     <input type="text" id="search-box" placeholder="0.06 Kolibri ..." autocomplete="off" list="room-suggestions">
     <datalist id="room-suggestions"></datalist>
   </label>
   <label>Длительность, мин:
     <input type="number" id="duration-minutes" min="1" step="5" placeholder="90" autocomplete="off">
+  </label>
+  <label id="time-from-wrap" hidden>С:
+    <input type="time" id="time-from" step="900" autocomplete="off">
+  </label>
+  <label id="time-to-wrap" hidden>По:
+    <input type="time" id="time-to" step="900" autocomplete="off">
   </label>
   <button id="btn-search">Найти</button>
   <button id="btn-refresh" title="Обновить данные">&#8635;</button>

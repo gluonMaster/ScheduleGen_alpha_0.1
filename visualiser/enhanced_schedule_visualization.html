@@ -189,7 +189,8 @@
 
             /* Visual indicator for non-group lessons */
             .lesson-block[data-lesson-type="individual"],
-            .lesson-block[data-lesson-type="nachhilfe"] {
+            .lesson-block[data-lesson-type="nachhilfe"],
+            .lesson-block[data-lesson-type="trial"] {
                 box-shadow: inset 4px 0 0 #1976d2, var(--card-shadow, 0 1px 3px rgba(0,0,0,.15));
             }
             
@@ -278,17 +279,18 @@
                 <div class="lesson-teacher">Aleiev Oleg</div>
                 <div class="lesson-location">K.07, Villa</div>
             </div>
-            <div class="lesson-block" data-group="Kunst Mo 2D" data-teacher="Stepanova Olesia" data-building="Villa" data-lesson-type="group" style="background-color: #ccf2ff; border-color: #8a23b2; color: #000000;">
-                <div class="lesson-time">17:20-18:05</div>
-                <div class="lesson-group">Kunst Mo 2D</div>
-                <div class="lesson-teacher">Stepanova Olesia</div>
-                <div class="lesson-location">1.05, Villa</div>
-            </div>
             <div class="lesson-block" data-group="6A" data-teacher="Urich Evgenia" data-building="Villa" data-lesson-type="group" style="background-color: #ccffcc; border-color: #8a23b2; color: #000000;">
                 <div class="lesson-time">17:20-18:50</div>
                 <div class="lesson-group">6A</div>
                 <div class="lesson-teacher">Urich Evgenia</div>
                 <div class="lesson-location">2.09, Villa</div>
+            </div>
+            <div class="lesson-block" data-group="Desortzev Oleg" data-teacher="Tatarchuk Tetiana" data-building="Villa" data-lesson-type="individual" style="background-color: #ffffff; border-color: #8a23b2; color: #000000;">
+                <div class="lesson-time">17:20-18:05</div>
+                <div class="lesson-subject">Ind. Mathe</div>
+                <div class="lesson-group">Desortzev Oleg</div>
+                <div class="lesson-teacher">Tatarchuk Tetiana</div>
+                <div class="lesson-location">2.03, Villa</div>
             </div>
             <div class="lesson-block" data-group="Kunst Mo 3A" data-teacher="Melnikov Olga" data-building="Villa" data-lesson-type="group" style="background-color: #ccf2ff; border-color: #8a23b2; color: #000000;">
                 <div class="lesson-time">17:20-18:05</div>
@@ -301,6 +303,12 @@
                 <div class="lesson-group">4A</div>
                 <div class="lesson-teacher">Tchoudnovskaia Anna</div>
                 <div class="lesson-location">2.07, Villa</div>
+            </div>
+            <div class="lesson-block" data-group="Kunst Mo 2D" data-teacher="Stepanova Olesia" data-building="Villa" data-lesson-type="group" style="background-color: #ccf2ff; border-color: #8a23b2; color: #000000;">
+                <div class="lesson-time">17:20-18:05</div>
+                <div class="lesson-group">Kunst Mo 2D</div>
+                <div class="lesson-teacher">Stepanova Olesia</div>
+                <div class="lesson-location">1.05, Villa</div>
             </div>
             <div class="lesson-block" data-group="Tanz Mo 10-11J" data-teacher="Rusol Elena" data-building="Villa" data-lesson-type="group" style="background-color: #ffffcc; border-color: #8a23b2; color: #000000;">
                 <div class="lesson-time">17:30-19:00</div>
@@ -317,11 +325,11 @@
                 <div class="lesson-teacher">Stepanova Olesia</div>
                 <div class="lesson-location">1.05, Villa</div>
             </div>
-            <div class="lesson-block" data-group="5G" data-teacher="Tchoudnovskaia Anna" data-building="Villa" data-lesson-type="group" style="background-color: #ccffcc; border-color: #8a23b2; color: #000000;">
+            <div class="lesson-block" data-group="Ukrainische Musik Di 5-6J" data-teacher="Dosenko Evgeniy" data-building="Kolibri" data-lesson-type="group" style="background-color: #ffffff; border-color: #2db223; color: #000000;">
                 <div class="lesson-time">16:00-16:45</div>
-                <div class="lesson-group">5G</div>
-                <div class="lesson-teacher">Tchoudnovskaia Anna</div>
-                <div class="lesson-location">2.07, Villa</div>
+                <div class="lesson-group">Ukrainische Musik Di 5-6J</div>
+                <div class="lesson-teacher">Dosenko Evgeniy</div>
+                <div class="lesson-location">2.2, Kolibri</div>
             </div>
             <div class="lesson-block" data-group="Deutsch ab 5J Di" data-teacher="Eichmann Irina" data-building="Villa" data-lesson-type="group" style="background-color: #ffffff; border-color: #8a23b2; color: #000000;">
                 <div class="lesson-time">16:00-17:00</div>
@@ -329,17 +337,17 @@
                 <div class="lesson-teacher">Eichmann Irina</div>
                 <div class="lesson-location">2.09, Villa</div>
             </div>
-            <div class="lesson-block" data-group="Ukrainische Musik Di 5-6J" data-teacher="Dosenko Evgeniy" data-building="Kolibri" data-lesson-type="group" style="background-color: #ffffff; border-color: #2db223; color: #000000;">
-                <div class="lesson-time">16:00-16:45</div>
-                <div class="lesson-group">Ukrainische Musik Di 5-6J</div>
-                <div class="lesson-teacher">Dosenko Evgeniy</div>
-                <div class="lesson-location">2.2, Kolibri</div>
-            </div>
             <div class="lesson-block" data-group="Ukrainisch Di 4-5J" data-teacher="Perevoznyk Inna" data-building="Kolibri" data-lesson-type="group" style="background-color: #ffffff; border-color: #2db223; color: #000000;">
                 <div class="lesson-time">16:00-16:45</div>
                 <div class="lesson-group">Ukrainisch Di 4-5J</div>
                 <div class="lesson-teacher">Perevoznyk Inna</div>
                 <div class="lesson-location">2.4, Kolibri</div>
+            </div>
+            <div class="lesson-block" data-group="5G" data-teacher="Tchoudnovskaia Anna" data-building="Villa" data-lesson-type="group" style="background-color: #ccffcc; border-color: #8a23b2; color: #000000;">
+                <div class="lesson-time">16:00-16:45</div>
+                <div class="lesson-group">5G</div>
+                <div class="lesson-teacher">Tchoudnovskaia Anna</div>
+                <div class="lesson-location">2.07, Villa</div>
             </div>
             <div class="lesson-block" data-group="4B" data-teacher="Kremenchutski Larissa" data-building="Villa" data-lesson-type="group" style="background-color: #ccffcc; border-color: #8a23b2; color: #000000;">
                 <div class="lesson-time">16:20-17:35</div>
@@ -359,11 +367,12 @@
                 <div class="lesson-teacher">Tchoudnovskaia Anna</div>
                 <div class="lesson-location">2.07, Villa</div>
             </div>
-            <div class="lesson-block" data-group="Gitarre E Di" data-teacher="Aleiev Oleg" data-building="Villa" data-lesson-type="group" style="background-color: #ffffff; border-color: #8a23b2; color: #000000;">
-                <div class="lesson-time">17:00-17:45</div>
-                <div class="lesson-group">Gitarre E Di</div>
-                <div class="lesson-teacher">Aleiev Oleg</div>
-                <div class="lesson-location">K.07, Villa</div>
+            <div class="lesson-block" data-group="Desortzev Oleg" data-teacher="Shakun Konstantin" data-building="Villa" data-lesson-type="trial" style="background-color: #ffffff; border-color: #8a23b2; color: #000000;">
+                <div class="lesson-time">16:50-18:20</div>
+                <div class="lesson-subject">Physik</div>
+                <div class="lesson-group">Desortzev Oleg</div>
+                <div class="lesson-teacher">Shakun Konstantin</div>
+                <div class="lesson-location">1.05, Villa</div>
             </div>
             <div class="lesson-block" data-group="Ukrainisch Di 5-6J" data-teacher="Perevoznyk Inna" data-building="Kolibri" data-lesson-type="group" style="background-color: #ffffff; border-color: #2db223; color: #000000;">
                 <div class="lesson-time">17:00-17:45</div>
@@ -376,6 +385,12 @@
                 <div class="lesson-group">Ukrainische Musik Di 4-5J</div>
                 <div class="lesson-teacher">Dosenko Evgeniy</div>
                 <div class="lesson-location">2.2, Kolibri</div>
+            </div>
+            <div class="lesson-block" data-group="Gitarre E Di" data-teacher="Aleiev Oleg" data-building="Villa" data-lesson-type="group" style="background-color: #ffffff; border-color: #8a23b2; color: #000000;">
+                <div class="lesson-time">17:00-17:45</div>
+                <div class="lesson-group">Gitarre E Di</div>
+                <div class="lesson-teacher">Aleiev Oleg</div>
+                <div class="lesson-location">K.07, Villa</div>
             </div>
             <div class="lesson-block" data-group="12C" data-teacher="Urich Evgenia" data-building="Villa" data-lesson-type="group" style="background-color: #ccffcc; border-color: #8a23b2; color: #000000;">
                 <div class="lesson-time">17:05-17:50</div>
@@ -471,7 +486,7 @@
                 <div class="lesson-location">2.07, Villa</div>
             </div>
             <div class="lesson-block" data-group="Kunst Mi StudioO" data-teacher="Melnikov Olga" data-building="Villa" data-lesson-type="group" style="background-color: #ccf2ff; border-color: #8a23b2; color: #000000;">
-                <div class="lesson-time">17:00-18:30</div>
+                <div class="lesson-time">17:00-18:35</div>
                 <div class="lesson-group">Kunst Mi StudioO</div>
                 <div class="lesson-teacher">Melnikov Olga</div>
                 <div class="lesson-location">1.03, Villa</div>
@@ -929,7 +944,7 @@
         </div>
         </div>
     </div>
-    <div class="footer">Создано: 19.03.2026 17:33</div>
+    <div class="footer">Создано: 26.03.2026 18:43</div>
 
             <script>
                 document.addEventListener('DOMContentLoaded', function() {

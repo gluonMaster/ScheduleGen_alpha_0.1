@@ -4,8 +4,12 @@ var _selectedRoom = "";
 var _selectedDays = [];
 var _searchQuery = "";
 var _requestedDurationMinutes = 0;
+var _searchMode = "room";
+var _requestedTimeFromMinutes = -1;
+var _requestedTimeToMinutes = -1;
 
 var DAY_ORDER = ["Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+var BUILDING_ORDER = ["Villa", "Kolibri"];
 var SLOT_MINUTES = 15;
 
 function escapeHtml(value) {
@@ -29,18 +33,26 @@ function parseTimeToMin(t) {
   return hour * 60 + minute;
 }
 
-function formatMin(m) {
+function parseTimeInputValue(value) {
+  var trimmed = String(value || "").trim();
+
+  if (!trimmed) return -1;
+  return parseTimeToMin(trimmed);
+}
+
+function formatMin(minutes) {
   return (
-    (m < 600 ? "0" : "") +
-    Math.floor(m / 60) +
+    (minutes < 600 ? "0" : "") +
+    Math.floor(minutes / 60) +
     ":" +
-    (m % 60 < 10 ? "0" : "") +
-    (m % 60)
+    (minutes % 60 < 10 ? "0" : "") +
+    (minutes % 60)
   );
 }
 
 function parseDurationMinutes(value) {
   var parsed = parseInt(String(value || "").trim(), 10);
+
   if (isNaN(parsed) || parsed <= 0) return 0;
   return parsed;
 }
@@ -120,14 +132,15 @@ function deriveFreeWindows(occupied, dayStart, dayEnd) {
 }
 
 function showError(msg) {
-  var el = document.getElementById("rooms-table-wrap");
-  if (el) {
-    el.innerHTML = '<p style="color:red;padding:12px">' + escapeHtml(msg) + "</p>";
-  }
-}
+  var tableWrap = document.getElementById("rooms-table-wrap");
+  var report = document.getElementById("free-windows");
 
-function getBuildings(data) {
-  return Object.keys((data && data.buildings) || {}).sort();
+  if (tableWrap) {
+    tableWrap.innerHTML = '<p style="color:red;padding:12px">' + escapeHtml(msg) + "</p>";
+  }
+  if (report) {
+    report.innerHTML = "";
+  }
 }
 
 function compareText(a, b) {
@@ -135,6 +148,42 @@ function compareText(a, b) {
     numeric: true,
     sensitivity: "base",
   });
+}
+
+function makeRoomSortKey(value) {
+  var parts = String(value || "")
+    .trim()
+    .match(/\d+|\D+/g) || [];
+
+  return parts.map(function(part) {
+    if (/^\d+$/.test(part)) {
+      return { kind: 0, numeric: parseInt(part, 10), text: "" };
+    }
+    return { kind: 1, numeric: 0, text: part.toLowerCase() };
+  });
+}
+
+function compareRooms(a, b) {
+  var keyA = makeRoomSortKey(a);
+  var keyB = makeRoomSortKey(b);
+  var maxLen = Math.max(keyA.length, keyB.length);
+  var i;
+
+  for (i = 0; i < maxLen; i += 1) {
+    if (!keyA[i]) return -1;
+    if (!keyB[i]) return 1;
+    if (keyA[i].kind !== keyB[i].kind) {
+      return keyA[i].kind - keyB[i].kind;
+    }
+    if (keyA[i].kind === 0 && keyA[i].numeric !== keyB[i].numeric) {
+      return keyA[i].numeric - keyB[i].numeric;
+    }
+    if (keyA[i].kind === 1 && keyA[i].text !== keyB[i].text) {
+      return keyA[i].text < keyB[i].text ? -1 : 1;
+    }
+  }
+
+  return compareText(a, b);
 }
 
 function normalizeSearchText(value) {
@@ -145,11 +194,43 @@ function normalizeSearchText(value) {
     .toLowerCase();
 }
 
+function getConfiguredBuildingOrder(data) {
+  var buildings = (data && data.buildings) || {};
+  var rawOrder =
+    Array.isArray(data && data.building_order) && data.building_order.length
+      ? data.building_order.slice()
+      : BUILDING_ORDER.slice();
+  var seen = {};
+  var ordered = [];
+
+  rawOrder.forEach(function(building) {
+    if (!building || seen[building] || !Object.prototype.hasOwnProperty.call(buildings, building)) {
+      return;
+    }
+    seen[building] = true;
+    ordered.push(building);
+  });
+
+  Object.keys(buildings)
+    .sort(compareText)
+    .forEach(function(building) {
+      if (seen[building]) return;
+      seen[building] = true;
+      ordered.push(building);
+    });
+
+  return ordered;
+}
+
+function getBuildings(data) {
+  return getConfiguredBuildingOrder(data);
+}
+
 function getRoomsForBuilding(data, building) {
   var buildings = (data && data.buildings) || {};
 
   if (building) {
-    return (((buildings[building] || {}).rooms) || []).slice().sort(compareText);
+    return (((buildings[building] || {}).rooms) || []).slice().sort(compareRooms);
   }
 
   var seen = {};
@@ -166,7 +247,7 @@ function getRoomsForBuilding(data, building) {
     });
   });
 
-  return rooms.sort(compareText);
+  return rooms.sort(compareRooms);
 }
 
 function getOccupiedRoomsForBuilding(buildingData) {
@@ -184,7 +265,7 @@ function getOccupiedRoomsForBuilding(buildingData) {
     });
   });
 
-  return rooms.sort(compareText);
+  return rooms.sort(compareRooms);
 }
 
 function getRoomCombos(data) {
@@ -192,29 +273,31 @@ function getRoomCombos(data) {
   var combos = [];
 
   getBuildings(data).forEach(function(building) {
-    (((data.buildings[building] || {}).rooms) || []).forEach(function(room) {
-      var key = building + "::" + room;
+    (((data.buildings[building] || {}).rooms) || [])
+      .slice()
+      .sort(compareRooms)
+      .forEach(function(room) {
+        var key = building + "::" + room;
 
-      if (seen[key]) return;
-      seen[key] = true;
-      combos.push({
-        building: building,
-        room: room,
-        text: normalizeSearchText(room + " " + building),
+        if (seen[key]) return;
+        seen[key] = true;
+        combos.push({
+          building: building,
+          room: room,
+          text: normalizeSearchText(room + " " + building),
+        });
       });
-    });
   });
 
-  return combos.sort(function(a, b) {
-    var byRoom = compareText(a.room, b.room);
-
-    if (byRoom) return byRoom;
-    return compareText(a.building, b.building);
-  });
+  return combos;
 }
 
 function getActiveDays() {
   return _selectedDays.length ? _selectedDays.slice() : DAY_ORDER.slice();
+}
+
+function shouldUseRoomFilter() {
+  return _searchMode === "room" && !!_selectedRoom;
 }
 
 function getTargetsFromFilters(data) {
@@ -227,12 +310,12 @@ function getTargetsFromFilters(data) {
 
     if (!buildingData) return;
     rooms = (buildingData.rooms || []).slice();
-    if (_selectedRoom) {
+    if (shouldUseRoomFilter()) {
       rooms = rooms.filter(function(room) {
         return room === _selectedRoom;
       });
     }
-    rooms.sort(compareText).forEach(function(room) {
+    rooms.sort(compareRooms).forEach(function(room) {
       targets.push({ building: building, room: room });
     });
   });
@@ -252,7 +335,7 @@ function filterWindowsByDuration(windows, requestedDuration) {
 function formatWindowList(windows, includeDuration) {
   return windows
     .map(function(windowItem) {
-      var label = windowItem.start + "–" + windowItem.end;
+      var label = windowItem.start + " - " + windowItem.end;
       if (includeDuration) {
         label += " (" + formatDuration(windowItem.duration) + ")";
       }
@@ -264,11 +347,21 @@ function formatWindowList(windows, includeDuration) {
 function applySearchStateFromInputs() {
   var searchBox = document.getElementById("search-box");
   var durationInput = document.getElementById("duration-minutes");
+  var searchModeSelect = document.getElementById("search-mode");
+  var timeFromInput = document.getElementById("time-from");
+  var timeToInput = document.getElementById("time-to");
 
+  _searchMode = searchModeSelect ? searchModeSelect.value : "room";
   _searchQuery = searchBox ? searchBox.value.trim() : "";
   _requestedDurationMinutes = durationInput
     ? parseDurationMinutes(durationInput.value)
     : 0;
+  _requestedTimeFromMinutes = timeFromInput
+    ? parseTimeInputValue(timeFromInput.value)
+    : -1;
+  _requestedTimeToMinutes = timeToInput
+    ? parseTimeInputValue(timeToInput.value)
+    : -1;
 }
 
 function setOptions(select, values, emptyLabel) {
@@ -332,6 +425,33 @@ function populateAutocomplete(data) {
     .join("");
 }
 
+function toggleControlVisibility(wrapperId, visible) {
+  var wrapper = document.getElementById(wrapperId);
+
+  if (!wrapper) return;
+  wrapper.hidden = !visible;
+  Array.prototype.slice.call(wrapper.querySelectorAll("input, select")).forEach(function(control) {
+    control.disabled = !visible;
+  });
+}
+
+function syncSearchModeUI() {
+  var searchButton = document.getElementById("btn-search");
+  var searchBox = document.getElementById("search-box");
+
+  toggleControlVisibility("filter-room-wrap", _searchMode === "room");
+  toggleControlVisibility("search-box-wrap", _searchMode === "room");
+  toggleControlVisibility("time-from-wrap", _searchMode === "available");
+  toggleControlVisibility("time-to-wrap", _searchMode === "available");
+
+  if (searchBox) {
+    searchBox.placeholder = _searchMode === "room" ? "0.06 Kolibri ..." : "";
+  }
+  if (searchButton) {
+    searchButton.textContent = _searchMode === "available" ? "Найти аудитории" : "Найти";
+  }
+}
+
 function loadAvailability() {
   fetch("/api/rooms/availability")
     .then(function(r) {
@@ -351,6 +471,7 @@ function loadAvailability() {
       populateFilters(data);
       populateAutocomplete(data);
       applySearchStateFromInputs();
+      syncSearchModeUI();
       renderTable();
     })
     .catch(function(e) {
@@ -376,7 +497,7 @@ function buildColumns(data) {
     if (!buildingData) return;
 
     allRooms = (buildingData.rooms || []).slice();
-    if (_selectedRoom) {
+    if (shouldUseRoomFilter()) {
       rooms = allRooms.filter(function(room) {
         return room === _selectedRoom;
       });
@@ -387,7 +508,7 @@ function buildColumns(data) {
       }
     }
 
-    rooms.sort(compareText);
+    rooms.sort(compareRooms);
     activeDays.forEach(function(day) {
       rooms.forEach(function(room) {
         var daySlots = (((buildingData.days || {})[day] || {})[room]) || [];
@@ -477,7 +598,7 @@ function renderTable() {
         return;
       }
 
-      cls = /^(individual|nachhilfe)$/i.test(slot.lesson_type || "")
+      cls = /^(individual|nachhilfe|trial)$/i.test(slot.lesson_type || "")
         ? "slot-busy-ind"
         : "slot-busy";
       titleText = [slot.subject || "", slot.students || ""].join(" ").trim();
@@ -499,6 +620,13 @@ function renderTable() {
     rows.push("</tr>");
   }
 
+  rows.push("<tr>");
+  rows.push("<th>" + escapeHtml(formatMin(gridEnd)) + "</th>");
+  columns.forEach(function() {
+    rows.push('<td class="slot-free"></td>');
+  });
+  rows.push("</tr>");
+
   thead.innerHTML = head.join("");
   tbody.innerHTML = rows.join("");
   renderFreeWindows();
@@ -507,22 +635,86 @@ function renderTable() {
 function resolveSearchTargets(data, query) {
   var lower = normalizeSearchText(query);
   var combos = getRoomCombos(data);
+  var matches;
 
   if (!lower) return [];
 
-  var exactCombo = combos.filter(function(item) {
+  matches = combos.filter(function(item) {
     return item.text === lower;
   });
 
-  if (exactCombo.length) return exactCombo;
+  if (!matches.length) {
+    matches = combos.filter(function(item) {
+      return normalizeSearchText(item.room) === lower;
+    });
+  }
 
-  return combos.filter(function(item) {
-    return normalizeSearchText(item.room) === lower;
-  });
+  if (_selectedBuilding) {
+    matches = matches.filter(function(item) {
+      return item.building === _selectedBuilding;
+    });
+  }
+
+  if (shouldUseRoomFilter()) {
+    matches = matches.filter(function(item) {
+      return item.room === _selectedRoom;
+    });
+  }
+
+  return matches;
 }
 
-function renderFreeWindows() {
-  var target = document.getElementById("free-windows");
+function getRequestedTimeRange(gridStart, gridEnd) {
+  var dayStart = _requestedTimeFromMinutes >= 0
+    ? Math.max(gridStart, _requestedTimeFromMinutes)
+    : gridStart;
+  var dayEnd = _requestedTimeToMinutes >= 0
+    ? Math.min(gridEnd, _requestedTimeToMinutes)
+    : gridEnd;
+
+  if (dayEnd <= dayStart) {
+    return {
+      error: "Некорректный диапазон времени: время начала должно быть раньше времени окончания.",
+    };
+  }
+
+  return {
+    start: dayStart,
+    end: dayEnd,
+  };
+}
+
+function formatRangeSummary(range) {
+  if (_requestedTimeFromMinutes >= 0 && _requestedTimeToMinutes >= 0) {
+    return "время: " + formatMin(range.start) + " - " + formatMin(range.end);
+  }
+  if (_requestedTimeFromMinutes >= 0) {
+    return "время: с " + formatMin(range.start);
+  }
+  if (_requestedTimeToMinutes >= 0) {
+    return "время: до " + formatMin(range.end);
+  }
+  return "время: весь рабочий день";
+}
+
+function extractRoomFloor(room) {
+  var value = String(room || "").trim();
+  var dotIndex = value.indexOf(".");
+
+  if (dotIndex > 0) {
+    return value.slice(0, dotIndex);
+  }
+  return "__other__";
+}
+
+function formatFloorLabel(floor) {
+  if (floor === "__other__") {
+    return "Прочие";
+  }
+  return "Этаж " + floor;
+}
+
+function renderSingleRoomReport(target) {
   var resolved = [];
   var activeDays;
   var requestedDuration;
@@ -531,8 +723,6 @@ function renderFreeWindows() {
   var unique = {};
   var parts = [];
   var sectionsAdded = 0;
-
-  if (!_availData || !target) return;
 
   activeDays = getActiveDays();
   requestedDuration = _requestedDurationMinutes;
@@ -543,9 +733,7 @@ function renderFreeWindows() {
       target.innerHTML = "<p>Аудитория не найдена: " + escapeHtml(_searchQuery) + "</p>";
       return;
     }
-  } else if (_selectedBuilding && _selectedRoom) {
-    resolved = [{ building: _selectedBuilding, room: _selectedRoom }];
-  } else if (requestedDuration > 0) {
+  } else if (shouldUseRoomFilter()) {
     resolved = getTargetsFromFilters(_availData);
   } else {
     target.innerHTML = "";
@@ -613,25 +801,25 @@ function renderFreeWindows() {
       sectionsAdded += 1;
       if (activeDays.length === DAY_ORDER.length) {
         fullyFreeText =
-          "\u0410\u0443\u0434\u0438\u0442\u043e\u0440\u0438\u044f " +
+          "Аудитория " +
           item.room +
           " (" +
           item.building +
-          ") \u0441\u0432\u043e\u0431\u043e\u0434\u043d\u0430 \u0432\u043e \u0432\u0441\u0435 \u0440\u0430\u0431\u043e\u0447\u0438\u0435 \u0434\u043d\u0438.";
+          ") свободна во все рабочие дни.";
       } else if (activeDays.length > 1) {
         fullyFreeText =
-          "\u0410\u0443\u0434\u0438\u0442\u043e\u0440\u0438\u044f " +
+          "Аудитория " +
           item.room +
           " (" +
           item.building +
-          ") \u0441\u0432\u043e\u0431\u043e\u0434\u043d\u0430 \u0432\u043e \u0432\u0441\u0435 \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u044b\u0435 \u0434\u043d\u0438.";
+          ") свободна во все выбранные дни.";
       } else {
         fullyFreeText =
-          "\u0410\u0443\u0434\u0438\u0442\u043e\u0440\u0438\u044f " +
+          "Аудитория " +
           item.room +
           " (" +
           item.building +
-          ") \u0441\u0432\u043e\u0431\u043e\u0434\u043d\u0430 \u0432 \u0442\u0435\u0447\u0435\u043d\u0438\u0435 \u0432\u0441\u0435\u0433\u043e \u0434\u043d\u044f (" +
+          ") свободна в течение всего дня (" +
           activeDays[0] +
           ").";
       }
@@ -649,7 +837,7 @@ function renderFreeWindows() {
         escapeHtml(item.room) +
         " (" +
         escapeHtml(item.building) +
-        ") — свободное время:</h3>"
+        ") - свободное время:</h3>"
     );
     parts.push("<ul>");
     parts.push(lines.join(""));
@@ -661,7 +849,7 @@ function renderFreeWindows() {
       target.innerHTML =
         "<p>Не найдено свободных окон длительностью не менее " +
         escapeHtml(formatDuration(requestedDuration)) +
-        " для выбранных фильтров.</p>";
+        " для выбранной аудитории.</p>";
       return;
     }
     target.innerHTML = "";
@@ -669,6 +857,156 @@ function renderFreeWindows() {
   }
 
   target.innerHTML = parts.join("");
+}
+
+function renderAvailableRoomsReport(target) {
+  var activeDays = getActiveDays();
+  var requestedDuration = _requestedDurationMinutes;
+  var gridStart = parseTimeToMin(_availData.grid_start);
+  var gridEnd = parseTimeToMin(_availData.grid_end);
+  var range = getRequestedTimeRange(gridStart, gridEnd);
+  var targets;
+  var summaryParts = [];
+  var parts = [];
+  var buildingSections = [];
+  var buildingSectionByName = {};
+  var resultsFound = 0;
+
+  if (range.error) {
+    target.innerHTML = "<p>" + escapeHtml(range.error) + "</p>";
+    return;
+  }
+
+  if (!requestedDuration) {
+    target.innerHTML = "<p>Укажите минимальную длительность для поиска свободных аудиторий.</p>";
+    return;
+  }
+
+  targets = getTargetsFromFilters(_availData);
+  if (!targets.length) {
+    target.innerHTML = "<p>Не найдено доступных аудиторий.</p>";
+    return;
+  }
+
+  if (_selectedBuilding) {
+    summaryParts.push("здание: " + _selectedBuilding);
+  } else {
+    summaryParts.push("здания: все");
+  }
+  summaryParts.push("дни: " + activeDays.join(", "));
+  summaryParts.push("длительность: от " + formatDuration(requestedDuration));
+  summaryParts.push(formatRangeSummary(range));
+
+  parts.push(
+    '<div class="report-summary"><strong>Поиск свободных аудиторий.</strong> ' +
+      escapeHtml(summaryParts.join("; ")) +
+      ".</div>"
+  );
+
+  targets.forEach(function(item) {
+    var buildingData = _availData.buildings[item.building] || { days: {} };
+    var dayLines = [];
+    var buildingSection;
+    var floorSection;
+    var floorName;
+
+    activeDays.forEach(function(day) {
+      var slots = (((buildingData.days || {})[day] || {})[item.room]) || [];
+      var occupied = slots
+        .map(function(slot) {
+          return { start: parseTimeToMin(slot.start), end: parseTimeToMin(slot.end) };
+        })
+        .filter(function(slot) {
+          return slot.start >= 0 && slot.end > slot.start;
+        });
+      var free = filterWindowsByDuration(
+        deriveFreeWindows(occupied, range.start, range.end),
+        requestedDuration
+      );
+
+      if (!free.length) return;
+      dayLines.push(day + ": " + formatWindowList(free, true));
+    });
+
+    if (!dayLines.length) {
+      return;
+    }
+
+    resultsFound += 1;
+
+    buildingSection = buildingSectionByName[item.building];
+    if (!buildingSection) {
+      buildingSection = {
+        building: item.building,
+        floors: [],
+        floorLookup: {},
+      };
+      buildingSectionByName[item.building] = buildingSection;
+      buildingSections.push(buildingSection);
+    }
+
+    floorName = extractRoomFloor(item.room);
+    floorSection = buildingSection.floorLookup[floorName];
+    if (!floorSection) {
+      floorSection = {
+        floor: floorName,
+        rooms: [],
+      };
+      buildingSection.floorLookup[floorName] = floorSection;
+      buildingSection.floors.push(floorSection);
+    }
+
+    floorSection.rooms.push({
+      room: item.room,
+      lines: dayLines,
+    });
+  });
+
+  if (!resultsFound) {
+    target.innerHTML =
+      parts.join("") +
+      "<p>Не найдено доступных аудиторий для выбранных параметров.</p>";
+    return;
+  }
+
+  buildingSections.forEach(function(buildingSection) {
+    parts.push('<section class="available-report-building">');
+    parts.push("<h3>" + escapeHtml(buildingSection.building) + "</h3>");
+
+    buildingSection.floors.forEach(function(floorSection) {
+      parts.push('<div class="available-report-floor">');
+      parts.push("<h4>" + escapeHtml(formatFloorLabel(floorSection.floor)) + "</h4>");
+      parts.push('<ul class="available-report-room-list">');
+      floorSection.rooms.forEach(function(roomEntry) {
+        parts.push(
+          '<li class="available-report-room"><strong>' +
+            escapeHtml(roomEntry.room) +
+            "</strong> - " +
+            escapeHtml(roomEntry.lines.join("; ")) +
+            "</li>"
+        );
+      });
+      parts.push("</ul>");
+      parts.push("</div>");
+    });
+
+    parts.push("</section>");
+  });
+
+  target.innerHTML = parts.join("");
+}
+
+function renderFreeWindows() {
+  var target = document.getElementById("free-windows");
+
+  if (!_availData || !target) return;
+
+  if (_searchMode === "available") {
+    renderAvailableRoomsReport(target);
+    return;
+  }
+
+  renderSingleRoomReport(target);
 }
 
 function _wireDayFilters() {
@@ -706,15 +1044,28 @@ function _wireDayFilters() {
 
 document.addEventListener("DOMContentLoaded", function() {
   var durationInput = document.getElementById("duration-minutes");
+  var searchBox = document.getElementById("search-box");
+  var searchModeSelect = document.getElementById("search-mode");
+  var timeFromInput = document.getElementById("time-from");
+  var timeToInput = document.getElementById("time-to");
 
+  applySearchStateFromInputs();
+  syncSearchModeUI();
   loadAvailability();
 
   document.getElementById("btn-search").addEventListener("click", function() {
     applySearchStateFromInputs();
+    syncSearchModeUI();
     renderTable();
   });
 
-  document.getElementById("search-box").addEventListener("keydown", function(e) {
+  searchModeSelect.addEventListener("change", function() {
+    applySearchStateFromInputs();
+    syncSearchModeUI();
+    renderTable();
+  });
+
+  searchBox.addEventListener("keydown", function(e) {
     if (e.key === "Enter") {
       e.preventDefault();
       applySearchStateFromInputs();
@@ -723,7 +1074,7 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   durationInput.addEventListener("input", function() {
-    _requestedDurationMinutes = parseDurationMinutes(this.value);
+    applySearchStateFromInputs();
     renderTable();
   });
 
@@ -733,6 +1084,20 @@ document.addEventListener("DOMContentLoaded", function() {
       applySearchStateFromInputs();
       renderTable();
     }
+  });
+
+  [timeFromInput, timeToInput].forEach(function(input) {
+    input.addEventListener("input", function() {
+      applySearchStateFromInputs();
+      renderTable();
+    });
+    input.addEventListener("keydown", function(e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        applySearchStateFromInputs();
+        renderTable();
+      }
+    });
   });
 
   document.getElementById("btn-refresh").addEventListener("click", loadAvailability);

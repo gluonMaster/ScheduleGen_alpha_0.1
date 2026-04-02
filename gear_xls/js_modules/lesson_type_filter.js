@@ -32,6 +32,12 @@ function updateBlockLessonType(block) {
         return;
     }
 
+    // Preserve explicit 'trial' type — classifyLessonType cannot produce it
+    var explicitType = (block.getAttribute('data-lesson-type') || '').trim();
+    if (block.getAttribute('data-block-id') && explicitType && explicitType !== 'group') {
+        return explicitType;
+    }
+
     var subject = getBlockSubjectText(block);
     var lessonType = classifyLessonType(subject);
     block.setAttribute('data-lesson-type', lessonType);
@@ -47,7 +53,7 @@ function applyLessonTypeFilter(filterValue) {
         if (filterValue === 'all') {
             shouldShow = true;
         } else if (filterValue === 'non-group') {
-            shouldShow = lessonType === 'individual' || lessonType === 'nachhilfe';
+            shouldShow = lessonType === 'individual' || lessonType === 'nachhilfe' || lessonType === 'trial';
         } else {
             shouldShow = lessonType === filterValue;
         }

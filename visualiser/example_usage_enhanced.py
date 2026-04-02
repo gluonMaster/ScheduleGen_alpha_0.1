@@ -16,7 +16,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--lesson-type',
         default='all',
-        choices=['all', 'group', 'individual', 'nachhilfe', 'non-group'],
+        choices=['all', 'group', 'individual', 'nachhilfe', 'trial', 'non-group'],
         help='Filter lessons by type (default: all)'
     )
     args = parser.parse_args()

@@ -226,7 +226,8 @@ class HtmlExportMixin:
 
             /* Visual indicator for non-group lessons */
             .lesson-block[data-lesson-type="individual"],
-            .lesson-block[data-lesson-type="nachhilfe"] {
+            .lesson-block[data-lesson-type="nachhilfe"],
+            .lesson-block[data-lesson-type="trial"] {
                 box-shadow: inset 4px 0 0 #1976d2, var(--card-shadow, 0 1px 3px rgba(0,0,0,.15));
             }
             
@@ -496,7 +497,8 @@ class HtmlExportMixin:
         text_color = '#000000'
         
         # Добавляем атрибут данных для возможности фильтрации
-        _lesson_type = _classify_lesson_type(lesson.get('subject', '') or '')
+        raw_lesson_type = str(lesson.get('lesson_type') or '').strip().lower()
+        _lesson_type = raw_lesson_type or _classify_lesson_type(lesson.get('subject', '') or '')
         data_attributes = (
             f'data-group="{lesson["group"]}" '
             f'data-teacher="{lesson["teacher"]}" '

@@ -68,7 +68,34 @@ function syncBlockContent(block) {
         );
     }
 
-    block.innerHTML = subject + '<br>' + teacher + '<br>' + students + '<br>' + newRoom + '<br>' + newTimeStr;
+    var newHTML = subject + '<br>' + teacher + '<br>' + students + '<br>' + newRoom + '<br>' + newTimeStr;
+
+    // Restore trial dates line for trial blocks
+    if (block.getAttribute('data-lesson-type') === 'trial') {
+        var rawDates = block.getAttribute('data-trial-dates');
+        if (rawDates) {
+            try {
+                var trialDates = JSON.parse(rawDates);
+                if (Array.isArray(trialDates) && trialDates.length > 0) {
+                    var displayDates = trialDates.map(function(d) {
+                        var parts = d.split('-');
+                        return parts.length === 3 ? parts[2] + '.' + parts[1] + '.' + parts[0] : d;
+                    }).join(', ');
+                    newHTML += '<br>\uD83D\uDCC5 ' + displayDates;
+                }
+            } catch (e) { /* ignore parse errors */ }
+        }
+    }
+
+    block.innerHTML = newHTML;
+
+    if (block.getAttribute('data-lesson-type') === 'trial' && window.TrialUI) {
+        var dates = [];
+        try {
+            dates = JSON.parse(block.getAttribute('data-trial-dates') || '[]');
+        } catch (e) {}
+        window.TrialUI.applyTrialExpiredStyle(block, window.TrialUI.isTrialExpired(dates));
+    }
 
     // Update lesson type attribute and re-apply active filter
     if (typeof updateBlockLessonType === 'function') {

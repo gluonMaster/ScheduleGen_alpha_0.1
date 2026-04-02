@@ -14,6 +14,12 @@
       ".col-add-btn",
       ".col-delete-btn",
     ],
+    organizer: [
+      "#saveIntermediate",
+      "#saveSchedule",
+      "#exportToExcel",
+      "#menuItemNewSchedule",
+    ],
     editor: ["#saveIntermediate", "#saveSchedule", "#exportToExcel"],
   };
 
@@ -41,11 +47,65 @@
   }
 
   function isEditableRole(role) {
-    return role === "admin" || role === "editor";
+    return role === "admin" || role === "editor" || role === "organizer";
   }
 
   function canEditNow(role) {
     return isEditableRole(role) && isEditMode;
+  }
+
+  function getBlockLessonType(block) {
+    return block ? block.getAttribute("data-lesson-type") || "group" : "group";
+  }
+
+  function canMutateBlock(role, block) {
+    var lessonType = getBlockLessonType(block);
+
+    if (role === "admin") {
+      return true;
+    }
+    if (role === "editor") {
+      return lessonType !== "group";
+    }
+    if (role === "organizer") {
+      return lessonType === "trial";
+    }
+    return false;
+  }
+
+  function stopEvent(event) {
+    if (!event) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") {
+      event.stopImmediatePropagation();
+    }
+  }
+
+  function getBlockedMutationMessage(role, lessonType, action) {
+    if (role === "organizer") {
+      return action === "delete"
+        ? "Организатор может удалять только trial-занятия."
+        : "Организатор может изменять только trial-занятия.";
+    }
+    if (role === "editor" && lessonType === "group") {
+      return action === "delete"
+        ? "Недостаточно прав для удаления групповых занятий."
+        : "Групповые занятия доступны только для просмотра.";
+    }
+    return "Недостаточно прав для этого действия.";
+  }
+
+  function cancelUnauthorizedResize(event) {
+    if (typeof handleResizeMouseUp === "function" && window.isResizing) {
+      try {
+        handleResizeMouseUp(event || {});
+      } catch (error) {
+        console.warn("Failed to cancel protected resize:", error);
+      }
+    }
   }
 
   function init() {
@@ -75,6 +135,7 @@
     roleLabels = {
       admin: "администратор",
       editor: "редактор",
+      organizer: "организатор",
       viewer: "наблюдатель",
     };
 
@@ -227,6 +288,9 @@
         "body.schedgen-readonly .drag-handle,",
         "body.schedgen-readonly [data-drag-handle] { pointer-events: none !important; }",
         'body.schedgen-readonly .activity-block[data-lesson-type="group"] { cursor: default !important; }',
+        'body[data-user-role="organizer"] #saveIntermediate,',
+        'body[data-user-role="organizer"] #saveSchedule,',
+        'body[data-user-role="organizer"] #exportToExcel { display: none !important; }',
       ].join("\n")
     );
   }
@@ -240,14 +304,14 @@
     new MutationObserver(function () {
       syncShellOffsets();
       syncUiState(currentRole());
-      if (currentRole() === "editor") {
+      if (currentRole() === "editor" || currentRole() === "organizer") {
         processGroupBlocks();
       }
     }).observe(document.body, { childList: true, subtree: true });
   }
 
   function applyRoleRestrictions(role) {
-    if (role === "editor") {
+    if (role === "editor" || role === "organizer") {
       attachEditorEventGuards();
       processGroupBlocks();
     }
@@ -255,7 +319,9 @@
   }
 
   function syncUiState(role) {
+    document.body.setAttribute("data-user-role", role || "viewer");
     toggleSelectors(HIDE_SELECTORS.viewer, role === "viewer");
+    toggleSelectors(HIDE_SELECTORS.organizer, role === "organizer");
     toggleSelectors(HIDE_SELECTORS.editor, role === "editor");
     toggleSelectors(
       EDIT_SELECTORS,
@@ -302,13 +368,42 @@
     document.addEventListener(
       "mousedown",
       function (event) {
-        var block = event.target.closest(
-          '.activity-block[data-lesson-type="group"]'
-        );
+        var role = currentRole();
+        var block = event.target.closest
+          ? event.target.closest(".activity-block")
+          : null;
 
-        if (block && canEditNow("editor")) {
-          event.stopPropagation();
+        if (!block || !canEditNow(role) || canMutateBlock(role, block)) {
+          return;
         }
+
+        cancelUnauthorizedResize(event);
+        stopEvent(event);
+      },
+      true
+    );
+
+    document.addEventListener(
+      "click",
+      function (event) {
+        var role = currentRole();
+        var block = event.target.closest
+          ? event.target.closest(".activity-block")
+          : null;
+        var lessonType;
+
+        if (
+          !block ||
+          !canEditNow(role) ||
+          !document.body.classList.contains("delete-mode") ||
+          canMutateBlock(role, block)
+        ) {
+          return;
+        }
+
+        lessonType = getBlockLessonType(block);
+        stopEvent(event);
+        alert(getBlockedMutationMessage(role, lessonType, "delete"));
       },
       true
     );
@@ -316,17 +411,23 @@
     document.addEventListener(
       "dblclick",
       function (event) {
-        var block = event.target.closest(
-          '.activity-block[data-lesson-type="group"]'
-        );
+        var role = currentRole();
+        var block = event.target.closest
+          ? event.target.closest(".activity-block")
+          : null;
+        var lessonType;
 
-        if (!block || !canEditNow("editor")) {
+        if (!block || !canEditNow(role) || canMutateBlock(role, block)) {
           return;
         }
 
-        event.preventDefault();
-        event.stopPropagation();
-        showReadOnlyBlockInfo(block);
+        lessonType = getBlockLessonType(block);
+        stopEvent(event);
+        if (lessonType === "group") {
+          showReadOnlyBlockInfo(block);
+          return;
+        }
+        alert(getBlockedMutationMessage(role, lessonType, "edit"));
       },
       true
     );
@@ -337,7 +438,10 @@
       .querySelectorAll('.activity-block[data-lesson-type="group"]')
       .forEach(function (block) {
         block.setAttribute("draggable", "false");
-        block.style.cursor = currentRole() === "editor" ? "default" : "";
+        block.style.cursor =
+          canEditNow(currentRole()) && !canMutateBlock(currentRole(), block)
+            ? "default"
+            : "";
         block
           .querySelectorAll(".drag-handle,[data-drag-handle]")
           .forEach(function (handle) {
@@ -570,6 +674,8 @@
     currentRole: currentRole,
     currentUser: currentUser,
     isEditableRole: isEditableRole,
+    canMutateBlock: canMutateBlock,
+    getBlockLessonType: getBlockLessonType,
     isEditMode: function () {
       return isEditMode;
     },

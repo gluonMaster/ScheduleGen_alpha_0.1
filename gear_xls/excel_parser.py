@@ -5,6 +5,7 @@
 Извлекает информацию о занятиях, преподавателях, кабинетах и группах.
 """
 
+import json
 import logging
 import pandas as pd
 import openpyxl
@@ -17,6 +18,24 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger('excel_parser')
+
+
+def _build_header_lookup(sheet):
+    lookup = {}
+    for col_idx in range(1, sheet.max_column + 1):
+        value = sheet.cell(row=1, column=col_idx).value
+        if value is None:
+            continue
+        lookup[str(value).strip().lower()] = col_idx
+    return lookup
+
+
+def _resolve_column_index(header_lookup, default_index, *header_names):
+    for header_name in header_names:
+        idx = header_lookup.get(str(header_name).strip().lower())
+        if idx is not None:
+            return idx
+    return default_index
 
 def parse_schedule(excel_file):
     """
@@ -47,26 +66,74 @@ def parse_schedule(excel_file):
         workbook = openpyxl.load_workbook(excel_file, data_only=True)
         sheet = workbook['Schedule']
         
+        header_lookup = _build_header_lookup(sheet)
+        subject_col = _resolve_column_index(header_lookup, 1, "subject")
+        group_col = _resolve_column_index(header_lookup, 2, "group")
+        teacher_col = _resolve_column_index(header_lookup, 3, "teacher")
+        room_col = _resolve_column_index(header_lookup, 4, "room")
+        building_col = _resolve_column_index(header_lookup, 5, "building")
+        day_col = _resolve_column_index(header_lookup, 6, "day")
+        start_time_col = _resolve_column_index(header_lookup, 7, "start_time")
+        end_time_col = _resolve_column_index(header_lookup, 8, "end_time")
+        duration_col = _resolve_column_index(header_lookup, 9, "duration")
+        lesson_type_col = _resolve_column_index(
+            header_lookup,
+            10 if sheet.max_column >= 10 else None,
+            "lesson_type", "тип занятия",
+        )
+        trial_dates_col = _resolve_column_index(
+            header_lookup,
+            11 if sheet.max_column >= 11 else None,
+            "trial_dates_json", "даты (json)",
+        )
+
         # Начинаем со второй строки (первая - заголовки)
         row_idx = 2
         act_id = 1
         
-        while sheet.cell(row=row_idx, column=1).value is not None:
-            subject = sheet.cell(row=row_idx, column=1).value
-            group = sheet.cell(row=row_idx, column=2).value
-            teacher = sheet.cell(row=row_idx, column=3).value
-            room = sheet.cell(row=row_idx, column=4).value
-            building = sheet.cell(row=row_idx, column=5).value
-            day = sheet.cell(row=row_idx, column=6).value
+        while sheet.cell(row=row_idx, column=subject_col).value is not None:
+            subject = sheet.cell(row=row_idx, column=subject_col).value
+            group = sheet.cell(row=row_idx, column=group_col).value
+            teacher = sheet.cell(row=row_idx, column=teacher_col).value
+            room = sheet.cell(row=row_idx, column=room_col).value
+            building = sheet.cell(row=row_idx, column=building_col).value
+            day = sheet.cell(row=row_idx, column=day_col).value
             
             # Извлекаем время начала и окончания с корректной обработкой
-            start_time_cell = sheet.cell(row=row_idx, column=7)
-            end_time_cell = sheet.cell(row=row_idx, column=8)
+            start_time_cell = sheet.cell(row=row_idx, column=start_time_col)
+            end_time_cell = sheet.cell(row=row_idx, column=end_time_col)
             start_time = extract_time_from_cell(start_time_cell)
             end_time = extract_time_from_cell(end_time_cell)
             
             # Извлекаем продолжительность
-            duration = sheet.cell(row=row_idx, column=9).value
+            duration = sheet.cell(row=row_idx, column=duration_col).value
+            lesson_type = None
+            trial_dates = []
+
+            if lesson_type_col is not None:
+                lesson_type_value = sheet.cell(row=row_idx, column=lesson_type_col).value
+                if lesson_type_value is not None:
+                    lesson_type = str(lesson_type_value).strip().lower() or None
+
+            if lesson_type == "trial" and trial_dates_col is not None:
+                raw_trial_dates = sheet.cell(row=row_idx, column=trial_dates_col).value
+                if raw_trial_dates not in (None, ""):
+                    try:
+                        parsed_trial_dates = json.loads(raw_trial_dates)
+                        if isinstance(parsed_trial_dates, list):
+                            trial_dates = [str(item) for item in parsed_trial_dates if item is not None]
+                        else:
+                            logger.warning(
+                                "trial_dates_json is not a list in row %s: %r",
+                                row_idx,
+                                raw_trial_dates,
+                            )
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to parse trial_dates_json in row %s: %s",
+                            row_idx,
+                            exc,
+                        )
             
             # Обработка названия кабинета и извлечение здания
             room_info = process_room_name(room, building)
@@ -84,6 +151,10 @@ def parse_schedule(excel_file):
                 "building": room_info["building"],
                 "students": group,
             }
+            if lesson_type:
+                activities[act_id]["lesson_type"] = lesson_type
+            if lesson_type == "trial":
+                activities[act_id]["trial_dates"] = trial_dates
             
             act_id += 1
             row_idx += 1

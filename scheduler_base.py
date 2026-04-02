@@ -1,6 +1,7 @@
 from ortools.sat.python import cp_model
 import pandas as pd
 import numpy as np
+import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional, Set, Any
 
@@ -246,6 +247,21 @@ class ScheduleOptimizer:
                 time_obj = datetime.strptime(start_time, "%H:%M")
                 time_obj += timedelta(minutes=c.duration)
                 end_time = time_obj.strftime("%H:%M")
+
+                raw_lesson_type = str(getattr(c, "lesson_type", "") or "").strip().lower()
+                if raw_lesson_type in {"group", "individual", "nachhilfe", "trial"}:
+                    lesson_type = raw_lesson_type
+                else:
+                    lesson_type = ""
+
+                raw_trial_dates = getattr(c, "trial_dates", [])
+                if lesson_type == "trial" and isinstance(raw_trial_dates, list):
+                    trial_dates_json = json.dumps(
+                        [str(item) for item in raw_trial_dates if item is not None],
+                        ensure_ascii=False,
+                    )
+                else:
+                    trial_dates_json = ""
                 
                 # Store the assignment
                 solution.append({
@@ -259,7 +275,9 @@ class ScheduleOptimizer:
                     "end_time": end_time,
                     "duration": c.duration,
                     "pause_before": c.pause_before,
-                    "pause_after": c.pause_after
+                    "pause_after": c.pause_after,
+                    "lesson_type": lesson_type,
+                    "trial_dates_json": trial_dates_json,
                 })
             
         # В случае INFEASIBLE, вызвать анализ конфликтов

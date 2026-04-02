@@ -11,6 +11,17 @@ function createAutocompleteInput(inputElement, items, options) {
         inputElement.placeholder = options.placeholder;
     }
 
+    // Disable native browser history/autofill popups. We keep only the custom dropdown.
+    inputElement.setAttribute('autocomplete', 'off');
+    inputElement.autocomplete = 'off';
+    inputElement.setAttribute('autocorrect', 'off');
+    inputElement.setAttribute('autocapitalize', 'off');
+    inputElement.setAttribute('spellcheck', 'false');
+    inputElement.setAttribute('data-lpignore', 'true');
+    if (inputElement.form) {
+        inputElement.form.setAttribute('autocomplete', 'off');
+    }
+
     // Ensure the parent has position:relative so the dropdown can be absolute-positioned below.
     var wrapper = inputElement.parentNode;
     if (wrapper && window.getComputedStyle(wrapper).position === 'static') {

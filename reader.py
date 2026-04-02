@@ -1,9 +1,13 @@
 import pandas as pd
 import numpy as np
 import openpyxl
+import json
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional, Set, Any
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 class ScheduleClass:
     """Class representing a scheduled lesson with all its properties."""
@@ -22,7 +26,9 @@ class ScheduleClass:
                  pause_before: Optional[int] = None,
                  pause_after: Optional[int] = None,
                  section_index: int = 0,
-                 column: str = "B"):
+                 column: str = "B",
+                 lesson_type: str = "",
+                 trial_dates: Optional[List[str]] = None):
         
         self.subject = subject
         self.group = group
@@ -38,6 +44,10 @@ class ScheduleClass:
         self.pause_after = int(pause_after) if pause_after is not None else 0
         self.section_index = section_index
         self.column = column
+        self.lesson_type = str(lesson_type).strip().lower() if lesson_type is not None else ""
+        self.trial_dates = []
+        if self.lesson_type == "trial" and isinstance(trial_dates, list):
+            self.trial_dates = [str(item) for item in trial_dates if item is not None]
         
         # Добавляем новые атрибуты для работы с временными окнами
         self.has_time_window = False  # Этот флаг будет установлен в model_variables.py
@@ -115,6 +125,76 @@ class ScheduleReader:
         self.rooms = set()
         self.buildings = set()
         self.days = set()
+
+    def _parse_trial_dates_json(self, raw_value: Any, source_label: str) -> List[str]:
+        """Parse optional trial_dates_json payload and return a normalized list."""
+        if raw_value in (None, ""):
+            return []
+
+        try:
+            parsed_value = json.loads(raw_value)
+        except Exception as exc:
+            logger.warning("Failed to parse trial_dates_json from %s: %s", source_label, exc)
+            return []
+
+        if not isinstance(parsed_value, list):
+            logger.warning(
+                "trial_dates_json from %s is not a list: %r",
+                source_label,
+                raw_value,
+            )
+            return []
+
+        return [str(item) for item in parsed_value if item is not None]
+
+    def _load_service_metadata(self, workbook: openpyxl.Workbook) -> Dict[Tuple[int, str], Dict[str, Any]]:
+        """Load optional hidden-sheet metadata keyed by (section_index, column_letter)."""
+        if "__service_metadata" not in workbook.sheetnames:
+            return {}
+
+        metadata_sheet = workbook["__service_metadata"]
+        metadata_lookup: Dict[Tuple[int, str], Dict[str, Any]] = {}
+
+        for row_idx in range(2, metadata_sheet.max_row + 1):
+            raw_section_index = metadata_sheet.cell(row=row_idx, column=1).value
+            raw_column_letter = metadata_sheet.cell(row=row_idx, column=2).value
+            raw_lesson_type = metadata_sheet.cell(row=row_idx, column=3).value
+            raw_trial_dates_json = metadata_sheet.cell(row=row_idx, column=4).value
+
+            try:
+                if raw_section_index in (None, ""):
+                    raise ValueError("empty section_index")
+                section_index = int(raw_section_index)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Skipping service metadata row %s with invalid section_index: %r",
+                    row_idx,
+                    raw_section_index,
+                )
+                continue
+
+            column_letter = str(raw_column_letter).strip().upper() if raw_column_letter is not None else ""
+            if not column_letter:
+                logger.warning(
+                    "Skipping service metadata row %s with empty column_letter",
+                    row_idx,
+                )
+                continue
+
+            lesson_type = str(raw_lesson_type).strip().lower() if raw_lesson_type is not None else ""
+            trial_dates = []
+            if lesson_type == "trial":
+                trial_dates = self._parse_trial_dates_json(
+                    raw_trial_dates_json,
+                    f"__service_metadata row {row_idx}",
+                )
+
+            metadata_lookup[(section_index, column_letter)] = {
+                "lesson_type": lesson_type or "",
+                "trial_dates": trial_dates,
+            }
+
+        return metadata_lookup
         
     def read_excel(self) -> List[ScheduleClass]:
         """Read and parse the Excel file to extract scheduling data."""
@@ -130,6 +210,8 @@ class ScheduleReader:
         
         if not planning_sheet:
             raise ValueError("Could not find 'Plannung' sheet in the Excel file")
+
+        service_metadata = self._load_service_metadata(workbook_data)
         
         # Helper function to extract time values from cells
         def extract_time(row, column):
@@ -220,6 +302,8 @@ class ScheduleReader:
                         pause_after = int(float(pause_after)) if pause_after is not None else 0
                     except (ValueError, TypeError):
                         pause_after = 0
+
+                    metadata = service_metadata.get((section_index, col_letter), {})
                     
                     # Create ScheduleClass object
                     class_data = ScheduleClass(
@@ -236,7 +320,9 @@ class ScheduleReader:
                         pause_before=pause_before,
                         pause_after=pause_after,
                         section_index=section_index,
-                        column=col_letter
+                        column=col_letter,
+                        lesson_type=metadata.get("lesson_type", ""),
+                        trial_dates=metadata.get("trial_dates", [])
                     )
                     
                     # Update sets of teachers, groups, rooms, buildings, days

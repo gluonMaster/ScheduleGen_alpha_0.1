@@ -84,9 +84,10 @@ class ApplicationInterface:
             "Только групповые",
             "Только индивидуальные",
             "Только наххильфе",
+            "Пробные/разовые",
             "Негрупповые"
         ]
-        lesson_type_values = ['all', 'group', 'individual', 'nachhilfe', 'non-group']
+        lesson_type_values = ['all', 'group', 'individual', 'nachhilfe', 'trial', 'non-group']
 
         self.lesson_type_var = tk.StringVar(value="Все")
         lesson_type_combo = ttk.Combobox(
@@ -94,7 +95,7 @@ class ApplicationInterface:
             textvariable=self.lesson_type_var,
             values=lesson_type_labels,
             state='readonly',
-            width=24
+            width=26
         )
         lesson_type_combo.pack(side='left')
 

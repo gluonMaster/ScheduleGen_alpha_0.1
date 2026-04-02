@@ -21,6 +21,7 @@ SPISKI_ROOM_FILE_MAP = {
     "Villa": "kabinets_Villa.txt",
     "Kolibri": "kabinets_Kolibri.txt",
 }
+BUILDING_ORDER = ["Villa", "Kolibri"]
 DAY_ORDER = {"Mo": 0, "Di": 1, "Mi": 2, "Do": 3, "Fr": 4, "Sa": 5}
 
 
@@ -70,6 +71,14 @@ def _load_configured_rooms() -> dict[str, list[str]]:
             logging.warning("Failed to read configured rooms from %s: %s", path, exc)
         configured[building] = sorted(rooms, key=_spiski_sort_key)
     return configured
+
+
+def _sort_building_names(building_names) -> list[str]:
+    order_index = {name: index for index, name in enumerate(BUILDING_ORDER)}
+    return sorted(
+        building_names,
+        key=lambda name: (order_index.get(name, len(BUILDING_ORDER)), str(name).casefold()),
+    )
 
 
 def _parse_time(t: str) -> int:
@@ -216,10 +225,12 @@ def compute_availability() -> dict:
         grid_end = max(end for _, end in spans)
         grid_start -= grid_start % 15
         grid_end += (15 - grid_end % 15) % 15
+        grid_end = max(grid_end, 1200)
     else:
         grid_start, grid_end = 480, 1200
     sorted_buildings = {}
-    for building in sorted(buildings):
+    sorted_building_names = _sort_building_names(buildings.keys())
+    for building in sorted_building_names:
         day_map = {}
         for day in sorted(buildings[building]["days"], key=lambda value: (DAY_ORDER.get(value, 99), value)):
             room_map = {}
@@ -232,6 +243,7 @@ def compute_availability() -> dict:
         }
     return {
         "buildings": sorted_buildings,
+        "building_order": sorted_building_names,
         "grid_start": _format_time(grid_start),
         "grid_end": _format_time(grid_end),
     }

@@ -14,6 +14,29 @@ var _addColumnAutocompleteCtrl = null; // current autocomplete controller for ro
 var _addColumnRoomItems = []; // mutable list used by the room autocomplete (updated on building change)
 var _addColumnEscHandler = null; // keydown handler for Escape — stored at module level so _closeAddColumnDialog can remove it
 
+function currentMenuRole() {
+    return window.USER_ROLE || 'viewer';
+}
+
+function canManageScheduleStructure() {
+    return currentMenuRole() === 'admin';
+}
+
+function canAddColumn() {
+    return ['admin', 'editor', 'organizer'].indexOf(currentMenuRole()) !== -1;
+}
+
+function _syncStructureMenuVisibility() {
+    var addColItem = document.getElementById('menuItemAddColumn');
+    if (addColItem) {
+        addColItem.style.display = canAddColumn() ? '' : 'none';
+    }
+    var newSchedItem = document.getElementById('menuItemNewSchedule');
+    if (newSchedItem) {
+        newSchedItem.style.display = canManageScheduleStructure() ? '' : 'none';
+    }
+}
+
 // === Menu open/close ===
 function toggleMenu() {
     var dropdown = document.getElementById('menuDropdown');
@@ -107,6 +130,10 @@ function hideMenuConfirmModal() {
 // === "Создать новое расписание" entry point ===
 function handleNewSchedule() {
     closeMenu();
+    if (!canManageScheduleStructure()) {
+        alert('Создание нового расписания доступно только администратору.');
+        return;
+    }
     showMenuConfirmModal(
         'Вы уверены, что хотите создать новое расписание? Все текущие данные будут удалены.',
         function() {
@@ -120,6 +147,10 @@ function handleNewSchedule() {
 function openAddColumnDialog(prefillBuilding, prefillDay) {
     if (_addColumnDialogOpen) return;
     closeMenu();
+    if (!canAddColumn()) {
+        alert('Добавление колонок недоступно для вашей роли.');
+        return;
+    }
     _addColumnDialogOpen = true;
 
     var overlay = document.createElement('div');
@@ -521,6 +552,7 @@ function initMenu() {
     // === Lesson type filter section ===
     var dropdown = document.getElementById('menuDropdown');
     _initPublishMenuItem();
+    _syncStructureMenuVisibility();
     if (dropdown && !dropdown.querySelector('.lesson-filter-item')) {
         var separator = document.createElement('div');
         separator.style.cssText = 'border-top: 1px solid #ccc; margin: 4px 0;';
@@ -536,6 +568,7 @@ function initMenu() {
             { label: 'Только групповые', value: 'group' },
             { label: 'Только индивидуальные', value: 'individual' },
             { label: 'Только наххильфе', value: 'nachhilfe' },
+            { label: 'Пробные занятия', value: 'trial' },
             { label: 'Негрупповые', value: 'non-group' }
         ];
 
@@ -574,6 +607,7 @@ window.openAddColumnDialog = openAddColumnDialog;
 (function() {
     function syncPublishVisibility() {
         _initPublishMenuItem();
+        _syncStructureMenuVisibility();
         var publishItem = document.getElementById('menu-publish-item');
         if (publishItem && window.USER_ROLE !== 'admin') {
             publishItem.style.display = 'none';

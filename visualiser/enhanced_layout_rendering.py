@@ -49,7 +49,8 @@ class BlockRenderingMixin:
         max_width = width - 2 * text_padding
 
         # Вычисляем размер шрифта в зависимости от высоты блока
-        lesson_type_pdf = _classify_lesson_type(lesson.get('subject', '') or '')
+        raw_lesson_type = str(lesson.get('lesson_type') or '').strip().lower()
+        lesson_type_pdf = raw_lesson_type or _classify_lesson_type(lesson.get('subject', '') or '')
         is_non_group = lesson_type_pdf != 'group'
         subject_val_pdf = lesson.get('subject', '') or ''
         has_subject_line = is_non_group and bool(subject_val_pdf)

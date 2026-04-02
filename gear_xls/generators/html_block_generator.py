@@ -6,9 +6,11 @@
 с правильным расчетом координат и размеров.
 """
 
+import json
 import logging
 import sys
 import os
+from html import escape as html_escape
 
 # Добавляем родительскую директорию в путь для импорта time_utils
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,6 +24,27 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger('html_block_generator')
+
+
+def _resolve_lesson_type(interval):
+    lesson_type = str(interval.get('lesson_type') or '').strip().lower()
+    if lesson_type:
+        return lesson_type
+    return classify_lesson_type(interval.get('subject', ''))
+
+
+def _normalize_trial_dates(interval):
+    trial_dates = interval.get('trial_dates')
+    if not isinstance(trial_dates, list):
+        return []
+    return [str(date_value) for date_value in trial_dates if date_value]
+
+
+def _format_trial_date(date_value):
+    parts = str(date_value or '').split('-')
+    if len(parts) == 3:
+        return f"{parts[2]}.{parts[1]}.{parts[0]}"
+    return str(date_value or '')
 
 
 class HTMLBlockGenerator:
@@ -151,7 +174,13 @@ class HTMLBlockGenerator:
         building = interval.get('building', '')
         start_row = (interval['start'] - grid_start) // self.time_interval
         row_span = (interval['end'] - interval['start']) // self.time_interval
-        lesson_type = classify_lesson_type(interval.get('subject', ''))
+        lesson_type = _resolve_lesson_type(interval)
+        trial_dates = _normalize_trial_dates(interval)
+        trial_dates_attr = ""
+        if lesson_type == 'trial':
+            trial_dates_attr = (
+                f" data-trial-dates='{html_escape(json.dumps(trial_dates, ensure_ascii=False), quote=True)}' "
+            )
 
         # Отладочная информация для диагностики
         logger.debug(f"Генерация блока: день='{day}', колонка={col_index}, здание='{building}'")
@@ -164,11 +193,12 @@ class HTMLBlockGenerator:
 
         # Формирование HTML блока с правильными атрибутами
         block_html = (
-            f"<div class='activity-block activity-day-{day}' "
+            f"<div class='activity-block activity-day-{day} lesson-type-{lesson_type}' "
             f"data-day='{day}' "
             f"data-col-index='{col_index}' "
             f"data-building='{building}' "
             f"data-lesson-type='{lesson_type}' "
+            f"{trial_dates_attr}"
             f"data-start-row='{start_row}' "
             f"data-row-span='{row_span}' "
             f"style='top:{position['top']}px; left:{position['left']}px; "
@@ -239,12 +269,14 @@ class HTMLBlockGenerator:
         Returns:
             str: HTML содержимое блока
         """
-        subject = interval.get('subject') or 'Не указано'
-        teacher = interval.get('teacher') or ''
-        students = interval.get('students') or ''
-        room_display = interval.get('room_display') or ''
+        subject = html_escape(interval.get('subject') or 'Не указано')
+        teacher = html_escape(interval.get('teacher') or '')
+        students = html_escape(interval.get('students') or '')
+        room_display = html_escape(interval.get('room_display') or '')
         start_time = minutes_to_time(interval.get('start', 0))
         end_time = minutes_to_time(interval.get('end', 0))
+        lesson_type = _resolve_lesson_type(interval)
+        trial_dates = _normalize_trial_dates(interval)
         
         content_parts = [
             f"<strong>{subject}</strong><br>",
@@ -253,6 +285,10 @@ class HTMLBlockGenerator:
             f"{room_display}<br>" if room_display else "",
             f"{start_time}-{end_time}"
         ]
+
+        if lesson_type == 'trial' and trial_dates:
+            dates_display = ", ".join(_format_trial_date(date_value) for date_value in trial_dates)
+            content_parts.append(f"<br>&#128197; {html_escape(dates_display)}")
         
         return "".join(content_parts)
     

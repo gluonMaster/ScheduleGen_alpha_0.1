@@ -110,6 +110,23 @@ function collectScheduleData() {
             var hexColor = rgbToHex(blockColor);
             
             // Создаем запись активности для экспорта
+            var lessonType = block.getAttribute('data-lesson-type') || 'group';
+            var trialDatesJson = '';
+
+            if (lessonType === 'trial') {
+                var rawTrialDates = block.getAttribute('data-trial-dates');
+                if (rawTrialDates) {
+                    try {
+                        var parsedTrialDates = JSON.parse(rawTrialDates);
+                        if (Array.isArray(parsedTrialDates)) {
+                            trialDatesJson = JSON.stringify(parsedTrialDates);
+                        }
+                    } catch (error) {
+                        console.warn('Не удалось распарсить data-trial-dates для экспорта:', error);
+                    }
+                }
+            }
+
             var activity = {
                 subject: subject,
                 students: students,
@@ -122,7 +139,8 @@ function collectScheduleData() {
                 end_time: endTime,      // Строка в формате "HH:MM"
                 duration: duration,
                 color: hexColor,
-                lesson_type: block.getAttribute('data-lesson-type') || 'group'
+                lesson_type: lessonType,
+                trial_dates_json: trialDatesJson
             };
             
             // Добавляем активность в общий список

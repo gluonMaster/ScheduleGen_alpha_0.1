@@ -8,6 +8,7 @@
 
 import logging
 from utils import time_to_minutes, get_color, room_sort_key
+from lesson_type_utils import classify_lesson_type
 
 # Настройка логирования
 logging.basicConfig(
@@ -15,6 +16,22 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger('schedule_structure')
+
+
+def _resolve_lesson_type(details):
+    lesson_type = str(details.get('lesson_type') or '').strip().lower()
+    if lesson_type:
+        return lesson_type
+    return classify_lesson_type(details.get('subject', ''))
+
+
+def _resolve_interval_color(details, lesson_type):
+    explicit_color = details.get('color')
+    if explicit_color:
+        return explicit_color
+    if lesson_type == 'trial':
+        return '#E8F5E9'
+    return get_color(details.get('students', 'default'))
 
 def build_schedule_structure(activities, time_interval=5):
     """
@@ -80,6 +97,9 @@ def build_schedule_structure(activities, time_interval=5):
             if end > grid_end:
                 logger.warning(f"Занятие {details['subject']} для {details['teacher']} заканчивается позже конца сетки ({end} > {grid_end})")
 
+            lesson_type = _resolve_lesson_type(details)
+            trial_dates = details.get('trial_dates') if lesson_type == 'trial' else []
+
             interval = {
                 "id": act_id,
                 "start": start,
@@ -89,7 +109,9 @@ def build_schedule_structure(activities, time_interval=5):
                 "students": details['students'],  # имя группы
                 "room": details['room'],
                 "room_display": details['room_display'],  # Очищенное название кабинета
-                "color": get_color(details.get('students', 'default')),
+                "color": _resolve_interval_color(details, lesson_type),
+                "lesson_type": lesson_type,
+                "trial_dates": list(trial_dates) if isinstance(trial_dates, list) else [],
                 # ИСПРАВЛЕНИЕ: Добавляем поля day и building для JavaScript
                 "day": day,
                 "building": building

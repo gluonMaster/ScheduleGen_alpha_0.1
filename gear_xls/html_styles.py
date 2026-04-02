@@ -436,5 +436,34 @@ def get_css_styles(cellHeight, dayCellWidth, timeColWidth, borderWidth=1):
       .activity-block[data-lesson-type="nachhilfe"] {{
          border-left: 3px solid #1976d2;
       }}
+
+      .activity-block[data-lesson-type="trial"] {{
+         border: 2px solid #2e7d32 !important;
+         box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 0 1px rgba(46,125,50,0.22);
+         padding-top: 18px !important;
+         overflow: hidden;
+      }}
+
+      .activity-block[data-lesson-type="trial"]::before {{
+         content: "TRIAL";
+         position: absolute;
+         top: 4px;
+         right: 4px;
+         padding: 2px 6px;
+         border-radius: 999px;
+         background: #1b5e20;
+         color: #fff;
+         font-size: 10px;
+         font-weight: 700;
+         letter-spacing: 0.08em;
+         z-index: 2;
+         pointer-events: none;
+      }}
+
+      .activity-block[data-lesson-type="trial"] strong {{
+         display: block;
+         width: 100%;
+         margin-bottom: 2px;
+      }}
     </style>
     """

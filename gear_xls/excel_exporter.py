@@ -59,8 +59,19 @@ def create_excel_from_html_data(schedule_data, output_file=None):
         ws.title = "Schedule"
         
         # Добавляем заголовки
-        headers = ["Занятие", "Группа", "Преподаватель", "Кабинет", 
-                  "Здание", "День", "Начало", "Конец", "Продолжительность"]
+        headers = [
+            "Занятие",
+            "Группа",
+            "Преподаватель",
+            "Кабинет",
+            "Здание",
+            "День",
+            "Начало",
+            "Конец",
+            "Продолжительность",
+            "Тип занятия",
+            "Даты (JSON)",
+        ]
         
         for col_idx, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col_idx)
@@ -152,9 +163,23 @@ def create_excel_from_html_data(schedule_data, output_file=None):
             
             # Продолжительность в минутах
             ws.cell(row=row_idx, column=9).value = activity.get('duration', 0)
+
+            lesson_type = str(activity.get('lesson_type') or 'group').strip() or 'group'
+            trial_dates_json = activity.get('trial_dates_json', '')
+            if lesson_type != 'trial':
+                trial_dates_json = ''
+            elif isinstance(trial_dates_json, list):
+                trial_dates_json = json.dumps(trial_dates_json, ensure_ascii=False)
+            elif trial_dates_json is None:
+                trial_dates_json = ''
+            else:
+                trial_dates_json = str(trial_dates_json)
+
+            ws.cell(row=row_idx, column=10).value = lesson_type
+            ws.cell(row=row_idx, column=11).value = trial_dates_json
             
             # Применяем стили к ячейкам
-            for col_idx in range(1, 10):
+            for col_idx in range(1, len(headers) + 1):
                 cell = ws.cell(row=row_idx, column=col_idx)
                 cell.alignment = Alignment(horizontal='center', vertical='center')
                 cell.border = Border(
