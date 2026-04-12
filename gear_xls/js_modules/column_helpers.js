@@ -1,207 +1,290 @@
-// Модуль с вспомогательными функциями для работы с колонками в разных зданиях
+// Column helpers shared by add/remove/move flows across buildings.
 
-// Глобальная переменная с порядком дней недели (если ещё не определена)
-if (typeof window.daysOrder === 'undefined') {
-    window.daysOrder = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+if (typeof window.daysOrder === "undefined") {
+    window.daysOrder = ["Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 }
 
-// Возвращает имя кабинета из заголовка колонки конкретного дня
-function extractRoomFromDayHeader(headerElement, day) {
+function getScheduleTable(rootOrTable) {
+    if (!rootOrTable) {
+        return null;
+    }
+    if (rootOrTable.classList && rootOrTable.classList.contains("schedule-grid")) {
+        return rootOrTable;
+    }
+    return rootOrTable.querySelector ? rootOrTable.querySelector(".schedule-grid") : null;
+}
+
+function getHeaderLocalColumnIndex(headerElement, fallbackIndex) {
+    var parsed = headerElement ? parseInt(headerElement.getAttribute("data-col"), 10) : NaN;
+    return isNaN(parsed) ? fallbackIndex : parsed;
+}
+
+function setDayHeaderMetadata(headerElement, day, colIndex, room) {
     if (!headerElement) {
-        return '';
+        return;
     }
-    
-    var headerParts = (headerElement.innerHTML || '').split(/<br\s*\/?>/i);
-    if (headerParts.length > 1) {
-        return headerParts[1].replace(/<[^>]*>/g, '').trim();
+
+    // Headers need the same logical coordinates as tbody cells/blocks so
+    // runtime operations can safely recalculate columns after DOM edits.
+    headerElement.setAttribute("data-day", day || "");
+    if (typeof colIndex === "number" && colIndex >= 0) {
+        headerElement.setAttribute("data-col", String(colIndex));
+    } else {
+        headerElement.removeAttribute("data-col");
     }
-    
-    var headerText = headerElement.textContent.trim();
-    return headerText.replace(day, '').trim();
+    headerElement.setAttribute("data-room", (room || "").trim());
 }
 
-// Функция для поиска подходящей колонки в заданном здании
+function refreshDayHeaderMetadata(rootOrTable, day) {
+    var table = getScheduleTable(rootOrTable);
+    if (!table || !day) {
+        return;
+    }
+
+    // Rebuild metadata from the actual header order after add/remove column.
+    Array.from(table.querySelectorAll("thead th.day-" + day)).forEach(function (header, index) {
+        setDayHeaderMetadata(header, day, index, parseRoomFromDayHeaderMarkup(header, day));
+    });
+}
+
+function parseRoomFromDayHeaderMarkup(headerElement, day) {
+    var dayLabel;
+    var headerParts;
+    var headerText;
+
+    if (!headerElement) {
+        return "";
+    }
+
+    // We intentionally parse markup here instead of cached data-room so
+    // refreshDayHeaderMetadata() can reconstruct metadata from legacy headers.
+    dayLabel = headerElement.getAttribute("data-day") || day || "";
+    headerParts = (headerElement.innerHTML || "").split(/<br\s*\/?>/i);
+    if (headerParts.length > 1) {
+        return headerParts[1].replace(/<[^>]*>/g, "").trim();
+    }
+
+    headerText = headerElement.textContent.trim();
+    return headerText.replace(dayLabel, "").trim();
+}
+
+function extractRoomFromDayHeader(headerElement, day) {
+    var dataRoom;
+
+    if (!headerElement) {
+        return "";
+    }
+
+    dataRoom = headerElement.getAttribute("data-room");
+    if (dataRoom !== null) {
+        return dataRoom.trim();
+    }
+
+    return parseRoomFromDayHeaderMarkup(headerElement, day);
+}
+
 function findMatchingColumnInBuilding(day, room, building) {
-    var normalizedRoom = (room || '').trim();
+    var normalizedRoom = (room || "").trim();
+    var container;
+    var dayHeaders;
+    var bestColIndex = -1;
+
     if (!normalizedRoom) {
         return -1;
     }
-    
-    // Находим контейнер расписания для указанного здания
-    var container = BuildingService.findScheduleContainerForBuilding(building);
+
+    container = BuildingService.findScheduleContainerForBuilding(building);
     if (!container) {
-        console.error(`Не найден контейнер расписания для здания ${building}`);
+        console.error(`Container not found for building ${building}`);
         return -1;
     }
-    
-    // Получаем все заголовки колонок для указанного дня в этом здании
-    var dayHeaders = container.querySelectorAll(`.schedule-grid th.day-${day}`);
-    var bestColIndex = -1;
-    
-    console.log(`Поиск колонки для кабинета ${normalizedRoom} в здании ${building} в день ${day}`);
-    console.log(`Найдено ${dayHeaders.length} заголовков`);
-    
-    // Ищем точное совпадение имени кабинета в заголовке
+
+    // Normalize header metadata first so lookups work for both regenerated
+    // HTML and columns inserted earlier in the current editing session.
+    refreshDayHeaderMetadata(container, day);
+    dayHeaders = container.querySelectorAll(`.schedule-grid th.day-${day}`);
+
+    console.log(
+        `Searching column for room ${normalizedRoom} in building ${building} on ${day}`
+    );
+    console.log(`Found ${dayHeaders.length} headers`);
+
     for (var i = 0; i < dayHeaders.length; i++) {
         var headerText = dayHeaders[i].textContent.trim();
         var roomPart = extractRoomFromDayHeader(dayHeaders[i], day);
-        console.log(`Заголовок ${i}: "${headerText}"`);
-        
+        console.log(`Header ${i}: "${headerText}"`);
+
         if (roomPart === normalizedRoom) {
-            console.log(`Найдено точное совпадение в колонке ${i}`);
-            bestColIndex = i;
+            bestColIndex = getHeaderLocalColumnIndex(dayHeaders[i], i);
+            console.log(`Exact room match found in column ${bestColIndex}`);
             break;
         }
     }
-    
-    // Возвращаем -1 если колонка не найдена (для последующего создания новой)
+
     if (bestColIndex === -1) {
-        console.log(`Колонка для кабинета ${normalizedRoom} не найдена в дне ${day} здания ${building}`);
+        console.log(
+            `No column found for room ${normalizedRoom} in day ${day} / building ${building}`
+        );
     }
-    
+
     return bestColIndex;
 }
 
-// Функция для обновления колонки блока при перемещении в другое здание
 function updateBlockColumnForBuilding(block, room, building, day) {
-    day = day || block.getAttribute('data-day');
-    
-    // Находим подходящую колонку в новом здании
-    var colIndex = findMatchingColumnInBuilding(day, room, building);
+    var colIndex;
+
+    day = day || block.getAttribute("data-day");
+    colIndex = findMatchingColumnInBuilding(day, room, building);
     if (colIndex === -1) {
-        console.warn(`Не удалось найти подходящую колонку для кабинета ${room} в здании ${building}`);
-        colIndex = 0; // Используем первую колонку, если не нашли подходящей
+        console.warn(
+            `Could not resolve room ${room} in building ${building}; falling back to first column`
+        );
+        colIndex = 0;
     }
-    
-    // Обновляем атрибуты блока
-    block.setAttribute('data-col-index', colIndex);
-    
+
+    block.setAttribute("data-col-index", colIndex);
     return colIndex;
 }
 
-// Helper функция для форматирования заголовка день-кабинет
 function formatDayRoomHeader(day, room, building) {
-    // Находим контейнер расписания для указанного здания
     var container = BuildingService.findScheduleContainerForBuilding(building);
+    var firstDayHeader;
+    var headerText;
+    var headerParts;
+    var dayPart;
+
     if (!container) {
-        console.warn(`Не найден контейнер расписания для здания ${building}, используем формат без пробела`);
+        console.warn(`Building container ${building} not found; using compact header format`);
         return day + room;
     }
-    
-    // Ищем первый существующий заголовок для этого дня
-    var firstDayHeader = container.querySelector(`.schedule-grid th.day-${day}`);
+
+    refreshDayHeaderMetadata(container, day);
+    firstDayHeader = container.querySelector(`.schedule-grid th.day-${day}`);
     if (!firstDayHeader) {
-        console.warn(`Не найдены заголовки для дня ${day} в здании ${building}, используем формат без пробела`);
+        console.warn(`No headers found for ${day} in ${building}; using compact header format`);
         return day + room;
     }
-    
-    var headerText = firstDayHeader.textContent.trim();
-    console.log(`Анализ формата заголовка: "${headerText}"`);
-    
-    // Определяем, есть ли пробел между днем и кабинетом
-    // Заголовок содержит <br>, поэтому анализируем часть после <br>
-    var headerParts = firstDayHeader.innerHTML.split('<br>');
+
+    headerText = firstDayHeader.textContent.trim();
+    console.log(`Inspecting header format: "${headerText}"`);
+
+    headerParts = firstDayHeader.innerHTML.split("<br>");
     if (headerParts.length >= 2) {
-        var roomPart = headerParts[1].trim();
-        var dayPart = headerParts[0].trim();
-        
-        // Если в исходном тексте есть пробел после дня, добавляем его
-        if (headerText.includes(dayPart + ' ')) {
-            console.log(`Обнаружен формат с пробелом: "${day} ${room}"`);
-            return day + ' ' + room;
+        dayPart = headerParts[0].trim();
+        if (headerText.includes(dayPart + " ")) {
+            console.log(`Detected spaced format: "${day} ${room}"`);
+            return day + " " + room;
         }
     }
-    
-    console.log(`Обнаружен формат без пробела: "${day}${room}"`);
+
+    console.log(`Detected compact format: "${day}${room}"`);
     return day + room;
 }
 
-// Компаратор для сортировки кабинетов: подвал (K.*) → 0.* → 1.* → 2.* → прочие.
-// Реплика Python utils.room_sort_key().
 function roomSortKey(room) {
-    var s = (room || '').trim();
-    if (!s) return [Infinity, 0, ''];
+    var s = (room || "").trim();
+    var parts;
+    var floorPart;
+    var roomPart;
+    var floorOrder;
+    var num;
 
-    // Mirror Python utils.room_sort_key(): treat "K.*" (and Cyrillic "К.*") as basement, then numeric floors.
-    // Examples: "K.06", "К.06", "0.05", "1.03", "2.7"
-    var parts = s.split('.');
+    if (!s) {
+        return [Infinity, 0, ""];
+    }
+
+    parts = s.split(".");
     if (parts.length === 2 && /^\d+$/.test(parts[1])) {
-        var floorPart = parts[0] || '';
-        var roomPart = parts[1] || '';
+        floorPart = parts[0] || "";
+        roomPart = parts[1] || "";
 
-        var floorOrder;
-        if (/^k/i.test(floorPart) || floorPart === 'К' || floorPart === 'к') {
-            floorOrder = -1; // basement first
+        if (/^k/i.test(floorPart) || floorPart === "\u041a" || floorPart === "\u043a") {
+            floorOrder = -1;
         } else if (/^\d+$/.test(floorPart)) {
             floorOrder = parseInt(floorPart, 10);
         } else {
-            floorOrder = Infinity; // non-standard prefix goes last
+            floorOrder = Infinity;
         }
 
-        var num = parseInt(roomPart, 10);
-        if (isNaN(num)) num = 0;
+        num = parseInt(roomPart, 10);
+        if (isNaN(num)) {
+            num = 0;
+        }
         return [floorOrder, num, s];
     }
 
-    // Non-standard format -> sort to end.
     return [Infinity, 0, s];
 }
 
 function _compareRoomKeys(a, b) {
     var ka = roomSortKey(a);
     var kb = roomSortKey(b);
+
     if (ka[0] !== kb[0]) {
-        if (ka[0] === Infinity) return 1;
-        if (kb[0] === Infinity) return -1;
+        if (ka[0] === Infinity) {
+            return 1;
+        }
+        if (kb[0] === Infinity) {
+            return -1;
+        }
         return ka[0] - kb[0];
     }
-    if (ka[1] !== kb[1]) return ka[1] - kb[1];
+    if (ka[1] !== kb[1]) {
+        return ka[1] - kb[1];
+    }
     return ka[2] < kb[2] ? -1 : ka[2] > kb[2] ? 1 : 0;
 }
 
-// Функция для создания новой колонки, если она отсутствует
 function addColumnIfMissing(day, room, building) {
-    var normalizedRoom = (room || '').trim();
-    console.log(`Попытка добавления колонки: день=${day}, кабинет=${normalizedRoom}, здание=${building}`);
-    
+    var normalizedRoom = (room || "").trim();
+    var container;
+    var table;
+    var dayHeaders;
+    var insertionIndex;
+    var newHeader;
+    var thead;
+    var insertPosition;
+    var tbody;
+    var rows;
+
+    console.log(
+        `Attempting to add column: day=${day}, room=${normalizedRoom}, building=${building}`
+    );
+
     if (!normalizedRoom) {
-        console.warn('Попытка добавить колонку с пустым названием кабинета');
+        console.warn("Attempt to add a column with an empty room name");
         return -1;
     }
-    
-    // Находим контейнер расписания для указанного здания
-    var container = BuildingService.findScheduleContainerForBuilding(building);
+
+    container = BuildingService.findScheduleContainerForBuilding(building);
     if (!container) {
-        console.error(`Не найден контейнер расписания для здания ${building}`);
+        console.error(`Container not found for building ${building}`);
         return -1;
     }
-    
-    var table = container.querySelector('.schedule-grid');
+
+    table = container.querySelector(".schedule-grid");
     if (!table) {
-        console.error(`Не найдена таблица расписания в здании ${building}`);
+        console.error(`Schedule table not found in building ${building}`);
         return -1;
     }
-    
-    // Собираем заголовки для указанного дня
-    var dayHeaders = Array.from(table.querySelectorAll(`thead th.day-${day}`));
-    console.log(`Найдено ${dayHeaders.length} заголовков для дня ${day}`);
-    
-    // Проверяем, существует ли уже колонка с этим кабинетом
+
+    refreshDayHeaderMetadata(table, day);
+    dayHeaders = Array.from(table.querySelectorAll(`thead th.day-${day}`));
+    console.log(`Found ${dayHeaders.length} headers for day ${day}`);
+
     for (var i = 0; i < dayHeaders.length; i++) {
         var headerText = dayHeaders[i].textContent.trim();
         var roomPart = extractRoomFromDayHeader(dayHeaders[i], day);
-        console.log(`Проверка существующего заголовка ${i}: "${headerText}"`);
+        console.log(`Checking existing header ${i}: "${headerText}"`);
         if (roomPart === normalizedRoom) {
-            console.log(`Колонка для кабинета ${normalizedRoom} уже существует в позиции ${i}`);
-            return i;
+            console.log(`Column for room ${normalizedRoom} already exists at index ${i}`);
+            return getHeaderLocalColumnIndex(dayHeaders[i], i);
         }
     }
-    
-    // Кабинет не найден, нужно создать новую колонку
-    console.log(`Создание новой колонки для кабинета ${normalizedRoom}`);
-    
-    // Определяем позицию для вставки по порядку сортировки кабинетов.
-    var insertionIndex = dayHeaders.length; // default: append at end
+
+    console.log(`Creating new column for room ${normalizedRoom}`);
+
+    insertionIndex = dayHeaders.length;
     for (var j = 0; j < dayHeaders.length; j++) {
         var existingRoom = extractRoomFromDayHeader(dayHeaders[j], day);
         if (_compareRoomKeys(normalizedRoom, existingRoom) < 0) {
@@ -209,116 +292,113 @@ function addColumnIfMissing(day, room, building) {
             break;
         }
     }
-    
-    // Создаем новый заголовок
-    var newHeader = document.createElement('th');
-    newHeader.className = 'day-' + day;
-    newHeader.innerHTML = day + '<br>' + normalizedRoom;
-    
-    // Находим позицию для вставки в thead
-    var thead = table.querySelector('thead tr');
-    var insertPosition = findInsertPositionInHeader(thead, day, insertionIndex);
-    
-    console.log(`Позиция для вставки в thead: ${insertPosition} (из ${thead.children.length} колонок)`);
-    
+
+    newHeader = document.createElement("th");
+    newHeader.className = "day-" + day;
+    newHeader.innerHTML = day + "<br>" + normalizedRoom;
+    setDayHeaderMetadata(newHeader, day, insertionIndex, normalizedRoom);
+
+    thead = table.querySelector("thead tr");
+    insertPosition = findInsertPositionInHeader(thead, day, insertionIndex);
+
+    console.log(
+        `Header insert position ${insertPosition} (of ${thead.children.length} total columns)`
+    );
+
     if (insertPosition < thead.children.length) {
         thead.insertBefore(newHeader, thead.children[insertPosition]);
-        console.log(`Заголовок вставлен ПЕРЕД элементом в позиции ${insertPosition}`);
+        console.log(`Inserted header before absolute column ${insertPosition}`);
     } else {
         thead.appendChild(newHeader);
-        console.log(`Заголовок добавлен В КОНЕЦ thead`);
+        console.log("Appended header to the end of thead");
     }
-    
-    // Добавляем соответствующие ячейки в каждую строку tbody
-    var tbody = table.querySelector('tbody');
-    var rows = tbody.querySelectorAll('tr');
-    
-    console.log(`Добавление ячеек в ${rows.length} строк tbody в позицию ${insertPosition}`);
-    
+
+    tbody = table.querySelector("tbody");
+    rows = tbody.querySelectorAll("tr");
+
+    console.log(`Adding tbody cells to ${rows.length} rows at absolute column ${insertPosition}`);
+
     for (var r = 0; r < rows.length; r++) {
-        var newCell = document.createElement('td');
-        newCell.className = 'day-' + day;
-        newCell.setAttribute('data-row', r);
-        newCell.setAttribute('data-col', insertionIndex);
-        
+        var newCell = document.createElement("td");
+        newCell.className = "day-" + day;
+        newCell.setAttribute("data-row", r);
+        newCell.setAttribute("data-col", insertionIndex);
+
         if (insertPosition < rows[r].children.length) {
             rows[r].insertBefore(newCell, rows[r].children[insertPosition]);
         } else {
             rows[r].appendChild(newCell);
         }
     }
-    
-    console.log(`Ячейки tbody добавлены успешно`);
 
-    // Important: after insertion, renumber data-col for ALL cells of this day.
-    // data-col is used by drag & drop / snapping to resolve colIndex; duplicates would break placement.
+    // Every row keeps local day-relative data-col values; absolute table
+    // indices are not stable once columns are inserted between days.
     for (var r2 = 0; r2 < rows.length; r2++) {
-        var dayCells = Array.from(rows[r2].querySelectorAll('td.day-' + day));
-        dayCells.forEach(function(td, idx) {
-            td.setAttribute('data-col', idx);
+        var dayCells = Array.from(rows[r2].querySelectorAll("td.day-" + day));
+        dayCells.forEach(function (td, idx) {
+            td.setAttribute("data-col", idx);
         });
     }
-    
-    // Обновляем data-col-index для существующих блоков того же дня и здания
-    console.log(`Обновление data-col-index для существующих блоков дня ${day} в здании ${building}`);
+
+    // Headers are renumbered after insertion so subsequent lookups can trust
+    // data-col instead of recomputing from DOM position every time.
+    refreshDayHeaderMetadata(table, day);
+
+    console.log(`Updating data-col-index for existing blocks on ${day} in ${building}`);
     updateExistingBlocksColIndex(building, day, insertionIndex);
-    
-    // НЕ вызываем updateActivityPositions здесь - это будет сделано в вызывающем коде
-    // if (typeof updateActivityPositions === 'function') {
-    //     updateActivityPositions();
-    // }
-    
-    console.log(`Новая колонка создана для кабинета ${normalizedRoom} в позиции ${insertionIndex}`);
+
+    console.log(`New column created for room ${normalizedRoom} at local index ${insertionIndex}`);
     return insertionIndex;
 }
 
-// Вспомогательная функция для определения позиции вставки в заголовке
 function findInsertPositionInHeader(headerRow, day, insertionIndex) {
-    var position = 1; // Начинаем после колонки времени
-    
-    // Используем глобальную переменную daysOrder
-    var daysOrder = window.daysOrder || ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
-    
-    // Проходим все дни в порядке daysOrder до нашего дня
+    var position = 1;
+    var daysOrder = window.daysOrder || ["Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+
     for (var d = 0; d < daysOrder.length; d++) {
         if (daysOrder[d] === day) {
-            // Используем insertionIndex (а не общее количество колонок),
-            // чтобы вставить в отсортированную позицию, а не в конец.
             position += insertionIndex;
             break;
-        } else {
-            // Добавляем количество колонок для предыдущих дней
-            var dayColCount = headerRow.querySelectorAll('.day-' + daysOrder[d]).length;
-            position += dayColCount;
         }
+
+        position += headerRow.querySelectorAll(".day-" + daysOrder[d]).length;
     }
-    
+
     return position;
 }
 
-// Функция для обновления data-col-index у существующих блоков
 function updateExistingBlocksColIndex(building, day, insertionIndex) {
     var container = BuildingService.findScheduleContainerForBuilding(building);
-    if (!container) return;
-    
-    var blocks = container.querySelectorAll(`.activity-block[data-day="${day}"][data-building="${building}"]`);
-    
+    var blocks;
+
+    if (!container) {
+        return;
+    }
+
+    blocks = container.querySelectorAll(
+        `.activity-block[data-day="${day}"][data-building="${building}"]`
+    );
+
     for (var i = 0; i < blocks.length; i++) {
         var block = blocks[i];
-        var currentColIndex = parseInt(block.getAttribute('data-col-index'));
-        
-        // Если колонка блока >= позиции вставки, увеличиваем на 1
+        var currentColIndex = parseInt(block.getAttribute("data-col-index"), 10);
+
         if (currentColIndex >= insertionIndex) {
             var newColIndex = currentColIndex + 1;
-            block.setAttribute('data-col-index', newColIndex);
-            console.log(`Обновлен data-col-index блока с ${currentColIndex} на ${newColIndex}`);
+            block.setAttribute("data-col-index", newColIndex);
+            console.log(
+                `Updated block data-col-index from ${currentColIndex} to ${newColIndex}`
+            );
         }
     }
 }
 
-// Экспортируем функции
+window.extractRoomFromDayHeader = extractRoomFromDayHeader;
 window.findMatchingColumnInBuilding = findMatchingColumnInBuilding;
 window.updateBlockColumnForBuilding = updateBlockColumnForBuilding;
 window.addColumnIfMissing = addColumnIfMissing;
 window.formatDayRoomHeader = formatDayRoomHeader;
 window.roomSortKey = roomSortKey;
+window.getHeaderLocalColumnIndex = getHeaderLocalColumnIndex;
+window.setDayHeaderMetadata = setDayHeaderMetadata;
+window.refreshDayHeaderMetadata = refreshDayHeaderMetadata;

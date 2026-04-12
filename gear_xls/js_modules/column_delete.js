@@ -13,6 +13,12 @@ function removeColumn(building, day, colIndex) {
         return;
     }
 
+    // Normalize header metadata before removal so the old index->room mapping
+    // is built from the current logical column order, not raw DOM position.
+    if (typeof refreshDayHeaderMetadata === 'function') {
+        refreshDayHeaderMetadata(table, day);
+    }
+
     // Step 2: Guard: do not remove the last column of a day.
     var dayHeaders = Array.from(table.querySelectorAll('thead th.day-' + day));
     if (dayHeaders.length <= 1) {
@@ -66,6 +72,12 @@ function removeColumn(building, day, colIndex) {
             td.setAttribute('data-col', idx);
         });
     });
+
+    // After DOM removal, rebuild header metadata so remaining columns expose
+    // consistent day-local data-col/data-room attributes.
+    if (typeof refreshDayHeaderMetadata === 'function') {
+        refreshDayHeaderMetadata(table, day);
+    }
 
     // Step 9: Recalculate data-col-index on remaining blocks for this day.
     var updatedDayHeaders = Array.from(table.querySelectorAll('thead th.day-' + day));
@@ -275,7 +287,11 @@ function _onDeleteColumnClick(th) {
 
     // Find colIndex among th.day-{day} in this container
     var dayHeaders = Array.from(container.querySelectorAll('.schedule-grid thead th.day-' + day));
-    var colIndex = dayHeaders.indexOf(th);
+    // Prefer the logical local index stored on the header; DOM index alone is
+    // more fragile once columns are dynamically inserted/removed.
+    var colIndex = typeof getHeaderLocalColumnIndex === 'function'
+        ? getHeaderLocalColumnIndex(th, dayHeaders.indexOf(th))
+        : dayHeaders.indexOf(th);
     if (colIndex < 0) return;
 
     // Guard: last column

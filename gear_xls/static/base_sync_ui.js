@@ -20,6 +20,28 @@
     return window.USER_ROLE || "viewer";
   }
 
+  function scheduleSearch() {
+    return window.ScheduleSearch || null;
+  }
+
+  function prepareSearchForSerialization(options) {
+    var search = scheduleSearch();
+
+    if (!search || typeof search.prepareForSerialization !== "function") {
+      return false;
+    }
+    return search.prepareForSerialization(options);
+  }
+
+  function notifySearchScheduleMutation() {
+    var search = scheduleSearch();
+
+    if (!search || typeof search.handleScheduleMutation !== "function") {
+      return;
+    }
+    search.handleScheduleMutation();
+  }
+
   function isInEditMode() {
     return !!(
       authUi() &&
@@ -231,6 +253,60 @@
     }, duration || 3000);
   }
 
+  function getHiddenDayButtons() {
+    return Array.from(document.querySelectorAll(".toggle-day-button.active"));
+  }
+
+  function withHiddenDaysVisible(callback) {
+    var hiddenButtons = getHiddenDayButtons();
+    var result;
+
+    if (hiddenButtons.length) {
+      hiddenButtons.forEach(function (btn) {
+        var dayCode = btn.getAttribute("data-day");
+        if (dayCode && typeof window.toggleDay === "function") {
+          window.toggleDay(btn, dayCode);
+        }
+      });
+    }
+
+    try {
+      result = typeof callback === "function" ? callback() : null;
+    } finally {
+      hiddenButtons.forEach(function (btn) {
+        var dayCode = btn.getAttribute("data-day");
+        if (dayCode && typeof window.toggleDay === "function") {
+          window.toggleDay(btn, dayCode);
+        }
+      });
+    }
+
+    return result;
+  }
+
+  function isDayHidden(day, container) {
+    var button;
+    var header;
+
+    if (!day) {
+      return false;
+    }
+
+    button = document.querySelector(
+      '.toggle-day-button.active[data-day="' + cssEscape(day) + '"]'
+    );
+    if (button) {
+      return true;
+    }
+
+    if (!container || !container.querySelector) {
+      return false;
+    }
+
+    header = container.querySelector("th.day-" + day);
+    return !!(header && window.getComputedStyle(header).display === "none");
+  }
+
   function requestJson(url, method, payload) {
     var options = {
       method: method || "GET",
@@ -390,6 +466,7 @@
     if (typeof reapplyLessonTypeFilter === "function") {
       reapplyLessonTypeFilter();
     }
+    notifySearchScheduleMutation();
 
     _basePendingUpdate = false;
     _blockNewEditsUntilSync = false;
@@ -421,6 +498,8 @@
       return;
     }
 
+    prepareSearchForSerialization();
+
     requestJson("/api/individual_lessons").then(function (refreshResult) {
       if (!refreshResult || !refreshResult.ok) {
         window.alert(
@@ -436,7 +515,9 @@
       ).then(function () {
         var blocks;
 
-        blocks = collectScheduleDataSafe();
+        blocks = withHiddenDaysVisible(function () {
+          return collectScheduleDataSafe();
+        });
         if (!blocks) {
           window.alert("Функция сбора данных расписания недоступна.");
           return;
@@ -462,7 +543,7 @@
             );
             _basePendingUpdate = false;
             _blockNewEditsUntilSync = false;
-            setPublishedGroupBaseline();
+            setPublishedGroupBaseline(blocks);
             clearUpdateBanner();
             syncBlockUi();
             showToast(
@@ -478,10 +559,10 @@
 
   function collectScheduleDataSafe() {
     if (typeof collectScheduleData === "function") {
-      return collectScheduleData();
+      return collectScheduleData({ includeHidden: true });
     }
     if (typeof window.collectScheduleData === "function") {
-      return window.collectScheduleData();
+      return window.collectScheduleData({ includeHidden: true });
     }
     return buildScheduleSnapshotFromDom();
   }
@@ -503,6 +584,8 @@
       return Promise.resolve(false);
     }
 
+    prepareSearchForSerialization();
+
     return requestJson("/api/individual_lessons").then(function (refreshResult) {
       if (!refreshResult || !refreshResult.ok) {
         window.alert(
@@ -516,7 +599,9 @@
           ? window.refreshIndividualLayer(refreshResult.data)
           : refreshResult.data
       ).then(function () {
-        blocks = collectScheduleDataSafe();
+        blocks = withHiddenDaysVisible(function () {
+          return collectScheduleDataSafe();
+        });
         if (!blocks) {
           window.alert("Функция сбора данных расписания недоступна.");
           return false;
@@ -542,7 +627,7 @@
             );
             _basePendingUpdate = false;
             _blockNewEditsUntilSync = false;
-            setPublishedGroupBaseline();
+            setPublishedGroupBaseline(blocks);
             clearUpdateBanner();
             syncBlockUi();
             showToast(
@@ -574,10 +659,6 @@
         var roomName;
         var timeRange;
         var lines;
-
-        if (window.getComputedStyle(block).display === "none") {
-          return;
-        }
 
         day = block.getAttribute("data-day") || "";
         colIndex = toInteger(block.getAttribute("data-col-index"), -1);
@@ -797,6 +878,9 @@
     element.setAttribute("data-row-span", String(rows.row_span));
     element.style.backgroundColor = block.color || "#FFFBD3";
     element.style.width = "100px";
+    if (isDayHidden(day, container)) {
+      element.style.display = "none";
+    }
 
     if (typeof getContrastTextColor === "function") {
       element.style.color = getContrastTextColor(element.style.backgroundColor);

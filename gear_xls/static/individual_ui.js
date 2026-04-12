@@ -18,6 +18,19 @@
     return window.SchedGenBaseSyncUI || null;
   }
 
+  function scheduleSearch() {
+    return window.ScheduleSearch || null;
+  }
+
+  function notifySearchScheduleMutation() {
+    var search = scheduleSearch();
+
+    if (!search || typeof search.handleScheduleMutation !== "function") {
+      return;
+    }
+    search.handleScheduleMutation();
+  }
+
   function currentRole() {
     return authUi() ? authUi().currentRole() : "viewer";
   }
@@ -105,6 +118,29 @@
         console.error("Individual API request failed:", error);
         return null;
       });
+  }
+
+  function isDayHidden(day, container) {
+    var button;
+    var header;
+
+    if (!day) {
+      return false;
+    }
+
+    button = document.querySelector(
+      '.toggle-day-button.active[data-day="' + cssEscape(day) + '"]'
+    );
+    if (button) {
+      return true;
+    }
+
+    if (!container || !container.querySelector) {
+      return false;
+    }
+
+    header = container.querySelector("th.day-" + day);
+    return !!(header && window.getComputedStyle(header).display === "none");
   }
 
   function init() {
@@ -585,6 +621,7 @@
       reapplyLessonTypeFilter();
     }
     refreshManagedBlockInteractivity(document);
+    notifySearchScheduleMutation();
   }
 
   function removeIndividualBlocks() {
@@ -644,6 +681,9 @@
     element.setAttribute("data-row-span", String(rows.row_span));
     element.style.backgroundColor = block.color || defaultColor(block.lesson_type);
     element.style.width = "100px";
+    if (isDayHidden(day, container)) {
+      element.style.display = "none";
+    }
 
     if (typeof getContrastTextColor === "function") {
       element.style.color = getContrastTextColor(element.style.backgroundColor);

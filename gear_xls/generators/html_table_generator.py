@@ -7,6 +7,7 @@
 """
 
 import logging
+from html import escape as html_escape
 from utils import minutes_to_time
 
 # Настройка логирования
@@ -87,7 +88,17 @@ class HTMLTableGenerator:
             for col in range(var_cols):
                 # Определяем название кабинета
                 cabinet = self._get_room_name(building_data, day, col)
-                header_parts.append(f'<th class="day-{day}">{day}<br>{cabinet}</th>')
+                # Header metadata must stay aligned with td.day-*/data-col and
+                # activity-block[data-col-index] so runtime features can map
+                # a visible column back to its logical room/day coordinates.
+                header_parts.append(
+                    f'<th class="day-{day}" '
+                    f'data-day="{html_escape(day, quote=True)}" '
+                    f'data-col="{col}" '
+                    f'data-room="{html_escape(cabinet, quote=True)}">'
+                    f'{html_escape(day)}<br>{html_escape(cabinet)}'
+                    '</th>'
+                )
         
         header_parts.extend(["</tr>", "</thead>"])
         

@@ -279,6 +279,9 @@ def schedule():
         '<script src="/static/lock_ui.js"></script>\n'
         '<script src="/js_modules/trial_ui.js"></script>\n'
         '<script src="/static/individual_ui.js"></script>\n'
+        # Load the search scaffold after the existing schedule UI so it can
+        # reuse the injected nav slot and exposed auth/base/individual APIs.
+        '<script src="/static/schedule_search_ui.js"></script>\n'
     )
     if "</body>" in html:
         html = html.replace("</body>", auth_ui_tag + "</body>", 1)

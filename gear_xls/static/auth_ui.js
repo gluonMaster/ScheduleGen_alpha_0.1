@@ -122,9 +122,11 @@
   function injectNav() {
     var roleLabels;
     var nav;
+    var editorTools;
     var statusPanel;
     var statusText;
     var statusActions;
+    var searchSlot;
     var form;
     var logoutButton;
 
@@ -141,18 +143,28 @@
 
     nav = createElement("nav", "schedgen-nav");
     nav.id = "schedgen-nav";
+    // Keep editor controls and search in one stable zone so lock-state updates
+    // can rerender buttons without destroying the search mount point.
+    editorTools = createElement("div", "nav-editor-tools");
+    editorTools.id = "schedgen-nav-editor-tools";
     statusPanel = createElement("div", "nav-lock-controls");
     statusPanel.id = "schedgen-nav-lock-controls";
     statusText = createElement("span", "nav-lock-status");
     statusText.id = "schedgen-nav-lock-status";
     statusActions = createElement("span", "nav-lock-actions");
     statusActions.id = "schedgen-nav-lock-actions";
+    // Search UI is mounted by a separate module into this dedicated slot.
+    searchSlot = createElement("div", "nav-search-slot");
+    searchSlot.id = "schedgen-nav-search-slot";
+    searchSlot.setAttribute("data-ui-slot", "schedule-search");
     statusPanel.appendChild(statusText);
     statusPanel.appendChild(statusActions);
+    editorTools.appendChild(statusPanel);
+    editorTools.appendChild(searchSlot);
     nav.appendChild(createElement("span", "nav-brand", "Kolibri SchedGen"));
     nav.appendChild(createLink("/schedule", "Расписание"));
     nav.appendChild(createLink("/rooms", "Аудитории"));
-    nav.appendChild(statusPanel);
+    nav.appendChild(editorTools);
     nav.appendChild(
       createElement(
         "span",
@@ -248,6 +260,11 @@
 
     window.__schedgenShellResizeBound = true;
     window.addEventListener("resize", syncShellOffsets);
+  }
+
+  function getSearchSlot() {
+    // Expose a stable lookup so external UI modules do not depend on nav internals.
+    return document.getElementById("schedgen-nav-search-slot");
   }
 
   function createElement(tag, className, text) {
@@ -576,8 +593,22 @@
   }
 
   function setEditMode(enabled) {
+    if (
+      enabled &&
+      window.ScheduleSearch &&
+      typeof window.ScheduleSearch.prepareForEditMode === "function"
+    ) {
+      window.ScheduleSearch.prepareForEditMode();
+    }
+
     isEditMode = !!enabled;
     syncUiState(currentRole());
+    if (
+      window.ScheduleSearch &&
+      typeof window.ScheduleSearch.handleEditModeChange === "function"
+    ) {
+      window.ScheduleSearch.handleEditModeChange(isEditMode);
+    }
   }
 
   function getBlockInfo(blockElement) {
@@ -681,6 +712,7 @@
     },
     setEditMode: setEditMode,
     setNavEditorState: setNavEditorState,
+    getSearchSlot: getSearchSlot,
     syncShellOffsets: syncShellOffsets,
   };
 

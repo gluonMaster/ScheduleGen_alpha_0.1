@@ -4,6 +4,15 @@ function getServerBaseUrl() {
     return '';
 }
 
+function _prepareSearchForSavedHtml(options) {
+    var search = window.ScheduleSearch;
+
+    if (!search || typeof search.prepareForSerialization !== 'function') {
+        return false;
+    }
+    return search.prepareForSerialization(options);
+}
+
 function _saveIntermediateViaServer(htmlContent, filename, onResult) {
     var xhr = new XMLHttpRequest();
     xhr.open('POST', getServerBaseUrl() + '/save_intermediate', true);
@@ -76,6 +85,8 @@ function initSaveExport() {
     // Handler for final save: saves a static version (without drag & drop)
     if (saveScheduleButton) {
         saveScheduleButton.addEventListener('click', function() {
+            _prepareSearchForSavedHtml({ flushLayout: true });
+
             // Add class to mark the page as final
             document.body.classList.add('static-schedule');
             // Disable drag & drop interactivity
@@ -100,6 +111,9 @@ function initSaveExport() {
     if (saveIntermediateButton) {
         saveIntermediateButton.addEventListener('click', function() {
             var defaultName = 'intermediate_schedule.html';
+
+            _prepareSearchForSavedHtml({ flushLayout: true });
+
             var htmlContent = document.documentElement.outerHTML;
 
             // Try native save dialog via Flask; fall back to blob download if unavailable

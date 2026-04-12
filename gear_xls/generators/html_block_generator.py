@@ -172,6 +172,9 @@ class HTMLBlockGenerator:
         day = interval.get('day', '')
         col_index = interval.get('col', 0)
         building = interval.get('building', '')
+        room = interval.get('room') or interval.get('room_display') or ''
+        start_time = minutes_to_time(interval.get('start', 0))
+        end_time = minutes_to_time(interval.get('end', 0))
         start_row = (interval['start'] - grid_start) // self.time_interval
         row_span = (interval['end'] - interval['start']) // self.time_interval
         lesson_type = _resolve_lesson_type(interval)
@@ -197,8 +200,14 @@ class HTMLBlockGenerator:
             f"data-day='{day}' "
             f"data-col-index='{col_index}' "
             f"data-building='{building}' "
+            # These attributes are duplicated on the DOM node on purpose:
+            # future search/runtime features should be able to read room/time
+            # directly from the current DOM without reparsing innerHTML.
+            f"data-room='{html_escape(room, quote=True)}' "
             f"data-lesson-type='{lesson_type}' "
             f"{trial_dates_attr}"
+            f"data-start-time='{start_time}' "
+            f"data-end-time='{end_time}' "
             f"data-start-row='{start_row}' "
             f"data-row-span='{row_span}' "
             f"style='top:{position['top']}px; left:{position['left']}px; "

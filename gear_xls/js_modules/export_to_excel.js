@@ -1,9 +1,10 @@
 // Модуль для экспорта расписания в Excel
 
 // Функция для сбора данных со всех блоков занятий
-function collectScheduleData() {
+function collectScheduleData(options) {
     // Структура для хранения данных расписания
     var scheduleData = [];
+    var includeHidden = !!(options && options.includeHidden);
 
     // Проходим по всем контейнерам расписания (по зданиям)
     document.querySelectorAll('.schedule-container').forEach(function(container) {
@@ -17,8 +18,9 @@ function collectScheduleData() {
         
         // Проходим по всем блокам активностей в этом здании
         container.querySelectorAll('.activity-block').forEach(function(block) {
-            // Пропускаем скрытые блоки
-            if (window.getComputedStyle(block).display === 'none') {
+            // В обычном режиме пропускаем скрытые блоки, но для публикации
+            // может понадобиться полный снимок расписания независимо от скрытых дней.
+            if (!includeHidden && window.getComputedStyle(block).display === 'none') {
                 return;
             }
             
@@ -152,6 +154,15 @@ function collectScheduleData() {
 }
 
 // Вспомогательная функция преобразования минут в формат времени HH:MM
+function _prepareSearchForExcelExport(options) {
+    var search = window.ScheduleSearch;
+
+    if (!search || typeof search.prepareForSerialization !== 'function') {
+        return false;
+    }
+    return search.prepareForSerialization(options);
+}
+
 function minutesToTime(minutes) {
     var hours = Math.floor(minutes / 60);
     var mins = minutes % 60;
@@ -299,6 +310,8 @@ function _showTemporaryExportToast(message) {
 }
 
 function _exportWithAutoUnhide() {
+    _prepareSearchForExcelExport();
+
     var hiddenButtons = Array.from(
         document.querySelectorAll('.toggle-day-button.active')
     );
@@ -330,7 +343,7 @@ function _exportWithAutoUnhide() {
     }
 
     try {
-        exportScheduleToExcel(restoreHiddenDays);
+        exportScheduleToExcel(restoreHiddenDays, { searchPrepared: true });
     } catch (e) {
         restoreHiddenDays();
         throw e;
@@ -358,8 +371,9 @@ function initExcelExport() {
 }
 
 // Основная функция экспорта расписания в Excel
-function exportScheduleToExcel(onDone) {
+function exportScheduleToExcel(onDone, options) {
     var _done = (typeof onDone === 'function') ? onDone : function() {};
+    var _options = options || {};
     var _doneCalled = false;
     function _callDone() {
         if (_doneCalled) {
@@ -371,6 +385,9 @@ function exportScheduleToExcel(onDone) {
 
     try {
         // Проверяем наличие конфликтов перед экспортом
+        if (!_options.searchPrepared) {
+            _prepareSearchForExcelExport();
+        }
         if (typeof ConflictDetector !== 'undefined' && ConflictDetector.hasConflicts()) {
             var summary = ConflictDetector.getConflictSummary();
             var proceed = confirm(
