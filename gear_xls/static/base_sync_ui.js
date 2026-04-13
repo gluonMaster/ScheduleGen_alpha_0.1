@@ -97,6 +97,7 @@
     ensureStyles();
     ensureDomObserver();
     attachBaseBlockInteractionHandlers();
+    refreshBaseBlockInteractions(document);
     setPublishedGroupBaseline();
     syncBlockUi();
   }
@@ -133,9 +134,37 @@
     }
     document.body.__baseSyncObserverAttached = true;
     new MutationObserver(function () {
+      refreshBaseBlockInteractions(document);
       updateDirtyState();
       syncBlockUi();
     }).observe(document.body, { childList: true, subtree: true, attributes: true });
+  }
+
+  function isGroupBlockElement(block) {
+    var lessonType;
+
+    if (!block) {
+      return false;
+    }
+
+    lessonType = (block.getAttribute("data-lesson-type") || "").trim();
+    if (lessonType) {
+      return lessonType === "group";
+    }
+
+    // Legacy generated group blocks may still lack explicit lesson type.
+    return !block.getAttribute("data-block-id");
+  }
+
+  function refreshBaseBlockInteractions(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+
+    scope.querySelectorAll(".activity-block").forEach(function (block) {
+      if (!isGroupBlockElement(block)) {
+        return;
+      }
+      attachBaseBlockInteractions(block);
+    });
   }
 
   function syncBlockUi() {
