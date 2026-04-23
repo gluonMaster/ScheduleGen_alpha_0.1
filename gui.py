@@ -69,7 +69,7 @@ class ApplicationInterface:
         UIBuilder.create_triple_button_row(
             buttons_frame,
             "3. Создать веб-приложение", self.app_actions.run_gear_xls,
-            "3.1. Запустить flask-сервер", self.app_actions.run_flask_server,
+            "3.1. Запустить сервер", self.app_actions.run_flask_server,
             "3.2. Открыть веб-приложение", self.app_actions.open_web_app
         )
 

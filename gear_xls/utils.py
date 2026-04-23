@@ -8,6 +8,14 @@
 import re
 import os
 import logging
+import sys
+
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(THIS_DIR)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from gear_xls.runtime_paths import get_html_output_dir
 
 # Настройка логирования
 logging.basicConfig(
@@ -24,9 +32,8 @@ def create_output_directories():
     Returns:
         dict: Словарь с путями к директориям
     """
-    module_dir = os.path.dirname(os.path.abspath(__file__))
     output_dirs = {
-        "html": os.path.join(module_dir, "html_output")
+        "html": get_html_output_dir(),
     }
     
     for dir_name, dir_path in output_dirs.items():

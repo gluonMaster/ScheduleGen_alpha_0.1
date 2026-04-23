@@ -14,11 +14,26 @@ import webbrowser
 import re
 import json
 import tempfile
+import sys
 from pathlib import Path
 
 # Импортируем новый сервис пайплайна
 from services.schedule_pipeline import SchedulePipeline, SchedulePipelineError
 from utils import create_output_directories
+
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(THIS_DIR)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from gear_xls.runtime_paths import (
+    get_excel_exports_dir,
+    get_html_output_dir,
+    get_js_modules_dir,
+    get_lock_json_path,
+    get_schedule_state_dir,
+    get_spiski_dir,
+)
 
 # Настройка логирования
 logging.basicConfig(
@@ -58,9 +73,7 @@ def load_spiski_data() -> dict:
 
         Missing or empty files produce an empty list for that key; no exception is raised.
     """
-    # spiski/ sits one level above gear_xls/ (i.e., at the project root)
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    spiski_dir = os.path.join(current_dir, '..', 'spiski')
+    spiski_dir = get_spiski_dir()
 
     file_map = {
         'subjects': 'disciplins.txt',
@@ -117,8 +130,7 @@ def reset_web_editor_state() -> None:
     Reset runtime state of the web editor so a newly generated app starts
     from the current Excel/HTML outputs instead of stale persisted JSON state.
     """
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    state_dir = os.path.join(current_dir, "schedule_state")
+    state_dir = get_schedule_state_dir()
 
     _write_json_atomic(
         os.path.join(state_dir, "base_schedule.json"),
@@ -155,12 +167,10 @@ def setup_environment():
     """
     try:
         # Определяем текущую директорию
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-          # Создаем директории для выходных файлов
         output_dirs = [
-            os.path.join(current_dir, "html_output"),
-            os.path.join(current_dir, "excel_exports"),
-            os.path.join(current_dir, "js_modules")
+            get_html_output_dir(),
+            get_excel_exports_dir(),
+            get_js_modules_dir(),
         ]
         
         for directory in output_dirs:
@@ -168,8 +178,8 @@ def setup_environment():
             logger.info(f"Директория {directory} создана или уже существует")
         
         # Копируем модуль export_to_excel.js в директорию с JS-модулями
-        export_js_src = os.path.join(current_dir, "export_to_excel.js")
-        export_js_dst = os.path.join(current_dir, "js_modules", "export_to_excel.js")
+        export_js_src = os.path.join(THIS_DIR, "export_to_excel.js")
+        export_js_dst = os.path.join(get_js_modules_dir(), "export_to_excel.js")
         
         if os.path.exists(export_js_src):
             shutil.copy2(export_js_src, export_js_dst)
@@ -193,6 +203,12 @@ def start_flask_server_subprocess():
     Returns:
         subprocess.Popen: Процесс Flask-сервера или None в случае ошибки
     """
+    if os.name == "nt":
+        logger.info(
+            "Windows v1: direct Flask subprocess launch from integration.py is disabled; "
+            "use the tray launcher or GUI control-plane instead."
+        )
+        return None
     try:
         import sys
         
@@ -285,13 +301,18 @@ def run_full_pipeline(excel_file_path: str,                     time_interval: i
         
         # Запускаем Flask-сервер для обработки запросов экспорта (если требуется)
         server_process = None
-        if start_server:
+        if start_server and os.name != "nt":
             logger.info("Запуск Flask-сервера...")
             server_process = start_flask_server_subprocess()
             if server_process:
                 logger.info("Flask-сервер успешно запущен")
             else:
                 logger.warning("Не удалось запустить Flask-сервер, экспорт в Excel будет недоступен")
+        elif start_server:
+            logger.info(
+                "Windows v1: lifecycle Flask-сервера остаётся ответственностью tray launcher; "
+                "direct subprocess launch skipped."
+            )
         
         # Открываем HTML-файл в браузере (если требуется)
         if open_browser and os.path.exists(result['html_file']):

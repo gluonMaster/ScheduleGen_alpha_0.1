@@ -1,15 +1,22 @@
 import json
 import logging
 import os
+import sys
 import tempfile
 import threading
 from contextlib import contextmanager
 from datetime import datetime
 
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(THIS_DIR)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
-BASE_SCHEDULE_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "schedule_state", "base_schedule.json"
-)
+from gear_xls.runtime_paths import get_base_schedule_path
+from gear_xls.room_name_utils import normalize_room_fields
+
+
+BASE_SCHEDULE_PATH = get_base_schedule_path()
 BASE_LOCK_PATH = BASE_SCHEDULE_PATH + ".lock"
 _base_mutex = threading.Lock()
 logger = logging.getLogger(__name__)
@@ -90,6 +97,17 @@ def _read_base():
         return _empty_base()
 
 
+def _normalize_base_blocks(blocks):
+    normalized_blocks = []
+
+    for block in blocks or []:
+        if not isinstance(block, dict):
+            continue
+        normalized_blocks.append(normalize_room_fields(block))
+
+    return normalized_blocks
+
+
 def _write_base(state):
     os.makedirs(os.path.dirname(BASE_SCHEDULE_PATH), exist_ok=True)
     payload = {
@@ -118,7 +136,9 @@ def _write_base(state):
 
 
 def get_base_schedule():
-    return _read_base()
+    state = _read_base()
+    state["blocks"] = _normalize_base_blocks(state.get("blocks", []))
+    return state
 
 
 def get_base_revision():
@@ -130,7 +150,7 @@ def publish_base(blocks, published_by):
         with _locked_base_file():
             _read_base()
             filtered_blocks = [
-                block
+                normalize_room_fields(block)
                 for block in (blocks or [])
                 if isinstance(block, dict) and block.get("lesson_type") == "group"
             ]

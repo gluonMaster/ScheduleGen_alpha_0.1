@@ -2,21 +2,26 @@ import json
 import logging
 import os
 import re
+import sys
 from html import unescape
 
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(THIS_DIR)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
-BASE_SCHEDULE_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "schedule_state", "base_schedule.json"
+from gear_xls.runtime_paths import (
+    get_base_schedule_path,
+    get_individual_lessons_path,
+    get_schedule_html_path,
+    get_spiski_dir,
 )
-INDIVIDUAL_LESSONS_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "schedule_state", "individual_lessons.json"
-)
-SCHEDULE_HTML_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "html_output", "schedule.html"
-)
-SPISKI_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "spiski")
-)
+
+
+BASE_SCHEDULE_PATH = get_base_schedule_path()
+INDIVIDUAL_LESSONS_PATH = get_individual_lessons_path()
+SCHEDULE_HTML_PATH = get_schedule_html_path()
+SPISKI_DIR = get_spiski_dir()
 SPISKI_ROOM_FILE_MAP = {
     "Villa": "kabinets_Villa.txt",
     "Kolibri": "kabinets_Kolibri.txt",

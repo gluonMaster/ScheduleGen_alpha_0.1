@@ -5,11 +5,11 @@ import threading
 import time
 import json
 import shutil
-import win32com.client
-import pythoncom
+import tkinter as tk
 from tkinter import messagebox
 from .file_manager import FileManager
 from .process_manager import ProcessManager
+from gear_xls.runtime_paths import resolve_project_root, validate_project_layout
 
 
 class AppActions:
@@ -30,6 +30,32 @@ class AppActions:
         """Устанавливает функцию логирования после инициализации UI"""
         self.log_action = log_callback
 
+    def _show_error(self, title: str, message: str):
+        """Показывает ошибку из любого потока через основной Tk-root."""
+        root = getattr(tk, "_default_root", None)
+        if root is not None and threading.current_thread() is not threading.main_thread():
+            try:
+                root.after(0, lambda: messagebox.showerror(title, message))
+                return
+            except RuntimeError:
+                pass
+        messagebox.showerror(title, message)
+
+    def _import_excel_automation(self):
+        """Ленивая загрузка pywin32, чтобы GUI мог стартовать без Excel-COM зависимостей."""
+        try:
+            import pythoncom
+            import win32com.client
+        except ImportError as exc:
+            self.log_action(f"Excel automation prerequisites missing: {exc}")
+            self._show_error(
+                "Ошибка Excel automation",
+                "Для операций с Excel/VBA нужен pywin32 в текущем Python-окружении "
+                "(модули pythoncom и win32com.client).",
+            )
+            return None, None
+        return pythoncom, win32com.client
+
     def set_lesson_type_filter(self, value: str):
         """Sets the lesson type filter forwarded to the visualiser command."""
         self.lesson_type_filter = value
@@ -37,67 +63,15 @@ class AppActions:
     def _auto_detect_root_directory(self):
         """Автоматическое определение корневого каталога программы"""
         try:
-            # Для .exe файла определяем каталог по расположению исполняемого файла
-            if getattr(sys, 'frozen', False):
-                # Если запущен как .exe файл (PyInstaller)
-                current_dir = os.path.dirname(sys.executable)
-                self.log_action(f"Запуск из .exe файла, каталог: {current_dir}")
+            current_dir = resolve_project_root()
+            layout_errors = validate_project_layout(current_dir)
+            if layout_errors:
+                self.log_action("Предупреждение: структура проекта неполная:")
+                for error in layout_errors:
+                    self.log_action(f"  - {error}")
             else:
-                # Если запущен как Python скрипт
-                current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                self.log_action(f"Запуск из Python скрипта, каталог: {current_dir}")
-            
-            # Проверяем, что мы находимся в правильном каталоге (ищем ключевые файлы/каталоги)
-            required_dirs = ['gear_xls', 'xlsx_initial', 'visualiser']
-            
-            # Сначала проверяем наличие основных каталогов
-            missing_dirs = []
-            for dir_name in required_dirs:
-                dir_path = os.path.join(current_dir, dir_name)
-                if not os.path.exists(dir_path):
-                    missing_dirs.append(dir_name)
-            
-            if missing_dirs:
-                self.log_action(f"Предупреждение: не найдены каталоги: {', '.join(missing_dirs)}")
-                self.log_action(f"Проверяем альтернативные пути...")
-                
-                # Пробуем найти каталоги в родительских папках (на случай если .exe в подпапке)
-                parent_dir = os.path.dirname(current_dir)
-                parent_missing = []
-                for dir_name in required_dirs:
-                    if not os.path.exists(os.path.join(parent_dir, dir_name)):
-                        parent_missing.append(dir_name)
-                
-                if len(parent_missing) < len(missing_dirs):
-                    current_dir = parent_dir
-                    self.log_action(f"Использую родительский каталог: {current_dir}")
-                else:
-                    # Создаем недостающие каталоги, если их нет
-                    for dir_name in missing_dirs:
-                        try:
-                            os.makedirs(os.path.join(current_dir, dir_name), exist_ok=True)
-                            self.log_action(f"Создан каталог: {dir_name}")
-                        except Exception as e:
-                            self.log_action(f"Не удалось создать каталог {dir_name}: {e}")
-            
-            # Создаем обязательные подкаталоги, если их нет
-            essential_subdirs = [
-                'gear_xls/excel_exports',
-                'xlsx_initial'
-            ]
-            
-            for subdir in essential_subdirs:
-                subdir_path = os.path.join(current_dir, subdir)
-                if not os.path.exists(subdir_path):
-                    try:
-                        os.makedirs(subdir_path, exist_ok=True)
-                        self.log_action(f"Создан подкаталог: {subdir}")
-                    except Exception as e:
-                        self.log_action(f"Не удалось создать подкаталог {subdir}: {e}")
-            
-            self.log_action(f"Рабочий каталог определен: {current_dir}")
+                self.log_action(f"Рабочий каталог определен: {current_dir}")
             return current_dir
-            
         except Exception as e:
             self.log_action(f"Ошибка при автоматическом определении каталога: {e}")
             # В случае ошибки возвращаем каталог исполняемого файла
@@ -137,6 +111,10 @@ class AppActions:
     def _convert_xlsx_to_xlsm_with_macro(self, xlsx_file):
         """Конвертирует .xlsx в .xlsm и добавляет VBA модуль"""
         try:
+            pythoncom, win32_client = self._import_excel_automation()
+            if not pythoncom or not win32_client:
+                return None
+
             # Получаем пути
             base_name = os.path.splitext(os.path.basename(xlsx_file))[0]
             output_dir = os.path.dirname(xlsx_file)
@@ -153,7 +131,7 @@ class AppActions:
             
             try:
                 # Создаем объект Excel
-                excel = win32com.client.Dispatch("Excel.Application")
+                excel = win32_client.Dispatch("Excel.Application")
                 excel.Visible = False
                 excel.DisplayAlerts = False
                 
@@ -239,12 +217,16 @@ class AppActions:
     def _run_excel_macro(self, xlsm_file, macro_name="CreateSchedulePlanning"):
         """Запускает макрос в Excel файле"""
         try:
+            pythoncom, win32_client = self._import_excel_automation()
+            if not pythoncom or not win32_client:
+                return False
+
             self.log_action(f"Запуск макроса {macro_name}...")
             pythoncom.CoInitialize()
             
             try:
                 # Создаем объект Excel
-                excel = win32com.client.Dispatch("Excel.Application")
+                excel = win32_client.Dispatch("Excel.Application")
                 excel.Visible = False
                 excel.DisplayAlerts = False
                 
@@ -427,19 +409,37 @@ class AppActions:
         """Обработчик для кнопки 3.1: Запуск flask-сервера"""
         if not self._check_directory():
             return
-        
-        if self.process_manager.is_flask_server_running():
-            messagebox.showinfo("Информация", "Flask-сервер уже запущен")
+
+        if os.name != "nt":
+            if self.process_manager.is_flask_server_running():
+                messagebox.showinfo("Информация", "Flask-сервер уже запущен")
+                return
+            self.log_action("Запуск flask-сервера...")
+
+            def run_in_thread():
+                self.process_manager.flask_process = self.process_manager.start_new_terminal_with_commands(
+                    self.program_directory)
+                time.sleep(1)
+                self.log_action("Терминал flask-сервера запущен. Пока окно терминала открыто Вы можете экспортировать расписание из веб-приложения в эксель-файл")
+
+            threading.Thread(target=run_in_thread, daemon=True).start()
             return
-        
-        self.log_action("Запуск flask-сервера...")
-        
+
+        self.log_action("Запуск сервера через tray control-plane...")
+
         def run_in_thread():
-            self.process_manager.flask_process = self.process_manager.start_new_terminal_with_commands(
-                self.program_directory)
-            time.sleep(1)
-            self.log_action("Терминал flask-сервера запущен. Пока окно терминала открыто Вы можете экспортировать расписание из веб-приложения в эксель-файл")
-        
+            try:
+                from gear_xls.windows_runtime import ControlPlaneError, send_control_command_or_raise
+
+                response = send_control_command_or_raise("ensure_running", self.program_directory)
+                self.log_action(response.message)
+            except ControlPlaneError as exc:
+                self.log_action(f"Ошибка запуска сервера: {exc.response.message}")
+                self._show_error("Ошибка запуска сервера", exc.response.message)
+            except Exception as exc:
+                self.log_action(f"Ошибка запуска сервера: {exc}")
+                self._show_error("Ошибка запуска сервера", str(exc))
+
         threading.Thread(target=run_in_thread, daemon=True).start()
     
     def open_web_app(self):
@@ -447,17 +447,36 @@ class AppActions:
         if not self._check_directory():
             return
 
-        if not self.process_manager.is_flask_server_running():
-            self.log_action("Flask-сервер не запущен. Запускаем автоматически...")
-            self.run_flask_server()
-            if not self.process_manager.wait_for_flask_server(timeout=5.0, poll_interval=0.3):
-                self.log_action("Предупреждение: Flask-сервер не ответил за 5 секунд, открываем браузер всё равно")
-        else:
-            self.log_action("Flask-сервер уже запущен")
+        if os.name != "nt":
+            if not self.process_manager.is_flask_server_running():
+                self.log_action("Flask-сервер не запущен. Запускаем автоматически...")
+                self.run_flask_server()
+                if not self.process_manager.wait_for_flask_server(timeout=5.0, poll_interval=0.3):
+                    self.log_action("Предупреждение: Flask-сервер не ответил за 5 секунд, открываем браузер всё равно")
+            else:
+                self.log_action("Flask-сервер уже запущен")
 
-        import webbrowser
-        webbrowser.open('http://localhost:5000/schedule')
-        self.log_action("Открыто веб-приложение: http://localhost:5000/schedule")
+            import webbrowser
+            webbrowser.open('http://localhost:5000/schedule')
+            self.log_action("Открыто веб-приложение: http://localhost:5000/schedule")
+            return
+
+        self.log_action("Открытие веб-приложения через tray control-plane...")
+
+        def run_in_thread():
+            try:
+                from gear_xls.windows_runtime import ControlPlaneError, send_control_command_or_raise
+
+                response = send_control_command_or_raise("open_web", self.program_directory)
+                self.log_action(response.message)
+            except ControlPlaneError as exc:
+                self.log_action(f"Ошибка открытия веб-приложения: {exc.response.message}")
+                self._show_error("Ошибка открытия веб-приложения", exc.response.message)
+            except Exception as exc:
+                self.log_action(f"Ошибка открытия веб-приложения: {exc}")
+                self._show_error("Ошибка открытия веб-приложения", str(exc))
+
+        threading.Thread(target=run_in_thread, daemon=True).start()
     
     def run_visualiser(self):
         """Обработчик для кнопки 4: Запуск визуализатора"""

@@ -2,12 +2,23 @@ import json
 import logging
 import os
 import re
+import sys
 import tempfile
 import threading
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
 from html import unescape
+
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(THIS_DIR)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from gear_xls.runtime_paths import (
+    get_individual_lessons_path,
+    get_schedule_html_path,
+)
 
 from base_schedule_manager import (
     BASE_SCHEDULE_PATH,
@@ -18,13 +29,9 @@ from base_schedule_manager import (
 )
 
 
-INDIVIDUAL_LESSONS_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "schedule_state", "individual_lessons.json"
-)
+INDIVIDUAL_LESSONS_PATH = get_individual_lessons_path()
 INDIVIDUAL_LOCK_PATH = INDIVIDUAL_LESSONS_PATH + ".lock"
-SCHEDULE_HTML_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "html_output", "schedule.html"
-)
+SCHEDULE_HTML_PATH = get_schedule_html_path()
 VALID_DAYS = {"Mo", "Di", "Mi", "Do", "Fr", "Sa"}
 _DAY_TO_WEEKDAY = {
     "Mo": 0,

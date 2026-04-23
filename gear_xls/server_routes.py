@@ -24,6 +24,26 @@ from flask import (
 )
 from flask_cors import CORS
 
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(THIS_DIR)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+if THIS_DIR not in sys.path:
+    sys.path.insert(0, THIS_DIR)
+
+from gear_xls.runtime_paths import (
+    DEFAULT_HOST,
+    DEFAULT_PORT,
+    ensure_runtime_dirs,
+    get_excel_exports_dir,
+    get_js_modules_dir,
+    get_schedule_html_path,
+    get_server_log_path,
+    get_spiski_dir,
+    get_static_dir,
+    set_project_root_env,
+)
+
 from auth import authenticate, current_user, get_or_create_secret_key, login_required, role_required
 from excel_exporter import process_schedule_export_request
 import lock_manager
@@ -32,11 +52,40 @@ import rooms_routes
 import state_manager
 
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler("flask_server.log")],
-)
+def _build_log_handlers():
+    ensure_runtime_dirs()
+    handlers = [logging.FileHandler(get_server_log_path(), encoding="utf-8")]
+    if _stdout_supports_text("Запуск Flask-сервера"):
+        handlers.insert(0, logging.StreamHandler(sys.stdout))
+    return handlers
+
+
+def _stdout_supports_text(text: str) -> bool:
+    stream = getattr(sys, "stdout", None)
+    if stream is None:
+        return False
+    encoding = getattr(stream, "encoding", None) or "utf-8"
+    try:
+        text.encode(encoding)
+    except Exception:
+        return False
+    return True
+
+
+def configure_logging():
+    if getattr(configure_logging, "_configured", False):
+        return
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    for handler in _build_log_handlers():
+        handler.setFormatter(formatter)
+        root_logger.addHandler(handler)
+    configure_logging._configured = True
+
+
+configure_logging()
 logger = logging.getLogger("server_routes")
 
 app = Flask(__name__)
@@ -115,10 +164,8 @@ button{width:100%;padding:.6rem;background:#1a73e8;color:#fff;border:none;border
 </div></body></html>"""
 ROOMS_PAGE_TEMPLATE = rooms_routes.ROOMS_PAGE_TEMPLATE
 
-EXCEL_EXPORTS_DIR = "excel_exports"
-SPISKI_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "spiski")
-)
+EXCEL_EXPORTS_DIR = get_excel_exports_dir()
+SPISKI_DIR = get_spiski_dir()
 SPISKI_FILE_MAP = {
     "subjects": "disciplins.txt",
     "groups": "groups.txt",
@@ -196,23 +243,18 @@ def _inject_latest_spiski_data(html):
     return updated_html
 
 
-if not os.path.exists(EXCEL_EXPORTS_DIR):
-    os.makedirs(EXCEL_EXPORTS_DIR)
-    logger.info("Создана директория для экспорта: %s", EXCEL_EXPORTS_DIR)
-else:
-    logger.info("Директория для экспорта существует: %s", EXCEL_EXPORTS_DIR)
+os.makedirs(EXCEL_EXPORTS_DIR, exist_ok=True)
+logger.info("Excel export directory ready: %s", EXCEL_EXPORTS_DIR)
 
 
 @app.route("/js_modules/<path:filename>")
 def serve_js_modules(filename):
-    js_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "js_modules")
-    return send_from_directory(js_dir, filename)
+    return send_from_directory(get_js_modules_dir(), filename)
 
 
 @app.route("/static/<path:filename>")
 def serve_static(filename):
-    static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
-    return send_from_directory(static_dir, filename)
+    return send_from_directory(get_static_dir(), filename)
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -241,9 +283,7 @@ def logout():
 @app.route("/schedule")
 @login_required
 def schedule():
-    html_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "html_output", "schedule.html"
-    )
+    html_path = get_schedule_html_path()
     if not os.path.exists(html_path):
         stub = (
             "<html><body><p>Расписание ещё не создано. "
@@ -750,10 +790,18 @@ def export_to_excel_options():
     return app.make_default_options_response()
 
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    host = os.environ.get("HOST", "0.0.0.0")
-    logger.info("Запуск Flask-сервера на %s:%s", host, port)
-    print(f"=== Запуск сервера экспорта в Excel на {host}:{port} ===")
-    print("=== Журнал работы в файле: flask_server.log ===")
+def run_server(host=None, port=None, project_root=None):
+    root = set_project_root_env(project_root)
+    ensure_runtime_dirs(root)
+    os.makedirs(get_excel_exports_dir(root), exist_ok=True)
+    host = host or os.environ.get("HOST", DEFAULT_HOST)
+    port = int(port or os.environ.get("PORT", DEFAULT_PORT))
+    logger.info("Запуск Flask-сервера на %s:%s (project_root=%s)", host, port, root)
+    if getattr(sys, "stdout", None) is not None:
+        print(f"=== Flask export server starting on {host}:{port} ===")
+        print(f"=== Log file: {get_server_log_path(root)} ===")
     app.run(debug=False, host=host, port=port)
+
+
+if __name__ == "__main__":
+    run_server()

@@ -98,6 +98,7 @@
     ensureDomObserver();
     attachBaseBlockInteractionHandlers();
     refreshBaseBlockInteractions(document);
+    normalizeExistingGroupBlockRuntimeAttrs();
     setPublishedGroupBaseline();
     syncBlockUi();
   }
@@ -691,8 +692,10 @@
 
         day = block.getAttribute("data-day") || "";
         colIndex = toInteger(block.getAttribute("data-col-index"), -1);
-        roomName =
-          (block.getAttribute("data-room") || resolveRoomName(table, day, colIndex)).trim();
+        roomName = normalizeRoomName(
+          resolveRoomName(table, day, colIndex) || block.getAttribute("data-room") || "",
+          building
+        );
         timeRange = resolveBlockTimeRange(block);
         lines = extractBlockLines(block);
 
@@ -780,6 +783,25 @@
 
     headerText = (headers[colIndex].innerText || headers[colIndex].textContent || "").trim();
     return headerText.replace(day, "").trim();
+  }
+
+  function normalizeRoomName(room, building) {
+    var normalizedRoom = (room || "").trim();
+
+    if (typeof window.normalizeRoomForBuilding === "function") {
+      return window.normalizeRoomForBuilding(normalizedRoom, building);
+    }
+
+    if (!normalizedRoom) {
+      return "";
+    }
+    if (building === "Villa" && normalizedRoom.length > 1 && normalizedRoom.charAt(0).toUpperCase() === "V") {
+      return normalizedRoom.slice(1).trim();
+    }
+    if (building === "Kolibri" && normalizedRoom.length > 1 && normalizedRoom.charAt(0).toUpperCase() === "K") {
+      return normalizedRoom.slice(1).trim();
+    }
+    return normalizedRoom;
   }
 
   function resolveBlockTimeRange(block) {
@@ -875,7 +897,7 @@
   function renderBaseBlock(block, deferLayout) {
     var building = (block.building || "").trim();
     var day = (block.day || "").trim();
-    var room = (block.room || "").trim();
+    var room = normalizeRoomName(block.room || block.room_display || "", building);
     var container = findScheduleContainer(building);
     var colIndex;
     var rows;
@@ -1150,6 +1172,7 @@
   function syncGroupBlockRuntimeAttrs(block) {
     var container;
     var table;
+    var building;
     var day;
     var colIndex;
     var lines;
@@ -1162,10 +1185,14 @@
 
     container = block.closest(".schedule-container");
     table = container ? container.querySelector(".schedule-grid") : null;
+    building = block.getAttribute("data-building") || "";
     day = block.getAttribute("data-day") || "";
     colIndex = toInteger(block.getAttribute("data-col-index"), -1);
     lines = extractBlockLines(block);
-    room = (lines[3] || resolveRoomName(table, day, colIndex) || "").trim();
+    room = normalizeRoomName(
+      lines[3] || resolveRoomName(table, day, colIndex) || "",
+      building
+    );
     timeRange = resolveBlockTimeRangeFromRows(block);
 
     if (room) {
@@ -1175,6 +1202,17 @@
       block.setAttribute("data-start-time", timeRange.start);
       block.setAttribute("data-end-time", timeRange.end);
     }
+  }
+
+  function normalizeExistingGroupBlockRuntimeAttrs() {
+    document
+      .querySelectorAll(".activity-block")
+      .forEach(function (block) {
+        if (!isGroupBlockElement(block)) {
+          return;
+        }
+        syncGroupBlockRuntimeAttrs(block);
+      });
   }
 
   function findScheduleContainer(building) {

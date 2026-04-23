@@ -1,17 +1,26 @@
 import json
 import logging
 import os
+import sys
 import tempfile
 import threading
 from datetime import datetime, timedelta
 
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(THIS_DIR)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
-LOCK_JSON_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "schedule_state", "lock.json"
-)
+from gear_xls.runtime_paths import get_lock_json_path
+
+
 LOCK_TIMEOUT_MINUTES = 30
 _lock_mutex = threading.Lock()
 logger = logging.getLogger(__name__)
+
+
+def _lock_json_path():
+    return get_lock_json_path()
 
 
 def _empty_lock_state():
@@ -28,10 +37,11 @@ def _empty_lock_state():
 
 
 def _read_lock():
-    if not os.path.exists(LOCK_JSON_PATH):
+    lock_json_path = _lock_json_path()
+    if not os.path.exists(lock_json_path):
         return _empty_lock_state()
     try:
-        with open(LOCK_JSON_PATH, "r", encoding="utf-8") as f:
+        with open(lock_json_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         state = _empty_lock_state()
         if isinstance(data, dict):
@@ -44,7 +54,8 @@ def _read_lock():
 
 
 def _write_lock(state):
-    directory = os.path.dirname(LOCK_JSON_PATH)
+    lock_json_path = _lock_json_path()
+    directory = os.path.dirname(lock_json_path)
     os.makedirs(directory, exist_ok=True)
     tmp_path = None
     try:
@@ -53,7 +64,7 @@ def _write_lock(state):
         ) as tmp:
             json.dump(state, tmp, ensure_ascii=False, indent=2)
             tmp_path = tmp.name
-        os.replace(tmp_path, LOCK_JSON_PATH)
+        os.replace(tmp_path, lock_json_path)
     finally:
         if tmp_path and os.path.exists(tmp_path):
             try:

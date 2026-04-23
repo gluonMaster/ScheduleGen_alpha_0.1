@@ -16,6 +16,7 @@ from html import escape as html_escape
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from time_utils import minutes_to_time
 from lesson_type_utils import classify_lesson_type
+from room_name_utils import normalize_room_name
 # NOTE: ColorService импортируется отложенно для избежания циклических зависимостей
 
 # Настройка логирования
@@ -172,7 +173,11 @@ class HTMLBlockGenerator:
         day = interval.get('day', '')
         col_index = interval.get('col', 0)
         building = interval.get('building', '')
-        room = interval.get('room') or interval.get('room_display') or ''
+        room = (
+            interval.get('room_display')
+            or normalize_room_name(interval.get('room'), building)
+            or ''
+        )
         start_time = minutes_to_time(interval.get('start', 0))
         end_time = minutes_to_time(interval.get('end', 0))
         start_row = (interval['start'] - grid_start) // self.time_interval

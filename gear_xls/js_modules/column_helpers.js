@@ -14,6 +14,31 @@ function getScheduleTable(rootOrTable) {
     return rootOrTable.querySelector ? rootOrTable.querySelector(".schedule-grid") : null;
 }
 
+function normalizeRoomForBuilding(room, building) {
+    var normalizedRoom = (room || "").trim();
+    var prefix = "";
+
+    if (!normalizedRoom) {
+        return "";
+    }
+
+    if (building === "Villa") {
+        prefix = "V";
+    } else if (building === "Kolibri") {
+        prefix = "K";
+    }
+
+    if (
+        prefix &&
+        normalizedRoom.length > prefix.length &&
+        normalizedRoom.slice(0, prefix.length).toUpperCase() === prefix
+    ) {
+        return normalizedRoom.slice(prefix.length).trim();
+    }
+
+    return normalizedRoom;
+}
+
 function getHeaderLocalColumnIndex(headerElement, fallbackIndex) {
     var parsed = headerElement ? parseInt(headerElement.getAttribute("data-col"), 10) : NaN;
     return isNaN(parsed) ? fallbackIndex : parsed;
@@ -84,7 +109,7 @@ function extractRoomFromDayHeader(headerElement, day) {
 }
 
 function findMatchingColumnInBuilding(day, room, building) {
-    var normalizedRoom = (room || "").trim();
+    var normalizedRoom = normalizeRoomForBuilding(room, building);
     var container;
     var dayHeaders;
     var bestColIndex = -1;
@@ -134,6 +159,7 @@ function updateBlockColumnForBuilding(block, room, building, day) {
     var colIndex;
 
     day = day || block.getAttribute("data-day");
+    room = normalizeRoomForBuilding(room, building);
     colIndex = findMatchingColumnInBuilding(day, room, building);
     if (colIndex === -1) {
         console.warn(
@@ -147,6 +173,7 @@ function updateBlockColumnForBuilding(block, room, building, day) {
 }
 
 function formatDayRoomHeader(day, room, building) {
+    room = normalizeRoomForBuilding(room, building);
     var container = BuildingService.findScheduleContainerForBuilding(building);
     var firstDayHeader;
     var headerText;
@@ -236,7 +263,7 @@ function _compareRoomKeys(a, b) {
 }
 
 function addColumnIfMissing(day, room, building) {
-    var normalizedRoom = (room || "").trim();
+    var normalizedRoom = normalizeRoomForBuilding(room, building);
     var container;
     var table;
     var dayHeaders;
@@ -402,3 +429,4 @@ window.roomSortKey = roomSortKey;
 window.getHeaderLocalColumnIndex = getHeaderLocalColumnIndex;
 window.setDayHeaderMetadata = setDayHeaderMetadata;
 window.refreshDayHeaderMetadata = refreshDayHeaderMetadata;
+window.normalizeRoomForBuilding = normalizeRoomForBuilding;

@@ -75,8 +75,9 @@ def run_script():
         if not os.path.exists(excel_export_dir):
             os.makedirs(excel_export_dir)
         
-        # Запускаем веб-сервер в отдельном потоке для обработки запросов экспорта в Excel
-        threading.Thread(target=start_flask_server, daemon=True).start()
+        if os.name != "nt":
+            # Legacy non-Windows path keeps the direct helper for local debugging.
+            threading.Thread(target=start_flask_server, daemon=True).start()
         
         # Автоматически открываем веб-браузер с HTML-расписанием
         # webbrowser.open(f'file://{os.path.abspath(result["html_file"])}')
@@ -106,6 +107,10 @@ def run_script():
 
 def start_flask_server():
     """Запускает Flask-сервер в отдельном потоке."""
+    if os.name == "nt":
+        print("Windows v1: gear_xls/main.py больше не управляет жизненным циклом Flask-сервера.")
+        print("Используйте tray launcher или GUI-кнопки 3.1 / 3.2.")
+        return
     try:
         import subprocess
         import os
@@ -125,18 +130,11 @@ def start_flask_server():
         # Используем текущий интерпретатор Python
         python_exec = sys.executable
         
-        # На Windows используем create_new_console для создания нового окна
-        if os.name == 'nt':  # Windows
-            subprocess.Popen(
-                [python_exec, server_script],
-                creationflags=subprocess.CREATE_NEW_CONSOLE
-            )
-        else:  # Linux, Mac и другие системы
-            subprocess.Popen(
-                [python_exec, server_script],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
+        subprocess.Popen(
+            [python_exec, server_script],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
         
         print("Flask-сервер запущен в отдельном процессе")
         print("Функция экспорта будет работать до тех пор пока запущен процесс Flask-сервера")

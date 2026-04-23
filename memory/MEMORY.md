@@ -1,6 +1,6 @@
 # SchedGen Project Memory
 
-Last updated: 2026-04-12
+Last updated: 2026-04-23
 
 ## Active Work
 
@@ -19,6 +19,9 @@ Last updated: 2026-04-12
 - Verification artifacts:
   - `VERIFY_REPORT.md`
   - `CODEX_VERIFY_RESPONSE.md`
+- Windows desktop Flask tray/control-plane hardening was completed after the original memory snapshot.
+- The authoritative operator/deployment note for that work is:
+  - `instructions/windows-autostart-flask-server.md`
 
 ## Current QA Status
 
@@ -115,6 +118,41 @@ Last updated: 2026-04-12
   - `gear_xls/static/schedule_search_ui.js`
   - `gear_xls/static/rooms_report.js`
   - `gear_xls/static/nav.css`
+
+### Windows Tray / GUI Runtime
+
+- Windows tray/control-plane entrypoint:
+  - `server_tray.py`
+- Main runtime/control-plane implementation:
+  - `gear_xls/windows_runtime.py`
+- Runtime path helpers / log / state locations:
+  - `gear_xls/runtime_paths.py`
+- GUI buttons `3.1` / `3.2` now use the tray control-plane instead of the old visible-terminal Flask start path.
+- The desktop GUI interpreter and the Flask/tray interpreter may be different Python installations on the same machine.
+- Tray/server runtime selection now prefers an available `pythonw.exe` whose sibling `python.exe` has:
+  - `flask`
+  - `flask_cors`
+  - `bcrypt`
+- GUI startup must not fail just because `pywin32` is missing:
+  - `gui_services/app_actions.py` now lazy-imports `win32com.client` / `pythoncom`;
+  - only Excel/VBA-related actions require `pywin32` at runtime.
+- `run_gui.bat` should not hardcode a specific local Python path anymore; it should resolve `python.exe` from `PATH` and then launch the matching `pythonw.exe`.
+- Windows localization matters for `schtasks` parsing:
+  - absence of the `SchedGen Flask Tray` task is normal and must be treated as `autostart disabled`, not as tray bootstrap failure;
+  - confirmed "task not found" variants that must be treated as non-fatal include English, Russian, and German (`Das System kann die angegebene Datei nicht finden`).
+- The tray monitor polls autostart status every 30 seconds.
+- Any subprocesses used by that polling must stay hidden (`CREATE_NO_WINDOW` / hidden startupinfo), otherwise a console window flashes periodically while the tray is running.
+- On machines where console/stdout encoding is `cp1252` or another non-Cyrillic code page, `gear_xls/server_routes.py` must not write Cyrillic to `stdout` during server bootstrap:
+  - file logging remains UTF-8;
+  - console `StreamHandler(sys.stdout)` should be attached only if the active stdout encoding can encode the test text;
+  - bootstrap `print(...)` banners should remain ASCII-safe.
+- Previous Windows tray crashes came from ctypes/WinAPI compatibility details:
+  - `LoadCursorW` must use an integer resource pointer rather than a plain `LPCWSTR` string declaration;
+  - the tray message loop must use the same custom `MSG` ctypes structure type that `GetMessageW` was declared against.
+- Tk logging / dialogs must stay main-thread safe:
+  - background control-plane worker threads must not directly mutate Tk widgets or show messageboxes;
+  - `gui_services/logger.py` now schedules UI updates via `root.after(...)`;
+  - `gui_services/app_actions.py` uses a safe error-display helper for background-thread failures.
 
 ### Locking
 
