@@ -4,7 +4,7 @@
 """
 
 from color_manager import get_group_color, get_building_color, get_text_color
-from lesson_type_utils import classify_lesson_type as _classify_lesson_type
+from lesson_label_utils import label_text_or_empty, should_show_subject_line
 
 
 class BlockRenderingMixin:
@@ -24,8 +24,16 @@ class BlockRenderingMixin:
             font_name (str): Название шрифта
         """
         # Определяем цвета для блока
-        fill_color = get_group_color(lesson['group'])
-        border_color = get_building_color(lesson['building'])
+        group_val = label_text_or_empty(lesson.get('group', ''))
+        building_val = label_text_or_empty(lesson.get('building', ''))
+        teacher_val = label_text_or_empty(lesson.get('teacher', ''))
+        room_val = label_text_or_empty(lesson.get('room', ''))
+        subject_val_pdf = label_text_or_empty(lesson.get('subject', ''))
+        start_time = label_text_or_empty(lesson.get('start_time', ''))
+        end_time = label_text_or_empty(lesson.get('end_time', ''))
+
+        fill_color = get_group_color(group_val)
+        border_color = get_building_color(building_val)
         text_color = get_text_color(fill_color)
         
         # Устанавливаем цвета
@@ -49,11 +57,7 @@ class BlockRenderingMixin:
         max_width = width - 2 * text_padding
 
         # Вычисляем размер шрифта в зависимости от высоты блока
-        raw_lesson_type = str(lesson.get('lesson_type') or '').strip().lower()
-        lesson_type_pdf = raw_lesson_type or _classify_lesson_type(lesson.get('subject', '') or '')
-        is_non_group = lesson_type_pdf != 'group'
-        subject_val_pdf = lesson.get('subject', '') or ''
-        has_subject_line = is_non_group and bool(subject_val_pdf)
+        has_subject_line = should_show_subject_line(lesson)
 
         if has_subject_line:
             font_size = min(9, height / 7)
@@ -63,7 +67,7 @@ class BlockRenderingMixin:
         
         # Рисуем время занятия
         canvas.setFont(font_name, font_size)
-        time_text = f"{lesson['start_time']}-{lesson['end_time']}"
+        time_text = f"{start_time}-{end_time}"
         canvas.drawCentredString(center_x, text_y - line_height, time_text)
 
         current_line = 2
@@ -76,18 +80,18 @@ class BlockRenderingMixin:
         # Рисуем группу
         bold_font = f"{font_name}-Bold"
         canvas.setFont(bold_font, font_size + 1)
-        group_text = self.truncate_text(lesson['group'], max_width, font_name, font_size + 1, canvas)
+        group_text = self.truncate_text(group_val, max_width, font_name, font_size + 1, canvas)
         canvas.drawCentredString(center_x, text_y - current_line * line_height, group_text)
         current_line += 1
         
         # Рисуем преподавателя
         canvas.setFont(font_name, font_size)
-        teacher_text = self.truncate_text(lesson['teacher'], max_width, font_name, font_size, canvas)
+        teacher_text = self.truncate_text(teacher_val, max_width, font_name, font_size, canvas)
         canvas.drawCentredString(center_x, text_y - current_line * line_height, teacher_text)
         current_line += 1
         
         # Рисуем аудиторию и здание
-        location_text = f"{lesson['room']}, {lesson['building']}"
+        location_text = f"{room_val}, {building_val}"
         location_text = self.truncate_text(location_text, max_width, font_name, font_size, canvas)
         canvas.drawCentredString(center_x, text_y - current_line * line_height, location_text)
 

@@ -3,12 +3,13 @@
 """
 
 import re
+import html as html_lib
 import hashlib
 import colorsys
 import tempfile
 import webbrowser
 from datetime import datetime
-from lesson_type_utils import classify_lesson_type as _classify_lesson_type
+from lesson_label_utils import get_lesson_type, label_text_or_empty, should_show_subject_line
 
 class HtmlExportMixin:
     """Миксин с методами для HTML-экспорта"""
@@ -330,7 +331,7 @@ class HtmlExportMixin:
                     
                     const searchBox = document.createElement('input');
                     searchBox.type = 'text';
-                    searchBox.placeholder = 'Suche nach Gruppe oder Lehrer(in)....';
+                    searchBox.placeholder = 'Suche nach Fach, Gruppe oder Lehrer(in)....';
                     searchBox.style.display = 'block';
                     searchBox.style.margin = '0 auto 20px';
                     searchBox.style.padding = '8px 12px';
@@ -346,11 +347,13 @@ class HtmlExportMixin:
                         const lessonBlocks = document.querySelectorAll('.lesson-block');
                         
                         lessonBlocks.forEach(block => {
+                            const subjectElement = block.querySelector('.lesson-subject');
+                            const subject = subjectElement ? subjectElement.textContent.toLowerCase() : '';
                             const group = block.querySelector('.lesson-group').textContent.toLowerCase();
                             const teacher = block.querySelector('.lesson-teacher').textContent.toLowerCase();
                             const location = block.querySelector('.lesson-location').textContent.toLowerCase();
                             
-                            if (group.includes(query) || teacher.includes(query) || location.includes(query)) {
+                            if (subject.includes(query) || group.includes(query) || teacher.includes(query) || location.includes(query)) {
                                 block.style.display = 'flex';
                             } else {
                                 block.style.display = 'none';
@@ -461,7 +464,13 @@ class HtmlExportMixin:
 #        bg_color = f'#{int(r_bg*255):02x}{int(g_bg*255):02x}{int(b_bg*255):02x}'
 
         # Определяем цвет блока на основе специальных правил
-        group_name = lesson['group']
+        group_name = label_text_or_empty(lesson.get('group', ''))
+        teacher_name = label_text_or_empty(lesson.get('teacher', ''))
+        building_name = label_text_or_empty(lesson.get('building', ''))
+        room_name = label_text_or_empty(lesson.get('room', ''))
+        subject_val = label_text_or_empty(lesson.get('subject', ''))
+        start_time = label_text_or_empty(lesson.get('start_time', ''))
+        end_time = label_text_or_empty(lesson.get('end_time', ''))
         lower_group = group_name.lower() if group_name else ""
         
         # Правило 1: Если входит число+буква (например 2D, 11B) -> бледно-зеленый
@@ -484,7 +493,6 @@ class HtmlExportMixin:
             bg_color = '#ffffff'  # белый в HEX
         
         # Определяем цвет контура на основе названия здания
-        building_name = lesson['building']
         hash_obj = hashlib.md5(building_name.encode())
         hash_int = int(hash_obj.hexdigest(), 16)
         hue_border = (hash_int % 1000) / 1000.0
@@ -497,24 +505,23 @@ class HtmlExportMixin:
         text_color = '#000000'
         
         # Добавляем атрибут данных для возможности фильтрации
-        raw_lesson_type = str(lesson.get('lesson_type') or '').strip().lower()
-        _lesson_type = raw_lesson_type or _classify_lesson_type(lesson.get('subject', '') or '')
+        _lesson_type = get_lesson_type(lesson)
         data_attributes = (
-            f'data-group="{lesson["group"]}" '
-            f'data-teacher="{lesson["teacher"]}" '
-            f'data-building="{lesson["building"]}" '
+            f'data-group="{group_name}" '
+            f'data-teacher="{teacher_name}" '
+            f'data-building="{building_name}" '
             f'data-lesson-type="{_lesson_type}"'
         )
         
         # Формируем HTML для блока занятия с улучшенным дизайном
-        subject_val = lesson.get('subject', '') or ''
         block_html.append(f'            <div class="lesson-block" {data_attributes} style="background-color: {bg_color}; border-color: {border_color}; color: {text_color};">')
-        block_html.append(f'                <div class="lesson-time">{lesson["start_time"]}-{lesson["end_time"]}</div>')
-        if _lesson_type != 'group' and subject_val:
-            block_html.append(f'                <div class="lesson-subject">{subject_val}</div>')
-        block_html.append(f'                <div class="lesson-group">{lesson["group"]}</div>')
-        block_html.append(f'                <div class="lesson-teacher">{lesson["teacher"]}</div>')
-        block_html.append(f'                <div class="lesson-location">{lesson["room"]}, {lesson["building"]}</div>')
+        block_html.append(f'                <div class="lesson-time">{start_time}-{end_time}</div>')
+        if should_show_subject_line(lesson):
+            subject_html = html_lib.escape(subject_val, quote=True)
+            block_html.append(f'                <div class="lesson-subject">{subject_html}</div>')
+        block_html.append(f'                <div class="lesson-group">{group_name}</div>')
+        block_html.append(f'                <div class="lesson-teacher">{teacher_name}</div>')
+        block_html.append(f'                <div class="lesson-location">{room_name}, {building_name}</div>')
         block_html.append('            </div>')
         
         return '\n'.join(block_html)
