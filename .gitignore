@@ -18,6 +18,13 @@ config.json
 *.p12
 *.pfx
 
+# Generated schedule HTML outputs (runtime-produced, not source)
+gear_xls/html_output/
+visualiser/*.html
+
+# Runtime working directory
+runtime/
+
 # Local schedule data and exports
 xlsx_initial/
 excel_exports/
