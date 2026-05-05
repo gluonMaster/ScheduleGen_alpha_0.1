@@ -32,15 +32,17 @@ if THIS_DIR not in sys.path:
     sys.path.insert(0, THIS_DIR)
 
 from gear_xls.runtime_paths import (
-    DEFAULT_HOST,
-    DEFAULT_PORT,
+    HEALTH_MARKER,
     ensure_runtime_dirs,
     get_excel_exports_dir,
     get_js_modules_dir,
+    get_project_root,
+    get_project_root_id,
     get_schedule_html_path,
     get_server_log_path,
     get_spiski_dir,
     get_static_dir,
+    load_server_config,
     set_project_root_env,
 )
 
@@ -91,6 +93,7 @@ logger = logging.getLogger("server_routes")
 app = Flask(__name__)
 app.secret_key = get_or_create_secret_key()
 app.permanent_session_lifetime = timedelta(hours=8)
+app.config["SESSION_COOKIE_NAME"] = f"schedgen_session_{get_project_root_id()}"
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 CORS(app, resources={r"/api/spiski/*": {"origins": "*"}})
@@ -633,6 +636,22 @@ def index():
     return "Excel Export Server is running! Access /export_to_excel via POST request to export schedule."
 
 
+@app.route("/health")
+def health():
+    root = get_project_root()
+    config = load_server_config(root, include_env=True)
+    return jsonify(
+        {
+            "ok": True,
+            "marker": HEALTH_MARKER,
+            "project_root": root,
+            "project_root_id": get_project_root_id(root),
+            "host": config["host"],
+            "port": config["port"],
+        }
+    )
+
+
 @app.route("/export_to_excel", methods=["POST"])
 @login_required
 @role_required("admin")
@@ -794,8 +813,11 @@ def run_server(host=None, port=None, project_root=None):
     root = set_project_root_env(project_root)
     ensure_runtime_dirs(root)
     os.makedirs(get_excel_exports_dir(root), exist_ok=True)
-    host = host or os.environ.get("HOST", DEFAULT_HOST)
-    port = int(port or os.environ.get("PORT", DEFAULT_PORT))
+    config = load_server_config(root, include_env=True)
+    host = host or config["host"]
+    port = int(port or config["port"])
+    os.environ["HOST"] = str(host)
+    os.environ["PORT"] = str(port)
     logger.info("Запуск Flask-сервера на %s:%s (project_root=%s)", host, port, root)
     if getattr(sys, "stdout", None) is not None:
         print(f"=== Flask export server starting on {host}:{port} ===")

@@ -9,7 +9,7 @@ import tkinter as tk
 from tkinter import messagebox
 from .file_manager import FileManager
 from .process_manager import ProcessManager
-from gear_xls.runtime_paths import resolve_project_root, validate_project_layout
+from gear_xls.runtime_paths import get_schedule_url, resolve_project_root, validate_project_layout
 
 
 class AppActions:
@@ -411,7 +411,7 @@ class AppActions:
             return
 
         if os.name != "nt":
-            if self.process_manager.is_flask_server_running():
+            if self.process_manager.is_flask_server_running(self.program_directory):
                 messagebox.showinfo("Информация", "Flask-сервер уже запущен")
                 return
             self.log_action("Запуск flask-сервера...")
@@ -448,17 +448,18 @@ class AppActions:
             return
 
         if os.name != "nt":
-            if not self.process_manager.is_flask_server_running():
+            if not self.process_manager.is_flask_server_running(self.program_directory):
                 self.log_action("Flask-сервер не запущен. Запускаем автоматически...")
                 self.run_flask_server()
-                if not self.process_manager.wait_for_flask_server(timeout=5.0, poll_interval=0.3):
+                if not self.process_manager.wait_for_flask_server(self.program_directory, timeout=5.0, poll_interval=0.3):
                     self.log_action("Предупреждение: Flask-сервер не ответил за 5 секунд, открываем браузер всё равно")
             else:
                 self.log_action("Flask-сервер уже запущен")
 
             import webbrowser
-            webbrowser.open('http://localhost:5000/schedule')
-            self.log_action("Открыто веб-приложение: http://localhost:5000/schedule")
+            schedule_url = get_schedule_url(self.program_directory)
+            webbrowser.open(schedule_url)
+            self.log_action(f"Открыто веб-приложение: {schedule_url}")
             return
 
         self.log_action("Открытие веб-приложения через tray control-plane...")

@@ -1,18 +1,34 @@
+3J Log
 3Jahrige
 4Jahrige
 Baby
 Deutsch
 English
 Gitarre
+Ind. Deutsch
+Ind. Engl
+Ind. Mathe
+Ind. Russisch
+Ind. VSpE
+Ind.Russ
 Kunst
 Logorithmika
 Mathe
 Musik
+Nachhilfe Deutsch
+Nachhilfe Englisch
+Nachhilfe Geschichte
+Nachhilfe Mathe
+Nachhilfe Physik
+Nachhilfe Sachunter.
 Orchester
-Russish
+Russisch
 Schach
+Serbische Schule
+Soroban-Abacus
 Tanz
 Theater
 Ukr. Mus.
 Ukrainisch
+Vermietung
 VSpE

@@ -1,13 +1,18 @@
 import subprocess
 import platform
+import json
 import os
 import time
 import threading
 import urllib.request
 
+from gear_xls.runtime_paths import (
+    HEALTH_MARKER,
+    get_project_root_id,
+    get_server_health_url,
+)
 
-FLASK_SERVER_URL = "http://127.0.0.1:5000/"
-FLASK_SERVER_MARKER = "Excel Export Server is running!"
+FLASK_SERVER_MARKER = HEALTH_MARKER
 
 
 class ProcessManager:
@@ -108,20 +113,37 @@ class ProcessManager:
         except:
             return False
     
-    def is_flask_server_running(self, url=FLASK_SERVER_URL, timeout=1.0):
+    def is_flask_server_running(self, project_root=None, url=None, timeout=1.0):
         """Check whether the expected Flask server responds on localhost."""
+        if url is None:
+            url = get_server_health_url(project_root)
         try:
             with urllib.request.urlopen(url, timeout=timeout) as response:
-                body = response.read(256).decode("utf-8", errors="replace")
-            return FLASK_SERVER_MARKER in body
+                body = response.read(2048).decode("utf-8", errors="replace")
+            try:
+                data = json.loads(body)
+                if project_root is not None:
+                    return (
+                        isinstance(data, dict)
+                        and data.get("ok") is True
+                        and data.get("marker") == FLASK_SERVER_MARKER
+                        and data.get("project_root_id") == get_project_root_id(project_root)
+                    )
+                return (
+                    isinstance(data, dict)
+                    and data.get("ok") is True
+                    and data.get("marker") == FLASK_SERVER_MARKER
+                )
+            except json.JSONDecodeError:
+                return FLASK_SERVER_MARKER in body and project_root is None
         except Exception:
             return False
 
-    def wait_for_flask_server(self, timeout=5.0, poll_interval=0.3):
+    def wait_for_flask_server(self, project_root=None, timeout=5.0, poll_interval=0.3):
         """Wait for the Flask server to become reachable."""
         deadline = time.time() + timeout
         while time.time() < deadline:
-            if self.is_flask_server_running():
+            if self.is_flask_server_running(project_root):
                 return True
             time.sleep(poll_interval)
         return False

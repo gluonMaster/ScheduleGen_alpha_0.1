@@ -9,19 +9,20 @@
 3A
 3B
 3D
-3JA        
-3JB
+3JA
 3JA_Log
+3JB
 3JB_Log
 4A
 4B
 4C
 4D
 4JA
-4JB
-4JC
 4JA_Log
+4JB
 4JB_Log
+4JC
+5-6J
 5A
 5B
 5C
@@ -29,6 +30,7 @@
 5G
 6A
 6B
+7-8J
 7A
 7B
 7C
@@ -45,39 +47,91 @@
 11B
 11E
 12C
+13C Ru
+---
+administrativ Arbeit
+Agarwal  Anita
+Akim Weigel
+alexader Saltykov
+Alisa Hrekhovotova
+Anastasiia Strunkina
+Arina Belousova
+Artur Orlovsky
+Avramenko Arina
 Baby Do
 Baby Mo
 Baby Sa
+Balakhnina Jeva
+Baybulatova Samira
+Bazko Yasmin
+Buhai Veronika
+Chumakov Olexander
+Chumakov Olha
+Chumakov Volodimir
+Cotman Elizaveta
+Daniel Tovkach
+Daniil Ruban
+De
+Deineka
+Denys Lakhnov
+Denys Tymoshenko
 Deutsch 5-7kl Do
+Deutsch 5J Di
 Deutsch 7-9kl Do
 Deutsch  3kl Mo
 Deutsch  4kl Mo
-Deutsch ab 5J Fr
 Deutsch ab 5J Di
+Deutsch ab 5J Fr
 Deutsch ab 6J Fr
+Dosenko Amadei
+Dyba Heorg und Hleb
+E.Spät
+Emil Ahasiiev
+Extern
+Externe
 Gitarre A Mo
+Gitarre B Do
 Gitarre B Mo
 Gitarre C Mo
 Gitarre D Do
 Gitarre E Di
 Gitarre F Di
-Kunst Mo 1A
-Kunst Mo 2D
-Kunst Mo 3A
-Kunst Mo 4A+6A
-Kunst Di 11A
+Gregory Vorobjov
+Halustijan Valerii
+Hnatiuk Anastasia
+Ivan Ermakov
+Ivasyk Artem
+Jaromir Shvetsov
+Julia Diesendorf
+Kalinichenko Vitalii
+Karakasch Kemal
+Karchenkova Daria
+Kiptila Milena
+Konstantin Piskun
+Kovalchuk
+Krasko Diana
+Kulkina
+Kunst
 Kunst Di 2A
 Kunst Di 4B
+Kunst Di 5G+10A
 Kunst Di 7A+5G
-Kunst Mi 6B
-Kunst Mi 9A
-Kunst Mi StudioO
-Kunst Mi StudioP
+Kunst Di 11A
+Kunst Do
+Kunst Do 5B
 Kunst Do 9B
 Kunst Do 9G+5B
 Kunst Fr 2B
 Kunst Fr 5D+7B
 Kunst Fr 8D
+Kunst Mi 6B
+Kunst Mi 9A
+Kunst Mi StudioO
+Kunst Mi StudioP
+Kunst Mo 1A
+Kunst Mo 2D
+Kunst Mo 3A
+Kunst Mo 4A+6A
 Kunst Sa 1B
 Kunst Sa 2C
 Kunst Sa 3B
@@ -85,45 +139,99 @@ Kunst Sa 3D+2C
 Kunst Sa 4C+10B
 Kunst Sa 4D
 Kunst Sa 5C
-Kunst Sa 7C 
+Kunst Sa 7C
 Kunst Sa 9C+7C
 Kunst Sa 9D+9C+7C
 Kunst Sa 10B
 Kunst Sa 11E
 Kunst Sa StudioO
 Kunst Sa StudioP
+Lamar Al-Astal
+Lemischko Dmytro
+Lemischko Myhailo
+Leonard Saam
+Lewik Polina; Hannemann Anton
+Lokhmatova Milana
+Lozovoyi Danilo
+Lutsenko Arina und Anna
+Makukha Tymyr
+Mark Semievolos
 Mathe 2A
 Mathe 6B
 Mathe 7C
 Mathe 10B
+Maxim Skidin
+Misha Starodub
+Mokhmatova Milana
+Morozova Mariana
+Morozova Viktoriia
 Musik 1B
 Musik 2C
+Nonikaschvili
+Nonikashvili Iona
+Nozenko
+Nozenko Mariia
+Nozhenko
+Oleksandr Riabenko
+Oleksandr Vezel
+Oleksii Syz
+Oleksiv Artem
+Oleksiv Zlata
+Orchester Fr
+Orchester Sa
+Pavlo Serhiienko
+Piddhurska Mariia
+Pidhurska Maria
+Pidhurska Mariia
+Pidhurski
+Pidhurski Borys
+Pydchur
+Pylipenko
+Pylipenko Igor
+Richter
+Richter Christian
+Roman Syz
+Sapkina Alisa
 Schach Mi A
 Schach Mi B
 Schach Sa C
 Schach Sa D
 Schach Sa E
 Schach Sa F
-Tanz Mo 6-7J
-Tanz Mo 10-11J
-Tanz Mi ab 7J
-Tanz Mi ab 11J 
-Tanz Mi 14-15J 
-Tanz Do ab 10J
+Seidler Anton
+Semen Burlaka
+Serbische Kita
+Serbische Schule
+Serbische Vorschule
+Shevtsov Matvii
+Soroban 7-8J
+Spät Eva
+Stanishevska Ivanna
 Tanz Do 6-7J
 Tanz Do 10-11J
+Tanz Do ab 10J
 Tanz Fr 6-7J
 Tanz Fr 14-15J
+Tanz Jugentliche
+Tanz Mi 14-15J
+Tanz Mi ab 7J
+Tanz Mi ab 11J
+Tanz Mo 6-7J
+Tanz Mo 10-11J
 Tanz Sa 4J
 Tanz Sa 5J
 Tanz Sa 10-11J
 Tanz Sa 12-13J
 Tanz Sa 14-15J
 Tanz Sa Ukr
-Tanz Jugentliche
+Telehanenko Mariia
 Theater 10-12
 Theater 14-18
 Theater ab 6J
+Tovkach Maxim
+Tovkach Michayko
+Tsysar Oleksandr
+Ukr. Tanz
 Ukrainisch Di 4-5J
 Ukrainisch Di 5-6J
 Ukrainisch Do 4-5J
@@ -133,9 +241,11 @@ Ukrainische Musik Di 4-5J
 Ukrainische Musik Di 5-6J
 Ukrainische Musik Do 4-5J
 Ukrainische Musik Do 5-6J
-VSpE_L
+Ukrainische Musik Do 6-7J
+Vasylchuk
+Vasylchuk Anna
+Vlasiiuk Yelyzaveta
 VSpE_E
-Orchester Fr
-Orchester Sa
-Ukr. Tanz
-
+VSpE_L
+Waares Dmitro
+Yelahina, Camilla

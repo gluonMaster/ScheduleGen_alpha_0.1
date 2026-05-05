@@ -27,17 +27,21 @@ from urllib.request import urlopen
 
 from gear_xls.runtime_paths import (
     HEALTH_MARKER,
-    HEALTH_URL,
     ProjectLayoutError,
     assert_valid_project_layout,
     ensure_runtime_dirs,
     get_project_root_id,
     get_runtime_dir,
+    get_schedule_url,
+    get_server_health_url,
+    get_server_port,
+    get_server_url_host,
     get_server_log_path,
     get_tray_launcher_path,
     get_tray_lock_path,
     get_tray_log_path,
     get_tray_state_path,
+    load_server_config,
     normalize_project_root,
     resolve_project_root,
     set_project_root_env,
@@ -191,8 +195,8 @@ def _mutex_name(project_root: str) -> str:
     return rf"Global\SchedGenTrayMutex-{get_project_root_id(project_root)}"
 
 
-def _schedule_url() -> str:
-    return "http://127.0.0.1:5000/schedule"
+def _schedule_url(project_root: str) -> str:
+    return get_schedule_url(project_root)
 
 
 def _read_text_file(path: str) -> str:
@@ -233,7 +237,9 @@ def _read_json_file(path: str) -> dict:
         return {}
 
 
-def _is_port_open(host: str = "127.0.0.1", port: int = 5000, timeout: float = 0.5) -> bool:
+def _is_port_open(project_root: str, timeout: float = 0.5) -> bool:
+    host = get_server_url_host(project_root)
+    port = get_server_port(project_root)
     try:
         with socket.create_connection((host, port), timeout=timeout):
             return True
@@ -241,11 +247,17 @@ def _is_port_open(host: str = "127.0.0.1", port: int = 5000, timeout: float = 0.
         return False
 
 
-def _is_compatible_server_running(timeout: float = 1.0) -> bool:
+def _is_compatible_server_running(project_root: str, timeout: float = 1.0) -> bool:
     try:
-        with urlopen(HEALTH_URL, timeout=timeout) as response:
-            body = response.read(256).decode("utf-8", errors="replace")
-        return HEALTH_MARKER in body
+        with urlopen(get_server_health_url(project_root), timeout=timeout) as response:
+            body = response.read(2048).decode("utf-8", errors="replace")
+        data = json.loads(body)
+        return (
+            isinstance(data, dict)
+            and data.get("ok") is True
+            and data.get("marker") == HEALTH_MARKER
+            and data.get("project_root_id") == get_project_root_id(project_root)
+        )
     except Exception:
         return False
 
@@ -1067,19 +1079,19 @@ class TrayController:
         managed_pid = None
         if self.server_process and self.server_process.poll() is None:
             managed_pid = self.server_process.pid
-        if _is_compatible_server_running():
+        if _is_compatible_server_running(self.project_root):
             if managed_pid is not None:
                 return STATUS_MANAGED, OWNERSHIP_MANAGED, ERROR_NONE, managed_pid
             if self._managed_process_matches():
                 return STATUS_MANAGED, OWNERSHIP_MANAGED, ERROR_NONE, self.state.get("server_pid")
             return STATUS_UNMANAGED, OWNERSHIP_UNMANAGED, ERROR_NONE, self.state.get("server_pid")
         if managed_pid is not None:
-            if self.state.get("status") == STATUS_MANAGED or _is_port_open():
+            if self.state.get("status") == STATUS_MANAGED or _is_port_open(self.project_root):
                 return STATUS_MANAGED, OWNERSHIP_MANAGED, ERROR_NONE, managed_pid
         if self.start_deadline and time.time() < self.start_deadline and self.state.get("server_pid"):
             if is_pid_running(self.state.get("server_pid")):
                 return STATUS_STARTING, OWNERSHIP_MANAGED, ERROR_NONE, self.state.get("server_pid")
-        if _is_port_open():
+        if _is_port_open(self.project_root):
             return STATUS_ERROR, OWNERSHIP_MANAGED, ERROR_PORT_CONFLICT, None
         return STATUS_STOPPED, OWNERSHIP_MANAGED, ERROR_NONE, None
 
@@ -1160,7 +1172,7 @@ class TrayController:
             try:
                 status, ownership, error_code, pid = self._inspect_runtime()
                 if status == STATUS_ERROR and error_code == ERROR_PORT_CONFLICT:
-                    self._set_state(status, "Port 5000 is occupied by another process", error_code=error_code, ownership_mode=ownership, server_pid=pid)
+                    self._set_state(status, f"Port {get_server_port(self.project_root)} is occupied by another process", error_code=error_code, ownership_mode=ownership, server_pid=pid)
                 elif status == STATUS_UNMANAGED:
                     self._set_state(status, "Compatible server is running without tray ownership", ownership_mode=ownership, server_pid=pid)
                 elif status == STATUS_STOPPED and self.state.get("status") not in {STATUS_STOPPED, STATUS_STARTING}:
@@ -1230,13 +1242,16 @@ class TrayController:
         command = resolve_server_child_command(self.project_root)
         environment = os.environ.copy()
         environment["SCHEDGEN_PROJECT_ROOT"] = self.project_root
+        server_config = load_server_config(self.project_root)
+        environment["HOST"] = str(server_config["host"])
+        environment["PORT"] = str(server_config["port"])
         return _launch_detached_process(command, self.project_root, env=environment)
 
     def _wait_for_managed_start(self) -> bool:
         deadline = time.time() + (START_TIMEOUT_MS / 1000)
         self.start_deadline = deadline
         while time.time() < deadline:
-            if _is_compatible_server_running() and self._managed_process_matches():
+            if _is_compatible_server_running(self.project_root) and self._managed_process_matches():
                 self.start_deadline = 0.0
                 return True
             if self.server_process and self.server_process.poll() is not None:
@@ -1254,7 +1269,7 @@ class TrayController:
             if status == STATUS_UNMANAGED:
                 return self._response(True, "Compatible server is running without tray ownership")
             if status == STATUS_ERROR and error_code == ERROR_PORT_CONFLICT:
-                return self._response(False, "Port 5000 is occupied by another process", ERROR_PORT_CONFLICT)
+                return self._response(False, f"Port {get_server_port(self.project_root)} is occupied by another process", ERROR_PORT_CONFLICT)
             return self._start_managed_server("Server started")
 
     def start_server(self) -> ControlResponse:
@@ -1265,7 +1280,7 @@ class TrayController:
             if status == STATUS_UNMANAGED:
                 return self._response(False, "Tray cannot take ownership of an external compatible server", ERROR_UNMANAGED_SERVER)
             if status == STATUS_ERROR and error_code == ERROR_PORT_CONFLICT:
-                return self._response(False, "Port 5000 is occupied by another process", ERROR_PORT_CONFLICT)
+                return self._response(False, f"Port {get_server_port(self.project_root)} is occupied by another process", ERROR_PORT_CONFLICT)
             return self._start_managed_server("Server started")
 
     def _start_managed_server(self, success_message: str) -> ControlResponse:
@@ -1326,7 +1341,7 @@ class TrayController:
                 terminate_pid(pid)
                 wait_for_pid_exit(pid, 5000)
             self.server_process = None
-            if _is_compatible_server_running():
+            if _is_compatible_server_running(self.project_root):
                 self._set_state(STATUS_ERROR, "Managed server stop did not clear health-check", error_code=ERROR_STOP_FAILED, ownership_mode=OWNERSHIP_MANAGED, server_pid=None)
                 return self._response(False, "Server stop failed", ERROR_STOP_FAILED)
             self._set_state(STATUS_STOPPED, "Server stopped", ownership_mode=OWNERSHIP_MANAGED, server_pid=None)
@@ -1349,7 +1364,7 @@ class TrayController:
         if not response.ok and response.status != STATUS_UNMANAGED:
             return response
         if response.status in {STATUS_MANAGED, STATUS_UNMANAGED} or response.ok:
-            webbrowser.open(_schedule_url())
+            webbrowser.open(_schedule_url(self.project_root))
             return self._response(True, "Web interface opened")
         return response
 
