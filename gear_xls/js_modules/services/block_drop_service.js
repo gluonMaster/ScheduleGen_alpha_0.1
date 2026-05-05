@@ -179,6 +179,9 @@ var BlockDropService = (function() {
             if (typeof syncBlockContent === 'function') {
                 syncBlockContent(block);
             }
+            if (block.getAttribute('data-lesson-type') === 'group' && typeof window.normalizeGroupBlockRuntimeState === 'function') {
+                window.normalizeGroupBlockRuntimeState(block);
+            }
             
             // Обновляем подсветку конфликтов после перемещения блока
             if (typeof ConflictDetector !== 'undefined') {
@@ -215,6 +218,9 @@ var BlockDropService = (function() {
                     // Sync block text (room + time) to match new position
                     if (typeof syncBlockContent === 'function') {
                         syncBlockContent(block);
+                    }
+                    if (block.getAttribute('data-lesson-type') === 'group' && typeof window.normalizeGroupBlockRuntimeState === 'function') {
+                        window.normalizeGroupBlockRuntimeState(block);
                     }
                     
                     // Обновляем подсветку конфликтов после перемещения блока

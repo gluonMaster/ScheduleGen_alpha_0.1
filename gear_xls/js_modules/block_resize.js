@@ -164,6 +164,9 @@ function handleResizeMouseUp(e) {
         if (typeof syncBlockContent === 'function') {
             syncBlockContent(resizingBlock);
         }
+        if (resizingBlock.getAttribute('data-lesson-type') === 'group' && typeof window.normalizeGroupBlockRuntimeState === 'function') {
+            window.normalizeGroupBlockRuntimeState(resizingBlock);
+        }
         if (typeof ConflictDetector !== 'undefined') {
             ConflictDetector.highlightConflicts();
         }

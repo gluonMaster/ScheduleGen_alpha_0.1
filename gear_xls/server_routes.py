@@ -52,6 +52,7 @@ import lock_manager
 import rooms_report
 import rooms_routes
 import state_manager
+from base_schedule_manager import BaseRevisionConflict
 
 
 def _build_log_handlers():
@@ -450,17 +451,56 @@ def api_publish_schedule():
     user = current_user()
     if user["role"] != "admin":
         return jsonify({"ok": False, "error": "Forbidden", "code": "FORBIDDEN"}), 403
+    err = _require_lock(user["login"])
+    if err:
+        logger.warning(
+            "Publish rejected without active lock: login=%s code=%s",
+            user["login"],
+            err.get("code"),
+        )
+        return jsonify(err), 403
     data = request.get_json(force=True, silent=True) or {}
     blocks = data.get("blocks", [])
     if not isinstance(blocks, list):
+        logger.warning("Publish rejected due to invalid payload: blocks is not a list")
         return jsonify({"ok": False, "error": "blocks must be a list"}), 400
-    result = state_manager.publish_base(blocks, user["login"])
+    if "expected_base_revision" not in data:
+        logger.warning("Publish rejected due to missing expected_base_revision")
+        return jsonify(
+            {
+                "ok": False,
+                "error": "expected_base_revision required",
+                "code": "EXPECTED_BASE_REVISION_REQUIRED",
+            }
+        ), 400
+    try:
+        result = state_manager.publish_base(
+            blocks,
+            user["login"],
+            expected_base_revision=data.get("expected_base_revision"),
+        )
+    except BaseRevisionConflict as exc:
+        logger.warning(
+            "Publish rejected due to base revision conflict: login=%s expected=%r current=%r",
+            user["login"],
+            exc.expected_revision,
+            exc.current_revision,
+        )
+        return jsonify(
+            {
+                "ok": False,
+                "error": "Base schedule has a newer revision",
+                "code": "BASE_REVISION_CONFLICT",
+                "current_base_revision": exc.current_revision,
+            }
+        ), 409
     return jsonify(
         {
             "ok": True,
             "published_at": result["published_at"],
             "base_revision": result["published_at"],
             "group_blocks_saved": len(result["blocks"]),
+            "changed": result.get("changed", True),
         }
     )
 

@@ -107,6 +107,8 @@ function openEditDialog(block, origLeft, origTop, building) {
     // Сохраняем текущие значения атрибутов для сравнения после редактирования
     var currentDay = block.getAttribute('data-day');
     var currentColIndex = block.getAttribute('data-col-index');
+    var originalLessonType = (block.getAttribute('data-lesson-type') || '').trim();
+    var wasExistingGroupBlock = originalLessonType === 'group' || (!originalLessonType && !block.getAttribute('data-block-id'));
     
     // ИСПОЛЬЗУЕМ НОВЫЙ BuildingService вместо дублированной функции
     var currentBuilding = building || block.getAttribute('data-building') || 
@@ -364,6 +366,9 @@ function openEditDialog(block, origLeft, origTop, building) {
             block.innerHTML = `<strong>${newSubject}</strong><br>${newTeacher}<br>${newStudents}<br>${newRoom}<br>${newTime}`;
 
             // Refresh lesson type and re-apply filter after subject may have changed
+            if (wasExistingGroupBlock) {
+                block.setAttribute('data-lesson-type', 'group');
+            }
             if (typeof updateBlockLessonType === 'function') {
                 updateBlockLessonType(block);
             }
@@ -429,6 +434,13 @@ function openEditDialog(block, origLeft, origTop, building) {
             
             // Единственный вызов updateActivityPositions в конце
             updateActivityPositions();
+
+            if (wasExistingGroupBlock && typeof window.normalizeGroupBlockRuntimeState === 'function') {
+                window.normalizeGroupBlockRuntimeState(block);
+            }
+            if (typeof ConflictDetector !== 'undefined') {
+                ConflictDetector.highlightConflicts();
+            }
             
             return false; // Дополнительное предотвращение отправки формы
         });

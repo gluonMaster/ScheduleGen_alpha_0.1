@@ -23,10 +23,7 @@ function syncBlockContent(block) {
     if (container) {
         var table = container.querySelector('.schedule-grid');
         if (table) {
-            var dayHeaders = Array.from(table.querySelectorAll('th.day-' + day))
-                .filter(function(h) {
-                    return window.getComputedStyle(h).display !== 'none';
-                });
+            var dayHeaders = Array.from(table.querySelectorAll('th.day-' + day));
             if (!isNaN(colIndex) && colIndex >= 0 && colIndex < dayHeaders.length) {
                 if (typeof extractRoomFromDayHeader === 'function') {
                     newRoom = extractRoomFromDayHeader(dayHeaders[colIndex], day);
@@ -88,6 +85,16 @@ function syncBlockContent(block) {
     }
 
     block.innerHTML = newHTML;
+    if (container && container.getAttribute('data-building')) {
+        block.setAttribute('data-building', container.getAttribute('data-building'));
+    }
+    if (newRoom) {
+        block.setAttribute('data-room', newRoom);
+    }
+    if (newTimeStr && newTimeStr.indexOf('-') !== -1) {
+        block.setAttribute('data-start-time', newTimeStr.split('-')[0] || '');
+        block.setAttribute('data-end-time', newTimeStr.split('-')[1] || '');
+    }
 
     if (block.getAttribute('data-lesson-type') === 'trial' && window.TrialUI) {
         var dates = [];
@@ -100,6 +107,9 @@ function syncBlockContent(block) {
     // Update lesson type attribute and re-apply active filter
     if (typeof updateBlockLessonType === 'function') {
         updateBlockLessonType(block);
+    }
+    if (block.getAttribute('data-lesson-type') === 'group' && typeof window.normalizeGroupBlockRuntimeState === 'function') {
+        window.normalizeGroupBlockRuntimeState(block);
     }
     if (typeof reapplyLessonTypeFilter === 'function') {
         reapplyLessonTypeFilter();

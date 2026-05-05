@@ -18,6 +18,14 @@ function collectScheduleData(options) {
         
         // Проходим по всем блокам активностей в этом здании
         container.querySelectorAll('.activity-block').forEach(function(block) {
+            var explicitLessonType = (block.getAttribute('data-lesson-type') || '').trim();
+            if (
+                typeof window.normalizeGroupBlockRuntimeState === 'function' &&
+                (explicitLessonType === 'group' || (!explicitLessonType && !block.getAttribute('data-block-id')))
+            ) {
+                window.normalizeGroupBlockRuntimeState(block);
+            }
+
             // В обычном режиме пропускаем скрытые блоки, но для публикации
             // может понадобиться полный снимок расписания независимо от скрытых дней.
             if (!includeHidden && window.getComputedStyle(block).display === 'none') {
@@ -54,9 +62,17 @@ function collectScheduleData(options) {
             var startTime = '';
             var endTime = '';
             var duration = 0;
+            var rowTimeRange = resolveTimeRangeFromRowsForExport(block);
+
+            if (rowTimeRange) {
+                startTime = rowTimeRange.startTime;
+                endTime = rowTimeRange.endTime;
+                duration = rowTimeRange.duration;
+                timeMatch = true;
+            }
             
             // Ищем строку с временем в последних строках
-            for (var i = lines.length - 1; i >= 0; i--) {
+            for (var i = lines.length - 1; !timeMatch && i >= 0; i--) {
                 timeMatch = lines[i].match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
                 if (timeMatch) {
                     startTime = timeMatch[1];
@@ -167,6 +183,27 @@ function minutesToTime(minutes) {
     var hours = Math.floor(minutes / 60);
     var mins = minutes % 60;
     return hours.toString().padStart(2, '0') + ':' + mins.toString().padStart(2, '0');
+}
+
+function resolveTimeRangeFromRowsForExport(block) {
+    var gStart = (typeof gridStart !== 'undefined') ? gridStart : 9 * 60;
+    var tInterval = (typeof timeInterval !== 'undefined') ? timeInterval : 5;
+    var attrStartRow = parseInt(block.getAttribute('data-start-row'), 10);
+    var attrRowSpan = parseInt(block.getAttribute('data-row-span'), 10);
+    var startMinutes;
+    var endMinutes;
+
+    if (isNaN(attrStartRow) || isNaN(attrRowSpan) || attrStartRow < 0 || attrRowSpan <= 0) {
+        return null;
+    }
+
+    startMinutes = gStart + attrStartRow * tInterval;
+    endMinutes = gStart + (attrStartRow + attrRowSpan) * tInterval;
+    return {
+        startTime: minutesToTime(startMinutes),
+        endTime: minutesToTime(endMinutes),
+        duration: endMinutes - startMinutes
+    };
 }
 
 // Вспомогательная функция для преобразования RGB в HEX

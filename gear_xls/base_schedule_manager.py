@@ -22,6 +22,13 @@ _base_mutex = threading.Lock()
 logger = logging.getLogger(__name__)
 
 
+class BaseRevisionConflict(Exception):
+    def __init__(self, expected_revision, current_revision):
+        super().__init__("Base schedule revision conflict")
+        self.expected_revision = expected_revision
+        self.current_revision = current_revision
+
+
 def _empty_base():
     return {"published_at": None, "published_by": None, "blocks": []}
 
@@ -108,6 +115,38 @@ def _normalize_base_blocks(blocks):
     return normalized_blocks
 
 
+def _normalize_revision(value):
+    if value is None:
+        return None
+    value = str(value).strip()
+    return value or None
+
+
+def _normalize_signature_value(value):
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        return {
+            str(key): _normalize_signature_value(value[key])
+            for key in sorted(value.keys())
+        }
+    if isinstance(value, list):
+        return [_normalize_signature_value(item) for item in value]
+    return value
+
+
+def _base_blocks_signature(blocks):
+    normalized = []
+
+    for block in _normalize_base_blocks(blocks):
+        if not isinstance(block, dict):
+            continue
+        normalized.append(_normalize_signature_value(block))
+
+    normalized.sort(key=lambda item: json.dumps(item, ensure_ascii=False, sort_keys=True))
+    return json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
 def _write_base(state):
     os.makedirs(os.path.dirname(BASE_SCHEDULE_PATH), exist_ok=True)
     payload = {
@@ -145,19 +184,33 @@ def get_base_revision():
     return get_base_schedule().get("published_at")
 
 
-def publish_base(blocks, published_by):
+def publish_base(blocks, published_by, expected_base_revision=None):
     with _base_mutex:
         with _locked_base_file():
-            _read_base()
+            current_state = _read_base()
+            current_revision = _normalize_revision(current_state.get("published_at"))
+            expected_revision = _normalize_revision(expected_base_revision)
+
+            if expected_revision != current_revision:
+                raise BaseRevisionConflict(expected_revision, current_revision)
+
             filtered_blocks = [
                 normalize_room_fields(block)
                 for block in (blocks or [])
                 if isinstance(block, dict) and block.get("lesson_type") == "group"
             ]
+            if _base_blocks_signature(current_state.get("blocks", [])) == _base_blocks_signature(
+                filtered_blocks
+            ):
+                current_state["blocks"] = _normalize_base_blocks(current_state.get("blocks", []))
+                current_state["changed"] = False
+                return current_state
+
             state = {
                 "published_at": datetime.utcnow().isoformat(),
                 "published_by": published_by,
                 "blocks": filtered_blocks,
+                "changed": True,
             }
             _write_base(state)
             return state

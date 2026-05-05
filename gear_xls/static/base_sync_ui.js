@@ -89,6 +89,10 @@
         "  box-shadow: 0 8px 20px rgba(0,0,0,.2);",
         "  display: none;",
         "}",
+        ".activity-block.schedgen-publish-invalid {",
+        "  outline: 3px solid #b3261e !important;",
+        "  outline-offset: 2px;",
+        "}",
       ].join("\n")
     );
   }
@@ -98,7 +102,7 @@
     ensureDomObserver();
     attachBaseBlockInteractionHandlers();
     refreshBaseBlockInteractions(document);
-    normalizeExistingGroupBlockRuntimeAttrs();
+    normalizeExistingGroupBlockRuntimeAttrs({ showAlert: false });
     setPublishedGroupBaseline();
     syncBlockUi();
   }
@@ -121,7 +125,7 @@
     }
     document.body.__baseBlockInteractionHandlersAttached = true;
 
-    document.addEventListener("submit", handleBaseEditSubmit);
+    document.addEventListener("submit", handleBaseEditSubmit, true);
     document.addEventListener("click", handleBaseEditCancel);
     document.addEventListener("mousedown", handleBaseResizeStart, true);
     document.addEventListener("mousemove", handleBaseDragMove, true);
@@ -391,6 +395,38 @@
     );
   }
 
+  function hasActiveEditLock() {
+    return isInEditMode();
+  }
+
+  function hasUnstablePublishState() {
+    var addModeButton = document.getElementById("toggle-add-mode");
+
+    return !!(
+      window.editDialogOpen ||
+      window.draggedBlock ||
+      _baseActiveDrag ||
+      _basePendingDragStart ||
+      window.isResizing ||
+      _basePendingResize ||
+      document.body.classList.contains("delete-mode") ||
+      (addModeButton && addModeButton.classList.contains("active"))
+    );
+  }
+
+  function ensureStablePublishState() {
+    deactivateTransientModes();
+    clearBasePendingDragStart();
+
+    if (!hasUnstablePublishState()) {
+      return true;
+    }
+    window.alert(
+      "Завершите текущее действие редактирования перед публикацией: открытый диалог, drag, resize, add/delete mode."
+    );
+    return false;
+  }
+
   function canStartEditing() {
     if (!_blockNewEditsUntilSync) {
       return true;
@@ -506,10 +542,16 @@
     return data;
   }
 
-  function publishSchedule() {
+  function preparePublishPreflight(options) {
+    options = options || {};
+
     if (currentRole() !== "admin") {
       window.alert("Недостаточно прав для публикации расписания.");
-      return;
+      return false;
+    }
+    if (!hasActiveEditLock()) {
+      window.alert("Чтобы опубликовать расписание, сначала нажмите «Начать редактирование».");
+      return false;
     }
     if (_basePendingUpdate) {
       window.alert(
@@ -518,6 +560,110 @@
       if (!hasUnsafeLocalState()) {
         refreshBaseLayer();
       }
+      return false;
+    }
+    if (!ensureStablePublishState()) {
+      return false;
+    }
+    if (!normalizeExistingGroupBlockRuntimeAttrs().ok) {
+      return false;
+    }
+    if (!hasUnpublishedGroupChanges()) {
+      if (options.showNoChangesAlert !== false) {
+        window.alert("Нет изменений для публикации.");
+      }
+      return false;
+    }
+    return true;
+  }
+
+  function collectBlocksForPublish() {
+    var blocks;
+    var normalization;
+
+    normalization = normalizeExistingGroupBlockRuntimeAttrs();
+    if (!normalization.ok) {
+      return null;
+    }
+
+    blocks = withHiddenDaysVisible(function () {
+      return collectScheduleDataSafe();
+    });
+    if (!Array.isArray(blocks)) {
+      window.alert("Функция сбора данных расписания недоступна.");
+      return null;
+    }
+    if (buildGroupSignature(blocks) === (_publishedGroupSignature || "[]")) {
+      window.alert("Нет изменений для публикации.");
+      return null;
+    }
+    return blocks;
+  }
+
+  function handlePublishFailure(publishResult) {
+    var data = (publishResult && publishResult.data) || {};
+    var code = data.code || "";
+    var error = data.error || "Не удалось опубликовать расписание.";
+
+    if (publishResult && publishResult.status === 403 && code === "NO_LOCK") {
+      if (window.SchedGenLockUI && typeof window.SchedGenLockUI.refreshLockStatus === "function") {
+        window.SchedGenLockUI.refreshLockStatus();
+      }
+      return "Публикация невозможна без активного режима редактирования. Нажмите «Начать редактирование» и повторите.";
+    }
+    if (publishResult && publishResult.status === 409 && code === "BASE_REVISION_CONFLICT") {
+      _basePendingUpdate = true;
+      if (typeof data.current_base_revision !== "undefined") {
+        _baseRevision = data.current_base_revision || null;
+      }
+      showUpdateBanner(
+        "На сервере есть более новая версия базового расписания. Синхронизируйтесь перед публикацией."
+      );
+      syncBlockUi();
+      return "На сервере есть более новая версия базового расписания. Сначала синхронизируйтесь.";
+    }
+    if (publishResult && publishResult.status === 400 && code === "EXPECTED_BASE_REVISION_REQUIRED") {
+      return "Не удалось опубликовать расписание: клиент не передал ревизию базового расписания. Обновите страницу.";
+    }
+    return error;
+  }
+
+  function publishCollectedBlocks(blocks) {
+    return requestJson("/api/schedule/publish", "POST", {
+      blocks: blocks,
+      expected_base_revision: _baseRevision,
+    }).then(function (publishResult) {
+      var error;
+
+      if (!publishResult) {
+        window.alert("Не удалось опубликовать расписание из-за ошибки сети.");
+        return false;
+      }
+      if (!publishResult.ok || publishResult.data.ok === false) {
+        error = handlePublishFailure(publishResult);
+        window.alert(error);
+        return false;
+      }
+
+      setBaseRevision(publishResult.data.base_revision || publishResult.data.published_at);
+      _basePendingUpdate = false;
+      _blockNewEditsUntilSync = false;
+      setPublishedGroupBaseline(blocks);
+      clearUpdateBanner();
+      syncBlockUi();
+      showToast(
+        publishResult.data.changed === false
+          ? "Изменений для публикации не найдено."
+          : "Расписание опубликовано. Другие пользователи увидят обновление после следующего опроса/обновления страницы.",
+        publishResult.data.changed === false ? "warning" : "success",
+        5000
+      );
+      return true;
+    });
+  }
+
+  function publishSchedule() {
+    if (!preparePublishPreflight({ showNoChangesAlert: true })) {
       return;
     }
     if (
@@ -545,54 +691,29 @@
       ).then(function () {
         var blocks;
 
-        blocks = withHiddenDaysVisible(function () {
-          return collectScheduleDataSafe();
-        });
+        blocks = collectBlocksForPublish();
         if (!blocks) {
-          window.alert("Функция сбора данных расписания недоступна.");
           return;
         }
-        requestJson("/api/schedule/publish", "POST", { blocks: blocks }).then(
-          function (publishResult) {
-            var error;
-
-            if (!publishResult) {
-              window.alert("Не удалось опубликовать расписание из-за ошибки сети.");
-              return;
-            }
-            if (!publishResult.ok || publishResult.data.ok === false) {
-              error =
-                (publishResult.data && publishResult.data.error) ||
-                "Не удалось опубликовать расписание.";
-              window.alert(error);
-              return;
-            }
-
-            setBaseRevision(
-              publishResult.data.base_revision || publishResult.data.published_at
-            );
-            _basePendingUpdate = false;
-            _blockNewEditsUntilSync = false;
-            setPublishedGroupBaseline(blocks);
-            clearUpdateBanner();
-            syncBlockUi();
-            showToast(
-              "Расписание опубликовано. Другие пользователи увидят обновление после следующего опроса/обновления страницы.",
-              "success",
-              5000
-            );
-          }
-        );
+        publishCollectedBlocks(blocks);
       });
     });
   }
 
   function collectScheduleDataSafe() {
     if (typeof collectScheduleData === "function") {
-      return collectScheduleData({ includeHidden: true });
+      try {
+        return collectScheduleData({ includeHidden: true });
+      } catch (error) {
+        console.warn("collectScheduleData failed, falling back to DOM snapshot:", error);
+      }
     }
     if (typeof window.collectScheduleData === "function") {
-      return window.collectScheduleData({ includeHidden: true });
+      try {
+        return window.collectScheduleData({ includeHidden: true });
+      } catch (error2) {
+        console.warn("window.collectScheduleData failed, falling back to DOM snapshot:", error2);
+      }
     }
     return buildScheduleSnapshotFromDom();
   }
@@ -600,17 +721,7 @@
   function publishScheduleForNavigation() {
     var blocks;
 
-    if (currentRole() !== "admin") {
-      window.alert("Недостаточно прав для публикации расписания.");
-      return Promise.resolve(false);
-    }
-    if (_basePendingUpdate) {
-      window.alert(
-        "На сервере уже есть более новая версия базового расписания. Сначала синхронизируйтесь."
-      );
-      if (!hasUnsafeLocalState()) {
-        refreshBaseLayer();
-      }
+    if (!preparePublishPreflight({ showNoChangesAlert: true })) {
       return Promise.resolve(false);
     }
 
@@ -629,45 +740,11 @@
           ? window.refreshIndividualLayer(refreshResult.data)
           : refreshResult.data
       ).then(function () {
-        blocks = withHiddenDaysVisible(function () {
-          return collectScheduleDataSafe();
-        });
+        blocks = collectBlocksForPublish();
         if (!blocks) {
-          window.alert("Функция сбора данных расписания недоступна.");
           return false;
         }
-        return requestJson("/api/schedule/publish", "POST", { blocks: blocks }).then(
-          function (publishResult) {
-            var error;
-
-            if (!publishResult) {
-              window.alert("Не удалось опубликовать расписание из-за ошибки сети.");
-              return false;
-            }
-            if (!publishResult.ok || publishResult.data.ok === false) {
-              error =
-                (publishResult.data && publishResult.data.error) ||
-                "Не удалось опубликовать расписание.";
-              window.alert(error);
-              return false;
-            }
-
-            setBaseRevision(
-              publishResult.data.base_revision || publishResult.data.published_at
-            );
-            _basePendingUpdate = false;
-            _blockNewEditsUntilSync = false;
-            setPublishedGroupBaseline(blocks);
-            clearUpdateBanner();
-            syncBlockUi();
-            showToast(
-              "Расписание опубликовано. Другие пользователи увидят обновление после следующего опроса или обновления страницы.",
-              "success",
-              5000
-            );
-            return true;
-          }
-        );
+        return publishCollectedBlocks(blocks);
       });
     });
   }
@@ -747,12 +824,34 @@
           teacher: String(block.teacher || "").trim(),
           students: String(block.students || "").trim(),
           lesson_type: "group",
-          color: String(block.color || "").trim(),
+          color: normalizeColorForSignature(block.color || ""),
         };
       })
       .sort(function (a, b) {
         return JSON.stringify(a).localeCompare(JSON.stringify(b));
       });
+  }
+
+  function normalizeColorForSignature(value) {
+    var color = String(value || "").trim().toLowerCase();
+    var rgbMatch;
+    var toHex;
+
+    if (!color) {
+      return "";
+    }
+    if (color.charAt(0) === "#") {
+      return color;
+    }
+
+    rgbMatch = color.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (!rgbMatch) {
+      return color;
+    }
+    toHex = function (part) {
+      return parseInt(part, 10).toString(16).padStart(2, "0");
+    };
+    return "#" + toHex(rgbMatch[1]) + toHex(rgbMatch[2]) + toHex(rgbMatch[3]);
   }
 
   function extractBlockLines(block) {
@@ -805,25 +904,35 @@
   }
 
   function resolveBlockTimeRange(block) {
+    return (
+      resolveBlockTimeRangeFromRows(block) ||
+      resolveBlockTimeRangeFromText(block) ||
+      resolveBlockTimeRangeFromAttrs(block)
+    );
+  }
+
+  function resolveBlockTimeRangeFromAttrs(block) {
     var startTime = (block.getAttribute("data-start-time") || "").trim();
     var endTime = (block.getAttribute("data-end-time") || "").trim();
-    var startMinutes;
-    var endMinutes;
+    var startMinutes = parseClockTime(startTime);
+    var endMinutes = parseClockTime(endTime);
+
+    if (startMinutes >= 0 && endMinutes > startMinutes) {
+      return {
+        start: formatClockTime(startMinutes),
+        end: formatClockTime(endMinutes),
+        duration: endMinutes - startMinutes,
+      };
+    }
+    return null;
+  }
+
+  function resolveBlockTimeRangeFromText(block) {
     var lines;
     var timeMatch;
+    var startMinutes;
+    var endMinutes;
     var i;
-
-    if (startTime && endTime) {
-      startMinutes = parseClockTime(startTime);
-      endMinutes = parseClockTime(endTime);
-      if (startMinutes >= 0 && endMinutes > startMinutes) {
-        return {
-          start: startTime,
-          end: endTime,
-          duration: endMinutes - startMinutes,
-        };
-      }
-    }
 
     lines = extractBlockLines(block);
     for (i = lines.length - 1; i >= 0; i -= 1) {
@@ -835,14 +944,13 @@
       endMinutes = parseClockTime(timeMatch[2]);
       if (startMinutes >= 0 && endMinutes > startMinutes) {
         return {
-          start: timeMatch[1],
-          end: timeMatch[2],
+          start: formatClockTime(startMinutes),
+          end: formatClockTime(endMinutes),
           duration: endMinutes - startMinutes,
         };
       }
     }
-
-    return resolveBlockTimeRangeFromRows(block);
+    return null;
   }
 
   function resolveBlockTimeRangeFromRows(block) {
@@ -945,6 +1053,7 @@
       escapeHtml(timeText),
     ].join("<br>");
     container.appendChild(element);
+    syncGroupBlockRuntimeAttrs(element);
     attachBaseBlockInteractions(element);
     if (!deferLayout && typeof updateActivityPositions === "function") {
       updateActivityPositions();
@@ -1178,41 +1287,169 @@
     var lines;
     var room;
     var timeRange;
+    var rows;
+    var result;
 
-    if (!block || (block.getAttribute("data-lesson-type") || "group") !== "group") {
-      return;
+    if (!block || !isGroupBlockElement(block)) {
+      return { ok: true, skipped: true };
     }
 
+    block.classList.remove("schedgen-publish-invalid");
     container = block.closest(".schedule-container");
     table = container ? container.querySelector(".schedule-grid") : null;
-    building = block.getAttribute("data-building") || "";
+    building =
+      (container && container.getAttribute("data-building")) ||
+      block.getAttribute("data-building") ||
+      "";
     day = block.getAttribute("data-day") || "";
     colIndex = toInteger(block.getAttribute("data-col-index"), -1);
     lines = extractBlockLines(block);
     room = normalizeRoomName(
-      lines[3] || resolveRoomName(table, day, colIndex) || "",
+      resolveRoomName(table, day, colIndex) || lines[3] || block.getAttribute("data-room") || "",
       building
     );
     timeRange = resolveBlockTimeRangeFromRows(block);
 
+    if (!timeRange) {
+      timeRange = resolveBlockTimeRangeFromText(block) || resolveBlockTimeRangeFromAttrs(block);
+      rows = timeRange ? deriveRowsFromTimeRange(timeRange) : null;
+      if (rows) {
+        block.setAttribute("data-start-row", String(rows.start_row));
+        block.setAttribute("data-row-span", String(rows.row_span));
+      }
+    }
+
+    if (!container || !table) {
+      return markInvalidGroupBlock(block, "Не найден контейнер или таблица расписания.");
+    }
+    if (!building || !day || colIndex < 0) {
+      return markInvalidGroupBlock(block, "Не заполнены координаты блока.");
+    }
+    if (!room) {
+      return markInvalidGroupBlock(block, "Не удалось определить кабинет блока.");
+    }
+    if (!timeRange) {
+      return markInvalidGroupBlock(block, "Не удалось определить время блока.");
+    }
+
+    block.setAttribute("data-building", building);
+    block.setAttribute("data-day", day);
+    block.setAttribute("data-col-index", String(colIndex));
+    block.setAttribute("data-lesson-type", "group");
     if (room) {
       block.setAttribute("data-room", room);
     }
-    if (timeRange) {
-      block.setAttribute("data-start-time", timeRange.start);
-      block.setAttribute("data-end-time", timeRange.end);
+    block.setAttribute("data-start-time", timeRange.start);
+    block.setAttribute("data-end-time", timeRange.end);
+
+    result = syncGroupBlockContentLines(block, lines, room, timeRange);
+    if (!result.ok) {
+      return result;
     }
+    return { ok: true, block: block };
   }
 
-  function normalizeExistingGroupBlockRuntimeAttrs() {
+  function normalizeExistingGroupBlockRuntimeAttrs(options) {
+    var firstError = null;
+    var count = 0;
+
+    options = options || {};
+
     document
       .querySelectorAll(".activity-block")
       .forEach(function (block) {
+        var result;
+
         if (!isGroupBlockElement(block)) {
           return;
         }
-        syncGroupBlockRuntimeAttrs(block);
+        count += 1;
+        result = syncGroupBlockRuntimeAttrs(block);
+        if (!result.ok && !firstError) {
+          firstError = result;
+        }
       });
+
+    if (firstError) {
+      if (options.showAlert !== false) {
+        focusInvalidGroupBlock(firstError.block);
+        window.alert(
+          "Публикация остановлена: " +
+            firstError.error +
+            " Исправьте выделенный групповой блок через редактирование."
+        );
+      }
+      return { ok: false, error: firstError.error, block: firstError.block, count: count };
+    }
+    return { ok: true, count: count };
+  }
+
+  function deriveRowsFromTimeRange(timeRange) {
+    var startMinutes;
+    var endMinutes;
+    var gridStartValue = typeof gridStart !== "undefined" ? gridStart : 9 * 60;
+    var interval = typeof timeInterval !== "undefined" ? timeInterval : 5;
+    var startOffset;
+    var duration;
+
+    if (!timeRange) {
+      return null;
+    }
+    startMinutes = parseClockTime(timeRange.start);
+    endMinutes = parseClockTime(timeRange.end);
+    duration = endMinutes - startMinutes;
+    startOffset = startMinutes - gridStartValue;
+    if (
+      startMinutes < 0 ||
+      endMinutes <= startMinutes ||
+      startOffset < 0 ||
+      startOffset % interval !== 0 ||
+      duration % interval !== 0
+    ) {
+      return null;
+    }
+    return {
+      start_row: startOffset / interval,
+      row_span: duration / interval,
+    };
+  }
+
+  function syncGroupBlockContentLines(block, lines, room, timeRange) {
+    var subject = lines[0] || "";
+    var teacher = lines[1] || "";
+    var students = lines[2] || "";
+    var timeText = timeRange.start + "-" + timeRange.end;
+
+    if (!subject) {
+      return markInvalidGroupBlock(block, "Не заполнен предмет группового блока.");
+    }
+
+    block.innerHTML = [
+      "<strong>" + escapeHtml(subject) + "</strong>",
+      escapeHtml(teacher),
+      escapeHtml(students),
+      escapeHtml(room),
+      escapeHtml(timeText),
+    ].join("<br>");
+    return { ok: true };
+  }
+
+  function markInvalidGroupBlock(block, message) {
+    if (block && block.classList) {
+      block.classList.add("schedgen-publish-invalid");
+    }
+    return { ok: false, block: block, error: message };
+  }
+
+  function focusInvalidGroupBlock(block) {
+    if (!block) {
+      return;
+    }
+    try {
+      block.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+    } catch (error) {
+      block.scrollIntoView();
+    }
   }
 
   function findScheduleContainer(building) {
@@ -1316,7 +1553,11 @@
     applyBaseScheduleData: applyBaseScheduleData,
     refreshBaseLayer: refreshBaseLayer,
     publishScheduleForNavigation: publishScheduleForNavigation,
+    normalizeGroupBlockRuntimeState: syncGroupBlockRuntimeAttrs,
+    normalizeAllGroupBlocks: normalizeExistingGroupBlockRuntimeAttrs,
   };
+  window.normalizeGroupBlockRuntimeState = syncGroupBlockRuntimeAttrs;
+  window.normalizeAllGroupBlocksRuntimeState = normalizeExistingGroupBlockRuntimeAttrs;
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

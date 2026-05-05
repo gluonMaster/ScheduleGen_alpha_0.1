@@ -34,6 +34,9 @@ function updateBlockLessonType(block) {
 
     // Preserve explicit 'trial' type — classifyLessonType cannot produce it
     var explicitType = (block.getAttribute('data-lesson-type') || '').trim();
+    if (explicitType === 'group') {
+        return explicitType;
+    }
     if (block.getAttribute('data-block-id') && explicitType && explicitType !== 'group') {
         return explicitType;
     }

@@ -133,15 +133,25 @@ function updateBlockPosition(block, newTimeRange) {
     }
     var startMinutes = parseInt(times[1], 10) * 60 + parseInt(times[2], 10);
     var endMinutes = parseInt(times[3], 10) * 60 + parseInt(times[4], 10);
+    if (endMinutes <= startMinutes) {
+        console.error('updateBlockPosition: end time must be after start time:', newTimeRange);
+        return;
+    }
 
     var gStart = (typeof gridStart !== 'undefined') ? gridStart : 9 * 60;
     var tInterval = (typeof timeInterval !== 'undefined') ? timeInterval : 5;
 
     var newStartRow = Math.floor((startMinutes - gStart) / tInterval);
     var newRowSpan = Math.floor((endMinutes - startMinutes) / tInterval);
+    if (newStartRow < 0 || newRowSpan <= 0) {
+        console.error('updateBlockPosition: time range is outside the schedule grid:', newTimeRange);
+        return;
+    }
 
     block.setAttribute('data-start-row', newStartRow);
     block.setAttribute('data-row-span', newRowSpan);
+    block.setAttribute('data-start-time', times[1] + ':' + times[2]);
+    block.setAttribute('data-end-time', times[3] + ':' + times[4]);
 
     updateActivityPositions();
 }
