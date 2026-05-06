@@ -14,6 +14,15 @@ from gear_xls.runtime_paths import get_schedule_url, resolve_project_root, valid
 
 class AppActions:
     """Действия приложения"""
+
+    DEFAULT_CONFIG = {
+        "copy_destination_path": "C:\\Alla\\Datenbank\\Stundenplan\\2025-2026\\",
+        "auto_copy_enabled": True,
+        "academic_year": {
+            "period": "2025-2026",
+            "color": "#2E7D32",
+        },
+    }
     
     def __init__(self, process_manager: ProcessManager, log_callback=None):
         self.process_manager = process_manager
@@ -267,21 +276,44 @@ class AppActions:
             config_path = os.path.join(self.program_directory, "config.json")
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    return self._merge_config_with_defaults(json.load(f))
             else:
                 # Создаем конфиг по умолчанию, если файл не существует
-                default_config = {
-                    "copy_destination_path": "C:\\Alla\\Datenbank\\Stundenplan\\2025-2026\\",
-                    "auto_copy_enabled": True
-                }
+                default_config = self._get_default_config()
                 self._save_config(default_config)
                 return default_config
         except Exception as e:
             self.log_action(f"Ошибка при загрузке конфигурации: {e}")
-            return {
-                "copy_destination_path": "C:\\Alla\\Datenbank\\Stundenplan\\2025-2026\\",
-                "auto_copy_enabled": True
-            }
+            return self._get_default_config()
+
+    def _get_default_config(self):
+        """Возвращает копию конфигурации по умолчанию."""
+        return {
+            "copy_destination_path": self.DEFAULT_CONFIG["copy_destination_path"],
+            "auto_copy_enabled": self.DEFAULT_CONFIG["auto_copy_enabled"],
+            "academic_year": dict(self.DEFAULT_CONFIG["academic_year"]),
+        }
+
+    def _merge_config_with_defaults(self, config):
+        """Добавляет отсутствующие ключи в конфигурацию без потери пользовательских значений."""
+        merged_config = self._get_default_config()
+        if not isinstance(config, dict):
+            return merged_config
+
+        for key, value in config.items():
+            if key == "academic_year" and isinstance(value, dict):
+                merged_config["academic_year"].update(value)
+            else:
+                merged_config[key] = value
+
+        return merged_config
+
+    def get_academic_year_info(self):
+        """Возвращает настройки отображения учебного года."""
+        academic_year = self._load_config().get("academic_year", {})
+        if not isinstance(academic_year, dict):
+            return dict(self.DEFAULT_CONFIG["academic_year"])
+        return academic_year
     
     def _save_config(self, config):
         """Сохраняет конфигурацию в config.json"""
@@ -486,14 +518,43 @@ class AppActions:
         
         self.log_action("Запуск визуализатора...")
         
-        visualiser_dir = FileManager.get_file_path(self.program_directory, "visualiser")
-        commands = [f"python example_usage_enhanced.py --lesson-type {self.lesson_type_filter}"]
-        
         def run_in_thread():
-            self.process_manager.terminal_process = self.process_manager.execute_in_terminal(
-                commands, visualiser_dir)
+            if not self._run_visualiser_command():
+                self._show_error(
+                    "Ошибка визуализатора",
+                    "Визуализатор завершился с ошибкой. Подробности отображены в логе.",
+                )
+                return
+
+            self.log_action("Копирование файлов визуализации после запуска кнопки 4...")
+            self._copy_visualization_files()
         
         threading.Thread(target=run_in_thread, daemon=True).start()
+
+    def _run_visualiser_command(self):
+        """Запускает визуализатор и ждет завершения процесса."""
+        visualiser_dir = FileManager.get_file_path(self.program_directory, "visualiser")
+        commands = [f"python -X utf8 -u example_usage_enhanced.py --lesson-type {self.lesson_type_filter}"]
+
+        visualiser_process, reader_thread = self.process_manager.execute_command_capture(
+            commands, visualiser_dir, self.log_action
+        )
+
+        if not visualiser_process:
+            self.log_action("Не удалось запустить визуализатор")
+            return False
+
+        visualiser_process.wait()
+        if reader_thread:
+            reader_thread.join(timeout=10)
+
+        returncode = visualiser_process.returncode
+        if returncode == 0:
+            self.log_action("Визуализатор завершен")
+            return True
+
+        self.log_action(f"ОШИБКА: визуализатор завершился с кодом {returncode}")
+        return False
     
     def open_pdf_visualization(self):
         """Обработчик для кнопки 4.1: Открытие PDF-визуализации"""
@@ -674,14 +735,12 @@ class AppActions:
 
                 # Шаг 5: Запуск визуализатора
                 self.log_action("Шаг 5: Запуск визуализатора...")
-                visualiser_commands = [f"python example_usage_enhanced.py --lesson-type {self.lesson_type_filter}"]
-                visualiser_dir = FileManager.get_file_path(self.program_directory, "visualiser")
-                visualiser_process = self.process_manager.execute_command_and_wait(visualiser_commands, visualiser_dir)
-
-                # Ждем завершения визуализатора
-                if visualiser_process:
-                    visualiser_process.wait()
-                    self.log_action("Визуализатор завершен")
+                if not self._run_visualiser_command():
+                    self._show_error(
+                        "Ошибка визуализатора",
+                        "Визуализатор завершился с ошибкой. Копирование файлов не выполнено.",
+                    )
+                    return
 
                 # Шаг 6: Копирование файлов визуализации
                 self.log_action("Шаг 6: Копирование файлов визуализации...")

@@ -46,7 +46,7 @@ the Tkinter log widget exists (avoiding a circular dependency during GUI setup).
 | `run_gear_xls()` | 3 | Starts `gear_xls/main.py` in a new terminal |
 | `run_flask_server()` | 3.1 | Writes `start_flask.bat` and launches Flask in a new terminal; guards against double-start |
 | `open_web_app()` | 3.2 | Auto-starts Flask if not running, polls `localhost:5000` (5 s timeout), then opens browser |
-| `run_visualiser()` | 4 | Runs `example_usage_enhanced.py --lesson-type <filter>` in a terminal |
+| `run_visualiser()` | 4 | Runs `example_usage_enhanced.py --lesson-type <filter>`, streams logs to GUI, then copies outputs when enabled |
 | `open_pdf_visualization()` | 4.1 | Opens `visualiser/enhanced_schedule_visualization.pdf` |
 | `open_html_visualization()` | 4.2 | Opens `visualiser/enhanced_schedule_visualization.html` in browser |
 | `select_xlsx_file()` | 5 | File-picker dialog; sets `selected_xlsx_file` |
@@ -86,9 +86,9 @@ Step 4  ProcessManager.execute_command_capture()
           → checks returncode == 0 AND that optimized_schedule.xlsx mtime changed
           → on failure: shows error dialog, pipeline stops
 
-Step 5  ProcessManager.execute_command_and_wait()
+Step 5  ProcessManager.execute_command_capture()
           → runs example_usage_enhanced.py --lesson-type <filter>
-          → waits for completion
+          → streams logs to GUI and waits for completion
 
 Step 6  _copy_visualization_files()
           → reads config.json (copy_destination_path, auto_copy_enabled)
@@ -114,7 +114,7 @@ Three subprocess execution modes are used:
 AppActions
   ├── ProcessManager.execute_in_terminal(cmds, dir)
   │     Opens a visible cmd/Terminal window; user sees output.
-  │     Used by: run_scheduler, run_gear_xls, run_visualiser, convert_to_xlsm
+  │     Used by: run_scheduler, run_gear_xls, convert_to_xlsm
   │
   ├── ProcessManager.start_new_terminal_with_commands(dir)
   │     Writes start_flask.bat then opens it in a new cmd window.
@@ -123,11 +123,11 @@ AppActions
   ├── ProcessManager.execute_command_capture(cmds, dir, log_cb)
   │     Headless Popen with stdout/stderr piped; reader thread feeds
   │     log_cb line-by-line. Returns (process, reader_thread).
-  │     Used by: run_scheduler_newpref step 4 (optimizer)
+  │     Used by: run_visualiser and run_scheduler_newpref steps 4-5
   │
   └── ProcessManager.execute_command_and_wait(cmds, dir)
         Headless Popen, no output capture; caller calls .wait().
-        Used by: run_scheduler_newpref step 5 (visualiser)
+        Currently retained for compatibility; not used by AppActions.
 ```
 
 All long-running operations are dispatched via `threading.Thread(daemon=True)`
@@ -141,7 +141,7 @@ gui.py (ApplicationInterface)
 UIBuilder (ui_builder.py)
   constructs:
   ├── Main window + frame
-  ├── Info labels (working directory)
+  ├── Info labels (working directory, academic year badge)
   ├── Action buttons (single, double-row, triple-row layouts)
   ├── Log Text widget (receives Logger output)
   └── Status bar
@@ -168,10 +168,15 @@ so the Logger can be swapped for a simple `print` fallback during early init.
 ```json
 {
     "copy_destination_path": "C:\\Alla\\Datenbank\\Stundenplan\\2025-2026\\",
-    "auto_copy_enabled": true
+    "auto_copy_enabled": true,
+    "academic_year": {
+        "period": "2025-2026",
+        "color": "#2E7D32"
+    }
 }
 ```
-If the file is absent a default is created automatically.
+If the file is absent a default is created automatically. `academic_year` is displayed
+in the GUI information panel and appended to the window title.
 
 ## Data Flow (GUI perspective)
 ```
@@ -184,8 +189,9 @@ User triggers button 7 → run_scheduler_newpref() (background thread)
   │       → visualiser/optimized_schedule.xlsx
   │       → log lines streamed to GUI widget
   │
-  ├─ ProcessManager.execute_command_and_wait
+  ├─ ProcessManager.execute_command_capture
   │     example_usage_enhanced.py --lesson-type <filter>
+  │       → log lines streamed to GUI widget
   │       → visualiser/enhanced_schedule_visualization.{html,pdf}
   │
   └─ FileManager.copy → configured destination (OneDrive etc.)
@@ -193,7 +199,7 @@ User triggers button 7 → run_scheduler_newpref() (background thread)
 Independent actions (buttons 2, 3, 4):
   run_scheduler()   → main_sch.py in interactive terminal
   run_gear_xls()    → gear_xls/main.py in interactive terminal
-  run_visualiser()  → example_usage_enhanced.py in interactive terminal
+  run_visualiser()  → example_usage_enhanced.py with GUI logs, then configured copy
 ```
 
 ## Error Handling Pattern

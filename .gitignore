@@ -2,6 +2,7 @@
 gear_xls/config/
 *.txt
 *.json
+!config.json
 
 # Prompt drafts and local assistant context
 PROMPTS/
@@ -9,7 +10,7 @@ Prompt-*.md
 .claude/
 
 # Local/private configuration and secrets
-config.json
+
 .env
 .env.*
 !.env.example

@@ -49,6 +49,20 @@ class UIBuilder:
         file_label = None
         
         return dir_label, file_label
+
+    @staticmethod
+    def create_academic_year_label(info_frame):
+        """Создание цветной метки учебного года."""
+        year_label = tk.Label(
+            info_frame,
+            text="Учебный год: не указан",
+            anchor=tk.W,
+            padx=8,
+            pady=3,
+            font=("Arial", 10, "bold"),
+        )
+        year_label.pack(anchor=tk.W, padx=10, pady=(0, 5))
+        return year_label
     
     @staticmethod
     def create_buttons_frame(parent):

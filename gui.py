@@ -25,6 +25,7 @@ class ApplicationInterface:
         # Информационная панель
         info_frame = UIBuilder.create_info_frame(main_frame)
         self.dir_label, _ = UIBuilder.create_info_labels(info_frame)  # file_label больше не используется
+        self.academic_year_label = UIBuilder.create_academic_year_label(info_frame)
 
         # Контейнер для кнопок
         buttons_frame = UIBuilder.create_buttons_frame(main_frame)
@@ -51,9 +52,46 @@ class ApplicationInterface:
             self.dir_label.config(text=f"Рабочий каталог: {display_dir}")
         else:
             self.dir_label.config(text="⚠ Рабочий каталог: не определен автоматически")
+        self._update_academic_year_label()
 
         # Создание кнопок интерфейса
         self._create_buttons(buttons_frame)
+
+    def _update_academic_year_label(self):
+        """Показывает период учебного года из config.json."""
+        academic_year = self.app_actions.get_academic_year_info()
+        period = str(academic_year.get("period", "")).strip()
+        color = str(academic_year.get("color", "#2E7D32")).strip() or "#2E7D32"
+
+        text = f"Учебный год: {period}" if period else "Учебный год: не указан"
+        foreground = self._get_contrast_text_color(color)
+
+        try:
+            self.academic_year_label.config(text=text, bg=color, fg=foreground)
+        except tk.TclError:
+            self.academic_year_label.config(text=text, bg="#2E7D32", fg="white")
+
+        if period:
+            self.root.title(f"Единый интерфейс оптимизации расписания - {period}")
+
+    @staticmethod
+    def _get_contrast_text_color(background_color):
+        """Возвращает черный или белый цвет текста для hex-фона."""
+        hex_color = background_color.lstrip("#")
+        if len(hex_color) == 3:
+            hex_color = "".join(char * 2 for char in hex_color)
+        if len(hex_color) != 6:
+            return "white"
+
+        try:
+            red = int(hex_color[0:2], 16)
+            green = int(hex_color[2:4], 16)
+            blue = int(hex_color[4:6], 16)
+        except ValueError:
+            return "white"
+
+        brightness = (red * 299 + green * 587 + blue * 114) / 1000
+        return "black" if brightness > 160 else "white"
 
     def _create_buttons(self, buttons_frame):
         """Создание всех кнопок интерфейса"""

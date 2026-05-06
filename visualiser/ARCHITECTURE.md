@@ -58,10 +58,15 @@ Via project-root `config.json`:
 ```json
 {
   "copy_destination_path": "path/to/OneDrive/folder",
-  "auto_copy_enabled": true
+  "auto_copy_enabled": true,
+  "academic_year": {
+    "period": "2025-2026",
+    "color": "#2E7D32"
+  }
 }
 ```
 When `auto_copy_enabled` is true, copies output files to OneDrive automatically.
+The `academic_year` section is displayed by the root GUI to distinguish parallel instances.
 See `CONFIG_README.md` for full documentation.
 
 ## Output Files
