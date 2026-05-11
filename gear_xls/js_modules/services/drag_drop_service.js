@@ -8,6 +8,7 @@ var DragDropService = (function() {
     var offsetX = 0;
     var offsetY = 0;
     var draggedBlock = null;
+    var dragSnapshot = null;
 
     function getAuthUi() {
         return window.SchedGenAuthUI || null;
@@ -91,6 +92,7 @@ var DragDropService = (function() {
     
     function startDrag(block, event) {
         draggedBlock = block;
+        dragSnapshot = createDragSnapshot(block);
         window.draggedBlock = block; // Поддерживаем совместимость с существующим кодом
         
         var rect = block.getBoundingClientRect();
@@ -111,9 +113,10 @@ var DragDropService = (function() {
         
         // Если был начат процесс перетаскивания, отменяем его
         if (draggedBlock === block) {
-            draggedBlock.style.opacity = 1;
+            restoreDragSnapshot(dragSnapshot);
             draggedBlock = null;
             window.draggedBlock = null;
+            dragSnapshot = null;
         }
         
         // Предотвращаем запуск перетаскивания
@@ -168,9 +171,50 @@ var DragDropService = (function() {
             
             draggedBlock = null;
             window.draggedBlock = null;
+            dragSnapshot = null;
         }
     }
     
+    // Drag cancellation helpers.
+    function createDragSnapshot(block) {
+        if (!block) {
+            return null;
+        }
+        return {
+            block: block,
+            left: block.style.left || '',
+            top: block.style.top || '',
+            opacity: block.style.opacity || '',
+            day: block.getAttribute('data-day'),
+            colIndex: block.getAttribute('data-col-index'),
+            startRow: block.getAttribute('data-start-row'),
+            className: block.className
+        };
+    }
+
+    function restoreDragSnapshot(snapshot) {
+        if (!snapshot || !snapshot.block) {
+            return;
+        }
+        snapshot.block.style.left = snapshot.left;
+        snapshot.block.style.top = snapshot.top;
+        snapshot.block.style.opacity = snapshot.opacity || '1';
+        restoreAttribute(snapshot.block, 'data-day', snapshot.day);
+        restoreAttribute(snapshot.block, 'data-col-index', snapshot.colIndex);
+        restoreAttribute(snapshot.block, 'data-start-row', snapshot.startRow);
+        if (snapshot.className) {
+            snapshot.block.className = snapshot.className;
+        }
+    }
+
+    function restoreAttribute(element, name, value) {
+        if (value === null || typeof value === 'undefined') {
+            element.removeAttribute(name);
+            return;
+        }
+        element.setAttribute(name, value);
+    }
+
     // Публичный API
     return {
         init: function() {

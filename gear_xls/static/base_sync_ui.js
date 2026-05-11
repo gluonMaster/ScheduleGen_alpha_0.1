@@ -1113,10 +1113,14 @@
     }
     clearBasePendingDragStart();
     cancelBaseDrag(block);
-    _baseEditedBlock = block;
     event.preventDefault();
     event.stopPropagation();
 
+    if (window.editDialogOpen) {
+      return;
+    }
+
+    _baseEditedBlock = block;
     if (typeof window.openEditDialog === "function") {
       window.openEditDialog(
         block,
@@ -1150,6 +1154,12 @@
       offsetY: clientY - rect.top,
       initialLeft: parseFloat(block.style.left) || 0,
       initialTop: parseFloat(block.style.top) || 0,
+      initialLeftStyle: block.style.left || "",
+      initialTopStyle: block.style.top || "",
+      initialDay: block.getAttribute("data-day"),
+      initialColIndex: block.getAttribute("data-col-index"),
+      initialStartRow: block.getAttribute("data-start-row"),
+      initialClassName: block.className,
       moved: false,
     };
     clearBasePendingDragStart();
@@ -1218,9 +1228,32 @@
       return;
     }
     if (_baseActiveDrag.block) {
-      _baseActiveDrag.block.style.opacity = "1";
+      restoreBaseDragSnapshot(_baseActiveDrag);
     }
     _baseActiveDrag = null;
+  }
+
+  function restoreBaseDragSnapshot(drag) {
+    if (!drag || !drag.block) {
+      return;
+    }
+    drag.block.style.opacity = "1";
+    drag.block.style.left = drag.initialLeftStyle || "";
+    drag.block.style.top = drag.initialTopStyle || "";
+    restoreAttribute(drag.block, "data-day", drag.initialDay);
+    restoreAttribute(drag.block, "data-col-index", drag.initialColIndex);
+    restoreAttribute(drag.block, "data-start-row", drag.initialStartRow);
+    if (drag.initialClassName) {
+      drag.block.className = drag.initialClassName;
+    }
+  }
+
+  function restoreAttribute(element, name, value) {
+    if (value === null || typeof value === "undefined") {
+      element.removeAttribute(name);
+      return;
+    }
+    element.setAttribute(name, value);
   }
 
   function handleBaseResizeStart(event) {

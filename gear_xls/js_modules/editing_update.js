@@ -96,6 +96,19 @@ function openEditDialog(block, origLeft, origTop, building) {
     console.log("Открытие диалога редактирования");
     
     // Устанавливаем флаг, что диалог открыт
+    if (typeof window.closeEditDialog === 'function') {
+        window.closeEditDialog();
+    }
+    document.querySelectorAll('.dialog-overlay').forEach(function(existingOverlay) {
+        if (
+            existingOverlay.querySelector &&
+            existingOverlay.querySelector('#edit-form') &&
+            existingOverlay.parentNode
+        ) {
+            existingOverlay.parentNode.removeChild(existingOverlay);
+        }
+    });
+
     window.editDialogOpen = true;
     
     // Восстанавливаем позицию блока, если она была изменена при двойном клике
@@ -201,6 +214,20 @@ function openEditDialog(block, origLeft, origTop, building) {
     dialogElement.innerHTML = dialogHTML;
     document.body.appendChild(dialogElement);
 
+    function findInDialog(selector) {
+        return dialogElement.querySelector(selector);
+    }
+
+    var formElement = findInDialog('#edit-form');
+    var cancelButton = findInDialog('#cancel-edit');
+
+    if (formElement) {
+        // Guard immediately so a later initialization error cannot turn Save into page reload.
+        formElement.addEventListener('submit', function(e) {
+            e.preventDefault();
+        }, true);
+    }
+
     // --- Секция дат и кнопка конвертации для trial-блоков ---
     var _editLessonType = block.getAttribute('data-lesson-type');
     if (_editLessonType === 'trial' && window.TrialUI) {
@@ -227,9 +254,7 @@ function openEditDialog(block, origLeft, origTop, building) {
         if (_editButtonRow && _allowedConvertRoles.indexOf(_currentRole) !== -1) {
             window.TrialUI.renderConvertButton(block, _currentRole, _editButtonRow.parentNode, function (updatedBlock) {
                 // Закрываем диалог и обновляем блок через refreshIndividualLayer
-                document.body.removeChild(dialogElement);
-                document.body.style.overflow = '';
-                window.editDialogOpen = false;
+                closeDialog();
                 if (typeof window.refreshIndividualLayer === 'function') {
                     window.refreshIndividualLayer();
                 }
@@ -242,8 +267,8 @@ function openEditDialog(block, origLeft, origTop, building) {
     var teachersList = (typeof spiskiData !== 'undefined' && spiskiData && Array.isArray(spiskiData.teachers)) ? spiskiData.teachers : [];
     var groupsList = (typeof spiskiData !== 'undefined' && spiskiData && Array.isArray(spiskiData.groups)) ? spiskiData.groups : [];
 
-    var buildingSelect = document.getElementById('edit-building');
-    var roomInput = document.getElementById('edit-room');
+    var buildingSelect = findInDialog('#edit-building');
+    var roomInput = findInDialog('#edit-room');
 
     // Rooms are building-specific. Use a proxy array updated in-place on building changes
     // to avoid re-attaching event listeners to the same input element.
@@ -258,9 +283,9 @@ function openEditDialog(block, origLeft, origTop, building) {
     _refreshRoomProxyItems(buildingSelect ? buildingSelect.value : '');
 
     if (typeof createAutocompleteInput === 'function') {
-        createAutocompleteInput(document.getElementById('edit-subject'), subjectsList, { allowCustom: true, spiskiKey: 'subjects' });
-        createAutocompleteInput(document.getElementById('edit-teacher'), teachersList, { allowCustom: true, spiskiKey: 'teachers' });
-        createAutocompleteInput(document.getElementById('edit-students'), groupsList, { allowCustom: true, spiskiKey: 'groups' });
+        createAutocompleteInput(findInDialog('#edit-subject'), subjectsList, { allowCustom: true, spiskiKey: 'subjects' });
+        createAutocompleteInput(findInDialog('#edit-teacher'), teachersList, { allowCustom: true, spiskiKey: 'teachers' });
+        createAutocompleteInput(findInDialog('#edit-students'), groupsList, { allowCustom: true, spiskiKey: 'groups' });
         createAutocompleteInput(roomInput, roomProxyItems, {
             allowCustom: true,
             onAddItem: function(v) {
@@ -286,7 +311,10 @@ function openEditDialog(block, origLeft, origTop, building) {
 
     // Ставим фокус на первое поле
     setTimeout(function() {
-        document.getElementById('edit-subject').focus();
+        var subjectField = findInDialog('#edit-subject');
+        if (subjectField) {
+            subjectField.focus();
+        }
     }, 100);
 
     // Предотвращаем скролл страницы при клике на overlay
@@ -300,13 +328,19 @@ function openEditDialog(block, origLeft, origTop, building) {
 
     // Функция закрытия диалога
     function closeDialog() {
-        document.body.removeChild(dialogElement);
+        if (dialogElement.parentNode) {
+            dialogElement.parentNode.removeChild(dialogElement);
+        }
         document.body.style.overflow = '';
         window.editDialogOpen = false;
+        document.removeEventListener('keydown', handleEscape);
+        if (window.closeEditDialog === closeDialog) {
+            window.closeEditDialog = null;
+        }
     }
+    window.closeEditDialog = closeDialog;
 
     // Обработчик отправки формы
-    var formElement = document.getElementById('edit-form');
     if (formElement) {
         formElement.addEventListener('submit', function(e) {
             console.log("Форма отправлена");
@@ -316,12 +350,12 @@ function openEditDialog(block, origLeft, origTop, building) {
             e.stopPropagation();
             
             // Получаем значения из формы
-            var newBuilding = document.getElementById('edit-building').value;
-            var newSubject = document.getElementById('edit-subject').value;
-            var newTeacher = document.getElementById('edit-teacher').value;
-            var newStudents = document.getElementById('edit-students').value;
-            var newRoom = document.getElementById('edit-room').value;
-            var newTime = document.getElementById('edit-time').value;
+            var newBuilding = findInDialog('#edit-building').value;
+            var newSubject = findInDialog('#edit-subject').value;
+            var newTeacher = findInDialog('#edit-teacher').value;
+            var newStudents = findInDialog('#edit-students').value;
+            var newRoom = findInDialog('#edit-room').value;
+            var newTime = findInDialog('#edit-time').value;
             
             console.log("Новые значения:", {
                 building: newBuilding,
@@ -447,7 +481,6 @@ function openEditDialog(block, origLeft, origTop, building) {
     }
 
     // Обработчик кнопки отмены
-    var cancelButton = document.getElementById('cancel-edit');
     if (cancelButton) {
         cancelButton.addEventListener('click', function(e) {
             console.log("Нажата кнопка отмены");
