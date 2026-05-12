@@ -19,8 +19,8 @@ _lock_mutex = threading.Lock()
 logger = logging.getLogger(__name__)
 
 
-def _lock_json_path():
-    return get_lock_json_path()
+def _lock_json_path(project_root=None):
+    return get_lock_json_path(project_root)
 
 
 def _empty_lock_state():
@@ -36,8 +36,8 @@ def _empty_lock_state():
     }
 
 
-def _read_lock():
-    lock_json_path = _lock_json_path()
+def _read_lock(project_root=None):
+    lock_json_path = _lock_json_path(project_root)
     if not os.path.exists(lock_json_path):
         return _empty_lock_state()
     try:
@@ -53,8 +53,8 @@ def _read_lock():
         return _empty_lock_state()
 
 
-def _write_lock(state):
-    lock_json_path = _lock_json_path()
+def _write_lock(state, project_root=None):
+    lock_json_path = _lock_json_path(project_root)
     directory = os.path.dirname(lock_json_path)
     os.makedirs(directory, exist_ok=True)
     tmp_path = None
@@ -95,18 +95,18 @@ def _clear_lock(state, reason, released_by=None):
     state["release_reason"] = reason
 
 
-def get_lock_status():
+def get_lock_status(project_root=None):
     with _lock_mutex:
-        state = _read_lock()
+        state = _read_lock(project_root)
         if _is_expired(state):
             _clear_lock(state, "timeout")
-            _write_lock(state)
+            _write_lock(state, project_root)
         return state
 
 
-def acquire_lock(login):
+def acquire_lock(login, project_root=None):
     with _lock_mutex:
-        state = _read_lock()
+        state = _read_lock(project_root)
         if _is_expired(state):
             _clear_lock(state, "timeout")
         if state.get("holder") is not None:
@@ -124,29 +124,29 @@ def acquire_lock(login):
         state["released_at"] = None
         state["released_by"] = None
         state["release_reason"] = None
-        _write_lock(state)
+        _write_lock(state, project_root)
         return {"ok": True, "holder": login, "version": state["version"]}
 
 
-def release_lock(login, version):
+def release_lock(login, version, project_root=None):
     with _lock_mutex:
-        state = _read_lock()
+        state = _read_lock(project_root)
         if state.get("holder") != login:
             return {"ok": False, "error": "Not the lock holder"}
         if state.get("version") != version:
             return {"ok": False, "error": "Version mismatch"}
         _clear_lock(state, "released", released_by=login)
-        _write_lock(state)
+        _write_lock(state, project_root)
         return {"ok": True, "version": state["version"]}
 
 
-def heartbeat(login, version):
+def heartbeat(login, version, project_root=None):
     with _lock_mutex:
-        state = _read_lock()
+        state = _read_lock(project_root)
         if _is_expired(state):
             expired_holder = state.get("holder")
             _clear_lock(state, "timeout")
-            _write_lock(state)
+            _write_lock(state, project_root)
             if expired_holder == login:
                 return {
                     "ok": False,
@@ -162,17 +162,31 @@ def heartbeat(login, version):
                 }
             return {"ok": False, "reason": "not_holder", "current_version": state["version"]}
         state["last_heartbeat"] = datetime.utcnow().isoformat()
-        _write_lock(state)
+        _write_lock(state, project_root)
         return {"ok": True, "version": state["version"]}
 
 
-def force_release(released_by_login):
+def force_release(released_by_login, project_root=None):
     with _lock_mutex:
-        state = _read_lock()
+        state = _read_lock(project_root)
         previous_holder = state.get("holder")
         _clear_lock(state, "force_released", released_by=released_by_login)
         state["last_holder"] = previous_holder
-        _write_lock(state)
+        _write_lock(state, project_root)
+        return {
+            "ok": True,
+            "previous_holder": previous_holder,
+            "version": state["version"],
+        }
+
+
+def clear_for_restore(restored_by_login, project_root=None):
+    with _lock_mutex:
+        state = _read_lock(project_root)
+        previous_holder = state.get("holder")
+        _clear_lock(state, "restore_completed", released_by=restored_by_login)
+        state["last_holder"] = previous_holder
+        _write_lock(state, project_root)
         return {
             "ok": True,
             "previous_holder": previous_holder,

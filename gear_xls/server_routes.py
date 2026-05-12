@@ -47,8 +47,10 @@ from gear_xls.runtime_paths import (
 )
 
 from auth import authenticate, current_user, get_or_create_secret_key, login_required, role_required
+import backup_manager
 from excel_exporter import process_schedule_export_request
 import lock_manager
+import restore_manager
 import rooms_report
 import rooms_routes
 import state_manager
@@ -111,14 +113,36 @@ JSON_AUTH_PATHS = {
     "/api/schedule",
     "/api/schedule/publish",
     "/api/rooms/availability",
+    "/api/backups",
+    "/api/restore/status",
+    "/api/restore/status/clear",
 }
+RESTORE_LOCKED_STATUS = 423
+RESTORE_BLOCK_MESSAGE = (
+    "\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440 "
+    "\u0432\u044b\u043f\u043e\u043b\u043d\u044f\u0435\u0442 "
+    "\u0432\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435 "
+    "\u0431\u0430\u0437\u044b \u0440\u0430\u0441\u043f\u0438\u0441\u0430\u043d\u0438\u044f. "
+    "\u0420\u0430\u0431\u043e\u0442\u0430 \u0432\u0440\u0435\u043c\u0435\u043d\u043d\u043e "
+    "\u0437\u0430\u0431\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u0430\u043d\u0430. "
+    "\u0412\u044b \u0441\u043c\u043e\u0436\u0435\u0442\u0435 \u0437\u0430\u0439\u0442\u0438 "
+    "\u043f\u043e\u0441\u043b\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0438\u044f "
+    "\u0432\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f."
+)
+
+
+def _json_auth_path(path):
+    return (
+        path in JSON_AUTH_PATHS
+        or path.startswith("/api/blocks/")
+        or path.startswith("/api/backups/")
+        or path.startswith("/api/restore/")
+    )
 
 
 @app.before_request
 def ensure_json_401_for_lock_api():
-    if (
-        request.path in JSON_AUTH_PATHS or request.path.startswith("/api/blocks/")
-    ) and session.get("login") is None:
+    if _json_auth_path(request.path) and session.get("login") is None:
         return jsonify({"error": "Unauthorized"}), 401
 
 
@@ -140,6 +164,158 @@ def csrf_same_origin_check():
             request.method, request.path, origin, expected,
         )
         return jsonify({"error": "Forbidden", "code": "CSRF_FAILED"}), 403
+
+
+def _restore_blocks_requests(status):
+    return bool(status.get("active") or status.get("recovery_required"))
+
+
+def _restore_public_status(status):
+    return {
+        "active": bool(status.get("active")),
+        "started_at": status.get("started_at"),
+        "started_by": status.get("started_by"),
+        "message": status.get("message"),
+        "generation": int(status.get("generation") or 0),
+        "last_completed_at": status.get("last_completed_at"),
+        "last_completed_by": status.get("last_completed_by"),
+        "last_restored_from": status.get("last_restored_from"),
+        "recovery_required": bool(status.get("recovery_required")),
+        "recovery_message": status.get("recovery_message"),
+        "safety_backup_id": status.get("safety_backup_id"),
+    }
+
+
+def _restore_status_api_payload(status):
+    public_status = _restore_public_status(status)
+    return {
+        "ok": True,
+        "restore_in_progress": _restore_blocks_requests(status),
+        **public_status,
+    }
+
+
+def _restore_status_summary(status):
+    return {
+        "active": bool(status.get("active")),
+        "generation": int(status.get("generation") or 0),
+        "last_completed_at": status.get("last_completed_at"),
+        "recovery_required": bool(status.get("recovery_required")),
+        "message": status.get("recovery_message") or status.get("message"),
+    }
+
+
+def _restore_error_payload(status):
+    payload = {
+        "ok": False,
+        "error": "Restore in progress",
+        "code": "RESTORE_IN_PROGRESS",
+        "message": RESTORE_BLOCK_MESSAGE,
+        "restore_generation": int(status.get("generation") or 0),
+    }
+    if status.get("recovery_required"):
+        payload["recovery_required"] = True
+        payload["recovery_message"] = status.get("recovery_message")
+    return payload
+
+
+def _restore_block_response(status):
+    return jsonify(_restore_error_payload(status)), RESTORE_LOCKED_STATUS
+
+
+def _is_backup_download_path(path):
+    return re.fullmatch(r"/api/backups/[^/]+/download", path or "") is not None
+
+
+def _is_backup_restore_path(path):
+    return re.fullmatch(r"/api/backups/[^/]+/restore", path or "") is not None
+
+
+def _restore_request_allowed():
+    path = request.path
+    method = request.method
+    role = session.get("role")
+
+    if path.startswith("/static/") or path.startswith("/js_modules/"):
+        return True
+    if path in ("/login", "/logout", "/health"):
+        return True
+    if method == "GET" and path in ("/api/restore/status", "/api/status"):
+        return True
+    if method == "POST" and path == "/api/restore/status/clear":
+        return True
+    if role == "admin" and method == "GET" and path == "/api/backups":
+        return True
+    if role == "admin" and method == "GET" and _is_backup_download_path(path):
+        return True
+    if role == "admin" and method == "POST" and _is_backup_restore_path(path):
+        return True
+    return False
+
+
+RESTORE_STATUS_PAGE_TEMPLATE = """<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>{{ title }}</title>
+<style>
+body{font-family:Arial,sans-serif;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f4f6f8;color:#202124}
+main{max-width:760px;padding:32px}
+h1{font-size:24px;margin:0 0 16px}
+p{font-size:17px;line-height:1.55}
+pre{background:#fff;border:1px solid #d8dee4;border-radius:6px;padding:16px;overflow:auto}
+.warning{color:#b3261e;font-weight:600}
+</style>
+</head>
+<body>
+<main>
+<h1>{{ title }}</h1>
+<p>{{ message }}</p>
+{% if details %}<p class="{{ 'warning' if recovery_required else '' }}">{{ details }}</p>{% endif %}
+{% if is_admin %}<pre>{{ status_json }}</pre>{% endif %}
+</main>
+</body>
+</html>"""
+
+
+def _restore_schedule_page(status):
+    is_admin = session.get("role") == "admin"
+    recovery_required = bool(status.get("recovery_required"))
+    title = "Restore recovery required" if recovery_required and is_admin else "Restore in progress"
+    details = status.get("recovery_message") or status.get("message")
+    response = app.make_response(
+        render_template_string(
+            RESTORE_STATUS_PAGE_TEMPLATE,
+            title=title,
+            message=RESTORE_BLOCK_MESSAGE,
+            details=details,
+            recovery_required=recovery_required,
+            is_admin=is_admin,
+            status_json=json.dumps(
+                _restore_status_api_payload(status),
+                ensure_ascii=False,
+                indent=2,
+            ),
+        )
+    )
+    response.status_code = RESTORE_LOCKED_STATUS
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.before_request
+def block_requests_during_restore():
+    status = restore_manager.get_restore_status()
+    if not _restore_blocks_requests(status):
+        return
+    if _restore_request_allowed():
+        return
+    if request.path == "/schedule" and request.method == "GET":
+        if session.get("login") is None:
+            return
+        return _restore_schedule_page(status)
+    if request.path.startswith("/api/") or request.path == "/export_to_excel":
+        return _restore_block_response(status)
 
 
 @app.after_request
@@ -326,6 +502,7 @@ def schedule():
         # Load the search scaffold after the existing schedule UI so it can
         # reuse the injected nav slot and exposed auth/base/individual APIs.
         '<script src="/static/schedule_search_ui.js"></script>\n'
+        '<script src="/static/backup_ui.js"></script>\n'
     )
     if "</body>" in html:
         html = html.replace("</body>", auth_ui_tag + "</body>", 1)
@@ -342,6 +519,35 @@ def _require_lock(login):
     if state.get("holder") != login:
         return {"ok": False, "error": "No active lock", "code": "NO_LOCK"}
     return None
+
+
+def _backup_error_response(exc):
+    status = getattr(exc, "status_code", 400)
+    return (
+        jsonify(
+            {
+                "ok": False,
+                "error": getattr(exc, "message", str(exc)),
+                "code": getattr(exc, "code", "BACKUP_ERROR"),
+            }
+        ),
+        status,
+    )
+
+
+def _restore_manager_error_response(exc):
+    status = getattr(exc, "status_code", 400)
+    payload = {
+        "ok": False,
+        "error": getattr(exc, "message", str(exc)),
+        "code": getattr(exc, "code", "RESTORE_ERROR"),
+    }
+    payload.update(getattr(exc, "payload", {}) or {})
+    return jsonify(payload), status
+
+
+def _restore_in_progress():
+    return restore_manager.is_restore_active()
 
 
 @app.route("/api/lock/status")
@@ -407,6 +613,7 @@ def api_lock_force_release():
 @login_required
 def api_status():
     lock_state = lock_manager.get_lock_status()
+    restore_status = restore_manager.get_restore_status()
     return jsonify(
         {
             "lock": {
@@ -418,8 +625,208 @@ def api_status():
             "base_revision": state_manager.get_base_revision(),
             "individual_revision": state_manager.get_individual_revision(),
             "base_updated": False,
+            "restore": _restore_status_summary(restore_status),
         }
     )
+
+
+@app.route("/api/restore/status", methods=["GET"])
+@login_required
+def api_restore_status():
+    return jsonify(_restore_status_api_payload(restore_manager.get_restore_status()))
+
+
+@app.route("/api/restore/status/clear", methods=["POST"])
+@login_required
+@role_required("admin")
+def api_restore_status_clear():
+    data = request.get_json(force=True, silent=True) or {}
+    user = current_user()
+    previous_status = restore_manager.get_restore_status()
+    try:
+        status = restore_manager.clear_restore_status(
+            confirm=data.get("confirm") is True,
+            cleared_by=user["login"],
+        )
+    except restore_manager.RestoreStatusError as exc:
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": exc.message,
+                    "code": exc.code,
+                }
+            ),
+            exc.status_code,
+        )
+
+    logger.warning(
+        "Restore status clear endpoint used by admin=%s recovery_required=%s stale=%s",
+        user["login"],
+        bool(previous_status.get("recovery_required")),
+        restore_manager.is_restore_stale(previous_status),
+    )
+    return jsonify({"ok": True, "status": _restore_status_api_payload(status)})
+
+
+@app.route("/api/backups", methods=["GET"])
+@login_required
+@role_required("admin")
+def api_backups_list():
+    return jsonify({"ok": True, "backups": backup_manager.list_backups()})
+
+
+@app.route("/api/backups", methods=["POST"])
+@login_required
+@role_required("admin")
+def api_backups_create():
+    if _restore_in_progress():
+        return _restore_block_response(restore_manager.get_restore_status())
+    data = request.get_json(force=True, silent=True) or {}
+    user = current_user()
+    try:
+        backup = backup_manager.create_backup(
+            user["login"],
+            user.get("display_name") or user["login"],
+            comment=data.get("comment", ""),
+            backup_kind="manual",
+        )
+    except backup_manager.BackupError as exc:
+        return _backup_error_response(exc)
+    except Exception as exc:
+        logger.exception("Unexpected backup creation error")
+        return jsonify({"ok": False, "error": str(exc), "code": "BACKUP_CREATE_FAILED"}), 500
+    return jsonify(
+        {
+            "ok": True,
+            "backup": {
+                "id": backup["id"],
+                "filename": backup["filename"],
+                "backup_kind": backup["backup_kind"],
+                "download_url": backup["download_url"],
+            },
+        }
+    )
+
+
+@app.route("/api/backups/upload", methods=["POST"])
+@login_required
+@role_required("admin")
+def api_backups_upload():
+    if _restore_in_progress():
+        return _restore_block_response(restore_manager.get_restore_status())
+
+    uploaded_file = request.files.get("file")
+    user = current_user()
+    try:
+        backup = backup_manager.store_uploaded_backup(
+            uploaded_file.stream if uploaded_file is not None else None,
+            uploaded_file.filename if uploaded_file is not None else "",
+            user["login"],
+            user.get("display_name") or user["login"],
+        )
+    except backup_manager.BackupError as exc:
+        return _backup_error_response(exc)
+    except Exception as exc:
+        logger.exception("Unexpected backup upload error")
+        return jsonify({"ok": False, "error": str(exc), "code": "BACKUP_UPLOAD_FAILED"}), 500
+
+    warnings = []
+    if backup.get("project_root_matches") is False:
+        warnings.append("PROJECT_ROOT_MISMATCH")
+
+    return jsonify(
+        {
+            "ok": True,
+            "backup": {
+                "id": backup["id"],
+                "filename": backup["filename"],
+                "backup_kind": backup["backup_kind"],
+                "project_root_matches": backup["project_root_matches"],
+                "download_url": backup["download_url"],
+            },
+            "warnings": warnings,
+        }
+    )
+
+
+@app.route("/api/backups/<backup_id>/download", methods=["GET"])
+@login_required
+@role_required("admin")
+def api_backup_download(backup_id):
+    try:
+        path = backup_manager.get_backup_path(backup_id)
+    except backup_manager.BackupError as exc:
+        return _backup_error_response(exc)
+    if not os.path.exists(path):
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": "Backup not found",
+                    "code": "BACKUP_NOT_FOUND",
+                }
+            ),
+            404,
+        )
+    filename = os.path.basename(path)
+    return send_file(
+        path,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/zip",
+    )
+
+
+@app.route("/api/backups/<backup_id>/restore", methods=["POST"])
+@login_required
+@role_required("admin")
+def api_backup_restore(backup_id):
+    data = request.get_json(force=True, silent=True) or {}
+    if data.get("confirm") is not True:
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": "Explicit confirmation is required",
+                    "code": "CONFIRM_REQUIRED",
+                }
+            ),
+            400,
+        )
+    if _restore_in_progress():
+        return _restore_block_response(restore_manager.get_restore_status())
+
+    user = current_user()
+    lock_state = lock_manager.get_lock_status()
+    if lock_state.get("holder") != user["login"]:
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": "Active edit lock held by the current admin is required",
+                    "code": "NO_LOCK",
+                    "lock_holder": lock_state.get("holder"),
+                }
+            ),
+            403,
+        )
+
+    try:
+        result = restore_manager.restore_backup(
+            backup_id,
+            user["login"],
+            user.get("display_name") or user["login"],
+            allow_foreign_project=data.get("allow_foreign_project") is True,
+        )
+    except restore_manager.RestoreError as exc:
+        return _restore_manager_error_response(exc)
+    except backup_manager.BackupError as exc:
+        return _backup_error_response(exc)
+    except Exception as exc:
+        logger.exception("Unexpected restore error")
+        return jsonify({"ok": False, "error": str(exc), "code": "RESTORE_FAILED"}), 500
+    return jsonify(result)
 
 
 @app.route("/api/individual_lessons")
@@ -731,54 +1138,6 @@ def export_to_excel():
 
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
-
-
-@app.route("/save_intermediate", methods=["POST"])
-@login_required
-def save_intermediate():
-    try:
-        if session.get("role") != "admin":
-            return jsonify({"success": False, "reason": "forbidden"}), 403
-
-        data = request.get_json(force=True, silent=True) or {}
-        html_content = data.get("html_content", "")
-        default_filename = data.get("default_filename", "intermediate_schedule.html")
-
-        import tkinter as tk
-        from tkinter import filedialog
-
-        root = None
-        save_path = ""
-        try:
-            root = tk.Tk()
-            root.withdraw()
-            root.attributes("-topmost", True)
-            save_path = filedialog.asksaveasfilename(
-                parent=root,
-                title="Сохранить промежуточный результат",
-                initialfile=default_filename,
-                defaultextension=".html",
-                filetypes=[("HTML files", "*.html"), ("All files", "*.*")],
-            )
-        finally:
-            if root is not None:
-                try:
-                    root.destroy()
-                except Exception:
-                    pass
-
-        if not save_path:
-            return jsonify({"success": False, "reason": "cancelled"})
-
-        with open(save_path, "w", encoding="utf-8") as f:
-            f.write(html_content)
-
-        logger.info("Промежуточный файл сохранён: %s", save_path)
-        return jsonify({"success": True, "path": save_path})
-
-    except Exception as e:
-        logger.error("Ошибка при сохранении промежуточного файла: %s", e)
-        return jsonify({"success": False, "reason": str(e)})
 
 
 @app.route("/api/spiski/add", methods=["POST"])

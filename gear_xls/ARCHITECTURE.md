@@ -217,7 +217,6 @@ Excel (Schedule sheet, ⚠️ Russian headers — see Critical Issue)
 | `editing_update.js` | Edit-in-place updates. **Does NOT call `syncBlockContent`** — user-typed room/time must not be overwritten on save. |
 | `delete_blocks.js` | Block deletion logic |
 | `delete_blocks_observer.js` | MutationObserver for deletion tracking |
-| `save_export.js` | Save state, trigger export |
 | `export_to_excel.js` | Client-side Excel export; calls `_refreshIndividualBeforeExport()` before collecting data; primary time source is block text; fallback uses `gridStart + startRow * timeInterval` from `data-start-row`/`data-row-span` |
 | `dropdown_widget.js` | **NEW** Reusable autocomplete-dropdown widget (`createAutocompleteInput`); supports custom-value confirmation and server persistence via `/api/spiski/add`. Exports: `createAutocompleteInput`, `sortStringListInPlace`, `getRoomListForBuilding`, `addUniqueToList`, `addRoomToBuildingList`, `_persistSpiskiToServer`. |
 | `column_helpers.js` | Column management across multiple buildings; provides `extractRoomFromDayHeader()` used by `block_content_sync.js` |
@@ -243,7 +242,7 @@ Modules are concatenated inside a single `DOMContentLoaded` listener. The order 
 ```
 services/building_service  → services/drag_drop_service  → services/grid_snap_service
   → services/block_drop_service  → core  → position  → drag_drop_refactored
-  → column_helpers  → column_delete  → save_export  → color_utils
+  → column_helpers  → column_delete  → color_utils
   → adaptive_text_color  → export_to_excel  → dropdown_widget  → menu
   → add_blocks_main  → block_creation_dialog  → block_utils
   → block_content_sync  → conflict_detector  → block_positioning
@@ -370,7 +369,7 @@ This replaces the previous approach of summing `<th>` widths and applying polyno
    - `.menu-item#menu-publish-item` → `publishSchedule()` (hidden for non-admin; shown by `base_sync_ui.js`)
    - lesson-type filter separator + items (injected by `initMenu()`)
 3. Six `.toggle-day-button` elements (Mo–Sa)
-4. `#saveIntermediate`, `#saveSchedule`, `#exportToExcel` buttons
+4. `#exportToExcel` button
 5. `#csrf_token` hidden input
 
 ## CSS Classes — Phase 6 and Phase 7
@@ -412,7 +411,6 @@ This replaces the previous approach of summing `<th>` widths and applying polyno
 | DELETE | `/api/columns` | `admin`/`editor`/`organizer` + lock | Delete column blocks; editor blocked by group lessons, organizer blocked by any non-trial content |
 | POST | `/api/spiski/add` | `login_required` | Append item to a spiski file; natural-sort preserved |
 | POST | `/export_to_excel` | `admin` | Export schedule to Excel file |
-| POST | `/save_intermediate` | `admin` | Save intermediate HTML via Tkinter save dialog |
 
 ## CSRF Protection
 

@@ -30,6 +30,8 @@ runtime/
 xlsx_initial/
 excel_exports/
 gear_xls/excel_exports/
+gear_xls/backups/
+gear_xls/schedule_state/restore_status.json
 *.pdf
 *.xlsx
 *.xlsm

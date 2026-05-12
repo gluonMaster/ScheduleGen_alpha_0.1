@@ -131,26 +131,6 @@ def get_css_styles(cellHeight, dayCellWidth, timeColWidth, borderWidth=1):
          color: white;
       }}
       
-      /* Кнопки сохранения */
-      #saveIntermediate {{
-         background-color: #90ee90; /* нежно-зелёный */
-         border: 1px solid #ccc;
-         padding: 8px 12px;
-         cursor: pointer;
-         margin-right: 5px;
-         margin-bottom: 5px;
-         border-radius: 4px;
-      }}
-      
-      #saveSchedule {{
-         background-color: #ffcccc; /* бледно-красный */
-         border: 1px solid #ccc;
-         padding: 8px 12px;
-         cursor: pointer;
-         margin-bottom: 5px;
-         border-radius: 4px;
-      }}
-
       #exportToExcel {{
          background-color: #FFD700; /* золотой */
          border: 1px solid #ccc;
@@ -189,12 +169,6 @@ def get_css_styles(cellHeight, dayCellWidth, timeColWidth, borderWidth=1):
          margin-bottom: 2px;
       }}
       
-      /* Стили для финальной статической версии */
-      body.static-schedule .activity-block {{
-         cursor: default;
-         box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-      }}
-      
       /* Адаптивность для маленьких экранов */
       @media (max-width: 768px) {{
         .sticky-buttons {{
@@ -202,9 +176,7 @@ def get_css_styles(cellHeight, dayCellWidth, timeColWidth, borderWidth=1):
           align-items: center;
         }}
         
-        .toggle-day-button,
-        #saveIntermediate,
-        #saveSchedule {{
+        .toggle-day-button {{
           width: 100%;
           margin-right: 0;
         }}

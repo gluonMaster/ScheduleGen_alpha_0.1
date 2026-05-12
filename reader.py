@@ -9,6 +9,42 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+
+def _is_blank_cell_value(value: Any) -> bool:
+    """Return True for empty Excel-style scalar values, including NaN."""
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() in {"", "nan", "none", "null"}
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):
+        return False
+
+
+def _clean_text(value: Any) -> str:
+    """Normalize scalar Excel cell values used as schedule resource names."""
+    if _is_blank_cell_value(value):
+        return ""
+    return str(value).strip()
+
+
+def _clean_optional_text(value: Any) -> Optional[str]:
+    """Normalize optional scalar text fields, preserving missing as None."""
+    cleaned = _clean_text(value)
+    return cleaned or None
+
+
+def _clean_int(value: Any, default: int = 0) -> int:
+    """Normalize numeric Excel cell values to int with a stable default."""
+    if _is_blank_cell_value(value):
+        return default
+    try:
+        return int(float(value))
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
 class ScheduleClass:
     """Class representing a scheduled lesson with all its properties."""
     
@@ -30,24 +66,28 @@ class ScheduleClass:
                  lesson_type: str = "",
                  trial_dates: Optional[List[str]] = None):
         
-        self.subject = subject
-        self.group = group
-        self.teacher = teacher
-        self.main_room = main_room
-        self.alternative_rooms = [r for r in alternative_rooms if r]  # Filter out None values
-        self.building = building
-        self.duration = int(duration) if duration is not None else 0
-        self.day = day
-        self.start_time = start_time
-        self.end_time = end_time
-        self.pause_before = int(pause_before) if pause_before is not None else 0
-        self.pause_after = int(pause_after) if pause_after is not None else 0
+        self.subject = _clean_text(subject)
+        self.group = _clean_text(group)
+        self.teacher = _clean_text(teacher)
+        self.main_room = _clean_text(main_room)
+        self.alternative_rooms = [
+            room for room in (_clean_text(r) for r in alternative_rooms) if room
+        ]
+        self.building = _clean_text(building)
+        self.duration = _clean_int(duration)
+        self.day = _clean_text(day)
+        self.start_time = _clean_optional_text(start_time)
+        self.end_time = _clean_optional_text(end_time)
+        self.pause_before = _clean_int(pause_before)
+        self.pause_after = _clean_int(pause_after)
         self.section_index = section_index
         self.column = column
-        self.lesson_type = str(lesson_type).strip().lower() if lesson_type is not None else ""
+        self.lesson_type = _clean_text(lesson_type).lower()
         self.trial_dates = []
         if self.lesson_type == "trial" and isinstance(trial_dates, list):
-            self.trial_dates = [str(item) for item in trial_dates if item is not None]
+            self.trial_dates = [
+                cleaned for cleaned in (_clean_text(item) for item in trial_dates) if cleaned
+            ]
         
         # Добавляем новые атрибуты для работы с временными окнами
         self.has_time_window = False  # Этот флаг будет установлен в model_variables.py
@@ -218,6 +258,9 @@ class ScheduleReader:
             # Try different methods to get the time
             cell = planning_sheet.cell(row=row, column=column)
             cell_value = cell.value
+
+            if _is_blank_cell_value(cell_value):
+                return None
             
             # If it's a datetime.time object
             if hasattr(cell_value, 'hour') and hasattr(cell_value, 'minute'):
@@ -326,14 +369,14 @@ class ScheduleReader:
                     )
                     
                     # Update sets of teachers, groups, rooms, buildings, days
-                    self.teachers.add(teacher)
-                    self.buildings.add(building) if building else None
-                    self.days.add(day) if day else None
+                    if class_data.teacher:
+                        self.teachers.add(class_data.teacher)
+                    if class_data.building:
+                        self.buildings.add(class_data.building)
+                    if class_data.day:
+                        self.days.add(class_data.day)
                     
-                    if main_room:
-                        self.rooms.add(main_room)
-                    
-                    for room in [alt_room1, alt_room2, alt_room3]:
+                    for room in class_data.possible_rooms:
                         if room:
                             self.rooms.add(room)
                     

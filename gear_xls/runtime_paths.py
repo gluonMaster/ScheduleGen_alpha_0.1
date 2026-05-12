@@ -190,6 +190,14 @@ def get_schedule_state_dir(project_root: str | None = None) -> str:
     return os.path.join(get_gear_xls_dir(project_root), "schedule_state")
 
 
+def get_backup_dir(project_root: str | None = None) -> str:
+    return os.path.join(get_gear_xls_dir(project_root), "backups")
+
+
+def get_restore_status_path(project_root: str | None = None) -> str:
+    return os.path.join(get_schedule_state_dir(project_root), "restore_status.json")
+
+
 def get_html_output_dir(project_root: str | None = None) -> str:
     return os.path.join(get_gear_xls_dir(project_root), "html_output")
 

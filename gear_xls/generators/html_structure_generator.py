@@ -107,8 +107,6 @@ class HTMLStructureGenerator:
         
         # Кнопки управления
         panel_parts.extend([
-            '<button id="saveIntermediate">Сохранить промежуточный результат</button>',
-            '<button id="saveSchedule">Сохранить финальную версию</button>',
             '<button id="exportToExcel">Экспорт в Excel</button>',
             f'<input type="hidden" id="csrf_token" value="{csrf_token}">',
             '</div>'

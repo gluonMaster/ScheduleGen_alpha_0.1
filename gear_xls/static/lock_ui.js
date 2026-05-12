@@ -114,6 +114,42 @@
     authUi().setNavEditorState(options || null);
   }
 
+  function isRestorePayload(data) {
+    return !!(
+      data &&
+      (data.code === "RESTORE_IN_PROGRESS" ||
+        data.restore_in_progress ||
+        data.active ||
+        data.recovery_required)
+    );
+  }
+
+  function clearLocalLockStateForRestore() {
+    closeOpenDialogs();
+    stopHeartbeat();
+    lockVersion = null;
+    currentLockHolder = null;
+    if (authUi() && typeof authUi().setEditMode === "function") {
+      authUi().setEditMode(false);
+    }
+    renderNavLockState({
+      mode: "view",
+      message: "Восстановление...",
+      buttons: [],
+    });
+    syncLockBannerMetrics();
+  }
+
+  function handleRestoreInProgress(data) {
+    clearLocalLockStateForRestore();
+    if (
+      window.SchedGenBackupUI &&
+      typeof window.SchedGenBackupUI.handleRestoreInProgress === "function"
+    ) {
+      window.SchedGenBackupUI.handleRestoreInProgress(data || {});
+    }
+  }
+
   function refreshLockStatus() {
     apiRequest("/api/lock/status").then(function (result) {
       if (result) {
@@ -125,6 +161,10 @@
   function pollStatus() {
     apiRequest("/api/status").then(function (result) {
       if (result && result.data && result.data.lock) {
+        if (isRestorePayload(result.data.restore)) {
+          handleRestoreInProgress(result.data.restore);
+          return;
+        }
         updateLockBanner(result.data.lock);
         if (
           baseSyncUi() &&
@@ -414,6 +454,11 @@
             }
           }
 
+          if (data && data.code === "RESTORE_IN_PROGRESS") {
+            handleRestoreInProgress(data);
+            return null;
+          }
+
           return { response: response, data: data };
         });
       })
@@ -464,6 +509,7 @@
 
   window.handleSessionExpired = handleSessionExpired;
   window.SchedGenLockUI = {
+    clearLocalLockStateForRestore: clearLocalLockStateForRestore,
     closeOpenDialogs: closeOpenDialogs,
     handleSessionExpired: handleSessionExpired,
     refreshLockStatus: refreshLockStatus,

@@ -5,8 +5,6 @@
     viewer: [
       "#menuButton",
       "#menuDropdown",
-      "#saveIntermediate",
-      "#saveSchedule",
       "#exportToExcel",
       "#create-block-button",
       "#toggle-add-mode",
@@ -15,12 +13,10 @@
       ".col-delete-btn",
     ],
     organizer: [
-      "#saveIntermediate",
-      "#saveSchedule",
       "#exportToExcel",
       "#menuItemNewSchedule",
     ],
-    editor: ["#saveIntermediate", "#saveSchedule", "#exportToExcel"],
+    editor: ["#exportToExcel"],
   };
 
   var EDIT_SELECTORS = [
@@ -305,8 +301,6 @@
         "body.schedgen-readonly .drag-handle,",
         "body.schedgen-readonly [data-drag-handle] { pointer-events: none !important; }",
         'body.schedgen-readonly .activity-block[data-lesson-type="group"] { cursor: default !important; }',
-        'body[data-user-role="organizer"] #saveIntermediate,',
-        'body[data-user-role="organizer"] #saveSchedule,',
         'body[data-user-role="organizer"] #exportToExcel { display: none !important; }',
       ].join("\n")
     );

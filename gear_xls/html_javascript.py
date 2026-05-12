@@ -88,7 +88,6 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
         'core',
         'position',
         'drag_drop_refactored',           # Обновленный модуль drag_drop
-        'save_export',
         'column_helpers',  # Модуль для работы с колонками в разных зданиях
         'column_delete',   # Модуль удаления колонок и кнопок удаления
         'color_utils',     # Модуль для работы с цветами
@@ -175,8 +174,6 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
             {js_modules.get('column_helpers', '')}
 
             {js_modules.get('column_delete', '')}
-            
-            {js_modules.get('save_export', '')}
             
             // Подключение модулей для работы с цветами
             {js_modules.get('color_utils', '')}
