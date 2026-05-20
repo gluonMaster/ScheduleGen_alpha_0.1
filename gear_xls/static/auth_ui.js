@@ -545,6 +545,17 @@
     );
   }
 
+  function refreshCompactRowsAfterEditModeChange() {
+    if (
+      window.ScheduleCompactRows &&
+      typeof window.ScheduleCompactRows.refresh === "function"
+    ) {
+      window.ScheduleCompactRows.refresh();
+    } else if (typeof window.updateActivityPositions === "function") {
+      window.updateActivityPositions();
+    }
+  }
+
   function confirmNavigationAway(continueAction) {
     var baseUi = baseSyncUi();
 
@@ -587,6 +598,8 @@
   }
 
   function setEditMode(enabled) {
+    var previousEditMode = isEditMode;
+
     if (
       enabled &&
       window.ScheduleSearch &&
@@ -602,6 +615,9 @@
       typeof window.ScheduleSearch.handleEditModeChange === "function"
     ) {
       window.ScheduleSearch.handleEditModeChange(isEditMode);
+    }
+    if (isEditMode !== previousEditMode) {
+      refreshCompactRowsAfterEditModeChange();
     }
   }
 

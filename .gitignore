@@ -20,7 +20,7 @@ Prompt-*.md
 *.pfx
 
 # Generated schedule HTML outputs (runtime-produced, not source)
-gear_xls/html_output/
+#gear_xls/html_output/
 visualiser/*.html
 
 # Runtime working directory
@@ -73,3 +73,5 @@ build/
 .idea/
 .DS_Store
 Thumbs.db
+
+gear_xls/implementation_prompts/

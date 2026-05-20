@@ -41,6 +41,12 @@ function initializeApplication() {
     if (typeof initLessonTypeFilter === 'function') {
         initLessonTypeFilter();
     }
+    if (typeof initCompactRows === 'function') {
+        initCompactRows();
+    }
+    if (typeof initCellHoverHint === 'function') {
+        initCellHoverHint();
+    }
     if (typeof initColumnDeleteButtons === 'function') {
         initColumnDeleteButtons(); // Инициализация кнопок удаления колонок
     }

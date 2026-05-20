@@ -11,6 +11,7 @@
   var _baseActiveDrag = null;
   var _basePendingResize = null;
   var _baseEditedBlock = null;
+  var _baseCompactDragPaused = false;
 
   function authUi() {
     return window.SchedGenAuthUI || null;
@@ -40,6 +41,47 @@
       return;
     }
     search.handleScheduleMutation();
+  }
+
+  function refreshCompactRowsAfterBaseMutation() {
+    if (
+      window.ScheduleCompactRows &&
+      typeof window.ScheduleCompactRows.refresh === "function"
+    ) {
+      window.ScheduleCompactRows.refresh();
+    } else if (typeof window.updateActivityPositions === "function") {
+      window.updateActivityPositions();
+    }
+  }
+
+  function pauseCompactRowsForBaseDrag() {
+    if (
+      !_baseCompactDragPaused &&
+      window.ScheduleCompactRows &&
+      typeof window.ScheduleCompactRows.pauseForInteraction === "function"
+    ) {
+      window.ScheduleCompactRows.pauseForInteraction("drag");
+      _baseCompactDragPaused = true;
+    }
+  }
+
+  function resumeCompactRowsAfterBaseDrag(refresh) {
+    if (
+      _baseCompactDragPaused &&
+      window.ScheduleCompactRows &&
+      typeof window.ScheduleCompactRows.resumeAfterInteraction === "function"
+    ) {
+      window.ScheduleCompactRows.resumeAfterInteraction("drag", { refresh: !!refresh });
+    }
+    _baseCompactDragPaused = false;
+  }
+
+  function reapplyLessonTypeFilterAfterBaseMutation() {
+    if (typeof reapplyLessonTypeFilter === "function") {
+      reapplyLessonTypeFilter();
+      return;
+    }
+    refreshCompactRowsAfterBaseMutation();
   }
 
   function isInEditMode() {
@@ -526,12 +568,7 @@
     blocks.forEach(function (block) {
       renderBaseBlock(block, true);
     });
-    if (typeof updateActivityPositions === "function") {
-      updateActivityPositions();
-    }
-    if (typeof reapplyLessonTypeFilter === "function") {
-      reapplyLessonTypeFilter();
-    }
+    reapplyLessonTypeFilterAfterBaseMutation();
     notifySearchScheduleMutation();
 
     _basePendingUpdate = false;
@@ -1055,8 +1092,8 @@
     container.appendChild(element);
     syncGroupBlockRuntimeAttrs(element);
     attachBaseBlockInteractions(element);
-    if (!deferLayout && typeof updateActivityPositions === "function") {
-      updateActivityPositions();
+    if (!deferLayout) {
+      reapplyLessonTypeFilterAfterBaseMutation();
     }
     return element;
   }
@@ -1163,6 +1200,7 @@
       moved: false,
     };
     clearBasePendingDragStart();
+    pauseCompactRowsForBaseDrag();
     block.style.opacity = "0.7";
   }
 
@@ -1205,19 +1243,23 @@
     }
 
     _baseActiveDrag = null;
-    drag.block.style.opacity = "1";
-    if (!drag.moved) {
-      return;
-    }
+    try {
+      drag.block.style.opacity = "1";
+      if (!drag.moved) {
+        return;
+      }
 
-    if (typeof BlockDropService !== "undefined" && BlockDropService) {
-      BlockDropService.processBlockDrop(drag.block);
-    } else if (typeof processBlockDrop === "function") {
-      processBlockDrop(drag.block);
-    }
+      if (typeof BlockDropService !== "undefined" && BlockDropService) {
+        BlockDropService.processBlockDrop(drag.block);
+      } else if (typeof processBlockDrop === "function") {
+        processBlockDrop(drag.block);
+      }
 
-    syncGroupBlockRuntimeAttrs(drag.block);
-    event.preventDefault();
+      syncGroupBlockRuntimeAttrs(drag.block);
+      event.preventDefault();
+    } finally {
+      resumeCompactRowsAfterBaseDrag(true);
+    }
   }
 
   function cancelBaseDrag(block) {
@@ -1231,6 +1273,7 @@
       restoreBaseDragSnapshot(_baseActiveDrag);
     }
     _baseActiveDrag = null;
+    resumeCompactRowsAfterBaseDrag(true);
   }
 
   function restoreBaseDragSnapshot(drag) {

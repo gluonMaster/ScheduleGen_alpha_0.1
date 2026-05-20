@@ -1,5 +1,13 @@
 // Модуль для функционала быстрого добавления блоков по клику на ячейку
 
+function refreshCompactRowsAfterAddModeChange() {
+    if (window.ScheduleCompactRows && typeof window.ScheduleCompactRows.refresh === 'function') {
+        window.ScheduleCompactRows.refresh();
+    } else if (typeof window.updateActivityPositions === 'function') {
+        window.updateActivityPositions();
+    }
+}
+
 // Функция для инициализации быстрого добавления по клику на ячейку
 function initQuickAddByClick(addBlockButton) {
     // Режим добавления блоков
@@ -132,7 +140,7 @@ function initQuickAddByClick(addBlockButton) {
     // Обработчик переключения режима
     addBlockButton.addEventListener('click', function() {
         addBlockMode = !addBlockMode;
-        this.classList.toggle('active');
+        this.classList.toggle('active', addBlockMode);
         
         // Включаем или выключаем подсветку ячеек в обоих зданиях
         document.querySelectorAll('.schedule-container').forEach(function(container) {
@@ -150,6 +158,8 @@ function initQuickAddByClick(addBlockButton) {
         buildingIndicator.style.display = addBlockMode ? 'block' : 'none';
         switchBuildingButton.style.display = addBlockMode ? 'block' : 'none';
         addNewRoomButton.style.display = addBlockMode ? 'block' : 'none';
+
+        refreshCompactRowsAfterAddModeChange();
     });
     
     // По умолчанию скрываем индикатор здания и кнопку переключения

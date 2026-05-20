@@ -1,6 +1,14 @@
 // Модуль для удаления блоков занятий из расписания
 // ОБНОВЛЕН: использует BuildingService вместо дублированных функций
 
+function refreshCompactRowsAfterBlockDelete() {
+    if (window.ScheduleCompactRows && typeof window.ScheduleCompactRows.refresh === 'function') {
+        window.ScheduleCompactRows.refresh();
+    } else if (typeof window.updateActivityPositions === 'function') {
+        window.updateActivityPositions();
+    }
+}
+
 // Функция инициализации режима удаления блоков
 function initDeleteBlocks() {
     // Добавляем кнопку для включения режима удаления
@@ -193,6 +201,7 @@ function addDeleteBlockButton() {
         if (confirm(confirmMessage)) {
             // Удаляем блок
             block.parentNode.removeChild(block);
+            refreshCompactRowsAfterBlockDelete();
             
             // Создаем уведомление об успешном удалении
             showNotification(`Занятие удалено: ${subject} (${time})`, 'success');

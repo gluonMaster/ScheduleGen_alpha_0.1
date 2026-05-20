@@ -20,6 +20,7 @@
     layoutRefreshPending: false,
     layoutRefreshFrame: 0,
     reapplyPending: false,
+    compactRowsSearchActive: false,
     mutationSuppressionDepth: 0,
     lastMatchCount: 0,
   };
@@ -1135,6 +1136,20 @@
     });
   }
 
+  function notifyCompactRowsSearchState(active) {
+    if (active === state.compactRowsSearchActive) {
+      return;
+    }
+
+    state.compactRowsSearchActive = active;
+    if (
+      window.ScheduleCompactRows &&
+      typeof window.ScheduleCompactRows.refresh === "function"
+    ) {
+      window.ScheduleCompactRows.refresh();
+    }
+  }
+
   function setNotice(message) {
     if (state.noticeTimer) {
       window.clearTimeout(state.noticeTimer);
@@ -1193,6 +1208,7 @@
     setDayToggleButtonsLocked(active);
     syncScheduleObserver();
     syncShellOffsets();
+    notifyCompactRowsSearchState(active);
   }
 
   function setDayToggleButtonsLocked(locked) {

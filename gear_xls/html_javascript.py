@@ -103,6 +103,8 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
         'block_creation_dialog',
         'block_utils',
         'lesson_type_filter',
+        'compact_rows',
+        'cell_hover_hint',
         'block_content_sync',   # NEW: must be after column_helpers (extractRoomFromDayHeader, in base_module_names)
         'conflict_detector',    # depends on block_utils
         'block_positioning',    # calls syncBlockContent after positionNewBlock
@@ -197,6 +199,10 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
             {js_modules.get('block_utils', '')}
 
             {js_modules.get('lesson_type_filter', '')}
+
+            {js_modules.get('compact_rows', '')}
+
+            {js_modules.get('cell_hover_hint', '')}
 
             // Синхронизация текста блока после перемещения
             {js_modules.get('block_content_sync', '')}

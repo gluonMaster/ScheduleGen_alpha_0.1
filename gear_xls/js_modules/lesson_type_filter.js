@@ -1,5 +1,13 @@
 window.currentLessonTypeFilter = 'all';
 
+function refreshCompactRowsAfterLessonTypeFilter() {
+    if (window.ScheduleCompactRows && typeof window.ScheduleCompactRows.refresh === 'function') {
+        window.ScheduleCompactRows.refresh();
+    } else if (typeof window.updateActivityPositions === 'function') {
+        window.updateActivityPositions();
+    }
+}
+
 function classifyLessonType(subject) {
     if (!subject) {
         return 'group';
@@ -76,6 +84,8 @@ function applyLessonTypeFilter(filterValue) {
     if (activeItem) {
         activeItem.classList.add('lesson-filter-active');
     }
+
+    refreshCompactRowsAfterLessonTypeFilter();
 }
 
 function reapplyLessonTypeFilter() {

@@ -81,6 +81,22 @@ function initBlockEditing() {
     document.head.appendChild(style);
 }
 
+function refreshCompactRowsAfterBlockEdit() {
+    if (window.ScheduleCompactRows && typeof window.ScheduleCompactRows.refresh === 'function') {
+        window.ScheduleCompactRows.refresh();
+    } else if (typeof window.updateActivityPositions === 'function') {
+        window.updateActivityPositions();
+    }
+}
+
+function reapplyLessonTypeFilterAfterBlockEdit() {
+    if (typeof reapplyLessonTypeFilter === 'function') {
+        reapplyLessonTypeFilter();
+        return;
+    }
+    refreshCompactRowsAfterBlockEdit();
+}
+
 // Функция открытия диалога редактирования с поддержкой зданий
 function openEditDialog(block, origLeft, origTop, building) {
     if (
@@ -406,10 +422,6 @@ function openEditDialog(block, origLeft, origTop, building) {
             if (typeof updateBlockLessonType === 'function') {
                 updateBlockLessonType(block);
             }
-            if (typeof reapplyLessonTypeFilter === 'function') {
-                reapplyLessonTypeFilter();
-            }
-            
             // Обновляем отображение блока, если изменилось время
             if (newTime !== timeRange) {
                 console.log("Обновление позиции блока из-за изменения времени");
@@ -466,8 +478,7 @@ function openEditDialog(block, origLeft, origTop, building) {
                 }
             }
             
-            // Единственный вызов updateActivityPositions в конце
-            updateActivityPositions();
+            reapplyLessonTypeFilterAfterBlockEdit();
 
             if (wasExistingGroupBlock && typeof window.normalizeGroupBlockRuntimeState === 'function') {
                 window.normalizeGroupBlockRuntimeState(block);

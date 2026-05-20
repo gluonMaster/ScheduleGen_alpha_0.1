@@ -9,6 +9,7 @@ var DragDropService = (function() {
     var offsetY = 0;
     var draggedBlock = null;
     var dragSnapshot = null;
+    var compactRowsDragPaused = false;
 
     function getAuthUi() {
         return window.SchedGenAuthUI || null;
@@ -40,6 +41,28 @@ var DragDropService = (function() {
         if (role === 'editor') return lessonType !== 'group';
         if (role === 'organizer') return lessonType === 'trial';
         return false;
+    }
+
+    function pauseCompactRowsForDrag() {
+        if (
+            !compactRowsDragPaused &&
+            window.ScheduleCompactRows &&
+            typeof window.ScheduleCompactRows.pauseForInteraction === 'function'
+        ) {
+            window.ScheduleCompactRows.pauseForInteraction('drag');
+            compactRowsDragPaused = true;
+        }
+    }
+
+    function resumeCompactRowsAfterDrag(refresh) {
+        if (
+            compactRowsDragPaused &&
+            window.ScheduleCompactRows &&
+            typeof window.ScheduleCompactRows.resumeAfterInteraction === 'function'
+        ) {
+            window.ScheduleCompactRows.resumeAfterInteraction('drag', { refresh: !!refresh });
+        }
+        compactRowsDragPaused = false;
     }
     
     // Приватные методы
@@ -93,6 +116,7 @@ var DragDropService = (function() {
     function startDrag(block, event) {
         draggedBlock = block;
         dragSnapshot = createDragSnapshot(block);
+        pauseCompactRowsForDrag();
         window.draggedBlock = block; // Поддерживаем совместимость с существующим кодом
         
         var rect = block.getBoundingClientRect();
@@ -117,6 +141,7 @@ var DragDropService = (function() {
             draggedBlock = null;
             window.draggedBlock = null;
             dragSnapshot = null;
+            resumeCompactRowsAfterDrag(true);
         }
         
         // Предотвращаем запуск перетаскивания
@@ -157,6 +182,7 @@ var DragDropService = (function() {
     
     function handleMouseUp(event) {
         if (draggedBlock && !window.editDialogOpen) {
+            try {
             draggedBlock.style.opacity = 1;
             
             // Используем BlockDropService для обработки завершения перетаскивания
@@ -169,9 +195,12 @@ var DragDropService = (function() {
                 }
             }
             
-            draggedBlock = null;
-            window.draggedBlock = null;
-            dragSnapshot = null;
+            } finally {
+                draggedBlock = null;
+                window.draggedBlock = null;
+                dragSnapshot = null;
+                resumeCompactRowsAfterDrag(true);
+            }
         }
     }
     

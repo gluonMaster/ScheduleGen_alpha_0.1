@@ -67,7 +67,7 @@ def build_schedule_structure(activities, time_interval=5):
     
     # Определяем начало и конец сетки расписания
     grid_start = 9 * 60  # 09:00 в минутах
-    grid_end = 19 * 60 + 45  # 19:45 в минутах
+    grid_end = 20 * 60  # 20:00 в минутах
     
     logger.info("Начинаем формирование структуры расписания")
     logger.info(f"Интервал времени: {time_interval} минут")

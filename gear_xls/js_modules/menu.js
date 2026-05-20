@@ -426,7 +426,7 @@ function _buildFullTable(building, rooms, rowCount) {
     // Prefer the rowCount derived from the old table to preserve actual gridEnd.
     var rowsCount = rowCount;
     if (!rowsCount || rowsCount <= 0) {
-        var gEnd = 1185; // 19:45 fallback
+        var gEnd = 1200; // 20:00 fallback
         rowsCount = Math.floor((gEnd - gStart) / tInterval) + 1; // inclusive end
     }
 
@@ -446,6 +446,9 @@ function _buildFullTable(building, rooms, rowCount) {
         for (var col = 0; col < rooms.length; col++) {
             var th = document.createElement('th');
             th.className = 'day-' + day;
+            th.setAttribute('data-day', day);
+            th.setAttribute('data-col', col);
+            th.setAttribute('data-room', rooms[col]);
             th.innerHTML = day + '<br>' + rooms[col];
             th.style.width = dcw + 'px';
             headRow.appendChild(th);

@@ -9,6 +9,8 @@
   var pendingResize = null;
   var hoveredManagedBlock = null;
   var managedLegacyDragReleaseTimer = null;
+  var compactRowsManagedDragPaused = false;
+  var compactRowsManagedResizePaused = false;
 
   function authUi() {
     return window.SchedGenAuthUI || null;
@@ -29,6 +31,69 @@
       return;
     }
     search.handleScheduleMutation();
+  }
+
+  function refreshCompactRowsAfterIndividualMutation() {
+    if (
+      window.ScheduleCompactRows &&
+      typeof window.ScheduleCompactRows.refresh === "function"
+    ) {
+      window.ScheduleCompactRows.refresh();
+    } else if (typeof window.updateActivityPositions === "function") {
+      window.updateActivityPositions();
+    }
+  }
+
+  function pauseCompactRowsForManagedDrag() {
+    if (
+      !compactRowsManagedDragPaused &&
+      window.ScheduleCompactRows &&
+      typeof window.ScheduleCompactRows.pauseForInteraction === "function"
+    ) {
+      window.ScheduleCompactRows.pauseForInteraction("drag");
+      compactRowsManagedDragPaused = true;
+    }
+  }
+
+  function resumeCompactRowsAfterManagedDrag(refresh) {
+    if (
+      compactRowsManagedDragPaused &&
+      window.ScheduleCompactRows &&
+      typeof window.ScheduleCompactRows.resumeAfterInteraction === "function"
+    ) {
+      window.ScheduleCompactRows.resumeAfterInteraction("drag", { refresh: !!refresh });
+    }
+    compactRowsManagedDragPaused = false;
+  }
+
+  function pauseCompactRowsForManagedResize() {
+    if (
+      !compactRowsManagedResizePaused &&
+      window.ScheduleCompactRows &&
+      typeof window.ScheduleCompactRows.pauseForInteraction === "function"
+    ) {
+      window.ScheduleCompactRows.pauseForInteraction("resize");
+      compactRowsManagedResizePaused = true;
+    }
+  }
+
+  function resumeCompactRowsAfterManagedResize(refresh) {
+    if (
+      compactRowsManagedResizePaused &&
+      window.ScheduleCompactRows &&
+      typeof window.ScheduleCompactRows.resumeAfterInteraction === "function"
+    ) {
+      window.ScheduleCompactRows.resumeAfterInteraction("resize", { refresh: !!refresh });
+    }
+    compactRowsManagedResizePaused = false;
+  }
+
+  function reapplyLessonTypeFilterAfterIndividualMutation() {
+    if (typeof reapplyLessonTypeFilter === "function") {
+      reapplyLessonTypeFilter();
+      return;
+    }
+    refreshCompactRowsAfterIndividualMutation();
   }
 
   function currentRole() {
@@ -614,12 +679,7 @@
       renderIndividualBlock(block, true);
     });
 
-    if (typeof updateActivityPositions === "function") {
-      updateActivityPositions();
-    }
-    if (typeof reapplyLessonTypeFilter === "function") {
-      reapplyLessonTypeFilter();
-    }
+    reapplyLessonTypeFilterAfterIndividualMutation();
     refreshManagedBlockInteractivity(document);
     notifySearchScheduleMutation();
   }
@@ -726,8 +786,8 @@
     attachIndividualBlockInteractions(element);
     applyManagedBlockInteractivity(element);
 
-    if (!deferLayout && typeof updateActivityPositions === "function") {
-      updateActivityPositions();
+    if (!deferLayout) {
+      refreshCompactRowsAfterIndividualMutation();
     }
     return element;
   }
@@ -820,6 +880,7 @@
         blockId: block.getAttribute("data-block-id") || "",
         snapshot: captureBlockSnapshot(block),
       };
+      pauseCompactRowsForManagedResize();
       applyManagedBlockInteractivity(block, "resize");
       return;
     }
@@ -894,6 +955,7 @@
       blockId: block.getAttribute("data-block-id") || "",
       snapshot: captureBlockSnapshot(block),
     };
+    pauseCompactRowsForManagedResize();
   }
 
   function handleManagedResizeEnd() {
@@ -903,6 +965,7 @@
     if (!resize || !resize.blockId) {
       pendingResize = null;
       releaseLegacyDragPrevention();
+      resumeCompactRowsAfterManagedResize(false);
       return;
     }
     pendingResize = null;
@@ -911,15 +974,20 @@
     );
     if (!block) {
       releaseLegacyDragPrevention();
+      resumeCompactRowsAfterManagedResize(true);
       return;
     }
 
-    persistChangedBlock(
+    try {
+      persistChangedBlock(
       block,
       resize.snapshot,
       "Не удалось сохранить новую длительность занятия из-за ошибки сети."
     );
-    finalizeManagedResize(block);
+      finalizeManagedResize(block);
+    } finally {
+      resumeCompactRowsAfterManagedResize(true);
+    }
   }
   function finalizeManagedResize(block) {
     applyManagedBlockInteractivity(block);
@@ -956,6 +1024,7 @@
       snapshot: captureBlockSnapshot(block),
     };
     clearPendingDragStart();
+    pauseCompactRowsForManagedDrag();
     block.style.opacity = "0.7";
   }
 
@@ -1000,23 +1069,27 @@
     }
 
     activeDrag = null;
-    drag.block.style.opacity = "1";
-    if (!drag.moved) {
+    try {
+      drag.block.style.opacity = "1";
+      if (!drag.moved) {
+        applyManagedBlockInteractivity(drag.block);
+        releaseLegacyDragPrevention();
+        return;
+      }
+
+      if (typeof BlockDropService !== "undefined" && BlockDropService) {
+        BlockDropService.processBlockDrop(drag.block);
+      } else if (typeof processBlockDrop === "function") {
+        processBlockDrop(drag.block);
+      }
+
+      persistDraggedBlock(drag);
       applyManagedBlockInteractivity(drag.block);
       releaseLegacyDragPrevention();
-      return;
+      event.preventDefault();
+    } finally {
+      resumeCompactRowsAfterManagedDrag(true);
     }
-
-    if (typeof BlockDropService !== "undefined" && BlockDropService) {
-      BlockDropService.processBlockDrop(drag.block);
-    } else if (typeof processBlockDrop === "function") {
-      processBlockDrop(drag.block);
-    }
-
-    persistDraggedBlock(drag);
-    applyManagedBlockInteractivity(drag.block);
-    releaseLegacyDragPrevention();
-    event.preventDefault();
   }
 
   function cancelManagedDrag(block) {
@@ -1032,6 +1105,7 @@
     }
     activeDrag = null;
     releaseLegacyDragPrevention();
+    resumeCompactRowsAfterManagedDrag(true);
   }
 
   function openManagedEditDialog(block) {
@@ -1135,12 +1209,7 @@
       setOrRemoveAttribute(block, name, snapshot.attrs[name]);
     });
 
-    if (typeof updateActivityPositions === "function") {
-      updateActivityPositions();
-    }
-    if (typeof reapplyLessonTypeFilter === "function") {
-      reapplyLessonTypeFilter();
-    }
+    reapplyLessonTypeFilterAfterIndividualMutation();
     if (typeof ConflictDetector !== "undefined") {
       ConflictDetector.highlightConflicts();
     }
@@ -1242,10 +1311,8 @@
         }
         individualRevision = result.data.individual_revision || individualRevision;
         removeBlockById(blockId);
-        renderIndividualBlock(result.data.block);
-        if (typeof updateActivityPositions === "function") {
-          updateActivityPositions();
-        }
+        renderIndividualBlock(result.data.block, true);
+        reapplyLessonTypeFilterAfterIndividualMutation();
         if (typeof ConflictDetector !== "undefined") {
           ConflictDetector.highlightConflicts();
         }
@@ -1377,10 +1444,8 @@
       }
       individualRevision = result.data.individual_revision || individualRevision;
       closeOverlay(form);
-      renderIndividualBlock(result.data.block);
-      if (typeof updateActivityPositions === "function") {
-        updateActivityPositions();
-      }
+      renderIndividualBlock(result.data.block, true);
+      reapplyLessonTypeFilterAfterIndividualMutation();
       if (typeof ConflictDetector !== "undefined") {
         ConflictDetector.highlightConflicts();
       }
@@ -1451,10 +1516,8 @@
         activeEditedBlock = null;
         closeOverlay(form);
         removeBlockById(blockId);
-        renderIndividualBlock(result.data.block);
-        if (typeof updateActivityPositions === "function") {
-          updateActivityPositions();
-        }
+        renderIndividualBlock(result.data.block, true);
+        reapplyLessonTypeFilterAfterIndividualMutation();
         if (typeof ConflictDetector !== "undefined") {
           ConflictDetector.highlightConflicts();
         }
@@ -1540,6 +1603,7 @@
         if (block.parentNode) {
           block.parentNode.removeChild(block);
         }
+        refreshCompactRowsAfterIndividualMutation();
         showNotice("Занятие удалено: " + info.subject + " (" + info.time + ")", "success");
       }
     );
@@ -1608,9 +1672,7 @@
         }
 
         closeOverlay(overlay);
-        if (typeof updateActivityPositions === "function") {
-          updateActivityPositions();
-        }
+        refreshCompactRowsAfterIndividualMutation();
         showNotice(
           newCount > prevCount
             ? "Добавлена колонка " + day + " " + room

@@ -18,6 +18,29 @@ function initLegacyDragAndDrop() {
     // Флаг для предотвращения drag при двойном клике
     var preventDrag = false;
     var offsetX = 0, offsetY = 0;
+    var compactRowsDragPaused = false;
+
+    function pauseCompactRowsForLegacyDrag() {
+        if (
+            !compactRowsDragPaused &&
+            window.ScheduleCompactRows &&
+            typeof window.ScheduleCompactRows.pauseForInteraction === 'function'
+        ) {
+            window.ScheduleCompactRows.pauseForInteraction('drag');
+            compactRowsDragPaused = true;
+        }
+    }
+
+    function resumeCompactRowsAfterLegacyDrag(refresh) {
+        if (
+            compactRowsDragPaused &&
+            window.ScheduleCompactRows &&
+            typeof window.ScheduleCompactRows.resumeAfterInteraction === 'function'
+        ) {
+            window.ScheduleCompactRows.resumeAfterInteraction('drag', { refresh: !!refresh });
+        }
+        compactRowsDragPaused = false;
+    }
     
     // Функция для привязки к сетке с учетом точных размеров и границ
     function snapToGrid(left, top) {
@@ -256,6 +279,7 @@ function initLegacyDragAndDrop() {
                 
                 if (!window.editDialogOpen && !preventDrag) {
                     window.draggedBlock = block;
+                    pauseCompactRowsForLegacyDrag();
                     var rect = block.getBoundingClientRect();
                     offsetX = e.clientX - rect.left;
                     offsetY = e.clientY - rect.top;
@@ -282,6 +306,7 @@ function initLegacyDragAndDrop() {
             if (window.draggedBlock === block) {
                 window.draggedBlock.style.opacity = 1;
                 window.draggedBlock = null;
+                resumeCompactRowsAfterLegacyDrag(true);
             }
             
             // Предотвращаем запуск перетаскивания
@@ -315,6 +340,7 @@ function initLegacyDragAndDrop() {
 
     document.addEventListener('mouseup', function(e) {
         if (window.draggedBlock && !window.editDialogOpen) {
+            try {
             window.draggedBlock.style.opacity = 1;
             
             // Используем новый BlockDropService если доступен, иначе старую функцию  
@@ -324,7 +350,10 @@ function initLegacyDragAndDrop() {
                 processBlockDrop(window.draggedBlock);
             }
             
-            window.draggedBlock = null;
+            } finally {
+                window.draggedBlock = null;
+                resumeCompactRowsAfterLegacyDrag(true);
+            }
         }
     });
 }

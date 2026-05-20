@@ -11,6 +11,29 @@ var resizeStartY   = 0;     // clientY at mousedown
 var resizeOrigSpan = 0;     // data-row-span value at mousedown
 var resizeStartRow = 0;     // data-start-row value at mousedown (read-only during resize)
 var RESIZE_ZONE_PX = 6;     // pixels from bottom edge that trigger resize mode
+var compactRowsResizePaused = false;
+
+function pauseCompactRowsForResize() {
+    if (
+        !compactRowsResizePaused &&
+        window.ScheduleCompactRows &&
+        typeof window.ScheduleCompactRows.pauseForInteraction === 'function'
+    ) {
+        window.ScheduleCompactRows.pauseForInteraction('resize');
+        compactRowsResizePaused = true;
+    }
+}
+
+function resumeCompactRowsAfterResize(refresh) {
+    if (
+        compactRowsResizePaused &&
+        window.ScheduleCompactRows &&
+        typeof window.ScheduleCompactRows.resumeAfterInteraction === 'function'
+    ) {
+        window.ScheduleCompactRows.resumeAfterInteraction('resize', { refresh: !!refresh });
+    }
+    compactRowsResizePaused = false;
+}
 
 function getResizeAuthUi() {
     return window.SchedGenAuthUI || null;
@@ -137,6 +160,7 @@ function handleResizeMouseDown(e) {
     resizeStartY = e.clientY;
     resizeOrigSpan = parseInt(block.getAttribute('data-row-span'), 10) || 1;
     resizeStartRow = parseInt(block.getAttribute('data-start-row'), 10) || 0;
+    pauseCompactRowsForResize();
 
     block.classList.add('resizing');
 
@@ -152,33 +176,36 @@ function handleResizeMouseDown(e) {
 function handleResizeMouseUp(e) {
     if (!isResizing || !resizingBlock) return;
 
-    var finalSpan = parseInt(resizingBlock.getAttribute('data-row-span'), 10) || resizeOrigSpan;
-    var spanChanged = (finalSpan !== resizeOrigSpan);
+    try {
+        var finalSpan = parseInt(resizingBlock.getAttribute('data-row-span'), 10) || resizeOrigSpan;
+        var spanChanged = (finalSpan !== resizeOrigSpan);
 
-    // Finalize the new rowSpan (already set in performResize)
-    resizingBlock.classList.remove('resizing');
-    resizingBlock.removeAttribute('data-resize-hover');
+        // Finalize the new rowSpan (already set in performResize)
+        resizingBlock.classList.remove('resizing');
+        resizingBlock.removeAttribute('data-resize-hover');
 
-    // Only update text and conflicts if the block was actually resized
-    if (spanChanged) {
-        if (typeof syncBlockContent === 'function') {
-            syncBlockContent(resizingBlock);
+        // Only update text and conflicts if the block was actually resized
+        if (spanChanged) {
+            if (typeof syncBlockContent === 'function') {
+                syncBlockContent(resizingBlock);
+            }
+            if (resizingBlock.getAttribute('data-lesson-type') === 'group' && typeof window.normalizeGroupBlockRuntimeState === 'function') {
+                window.normalizeGroupBlockRuntimeState(resizingBlock);
+            }
+            if (typeof ConflictDetector !== 'undefined') {
+                ConflictDetector.highlightConflicts();
+            }
         }
-        if (resizingBlock.getAttribute('data-lesson-type') === 'group' && typeof window.normalizeGroupBlockRuntimeState === 'function') {
-            window.normalizeGroupBlockRuntimeState(resizingBlock);
+    } finally {
+        // Re-enable drag
+        if (typeof DragDropService !== 'undefined') {
+            DragDropService.setPreventDrag(false);
         }
-        if (typeof ConflictDetector !== 'undefined') {
-            ConflictDetector.highlightConflicts();
-        }
+
+        isResizing = false;
+        resizingBlock = null;
+        resumeCompactRowsAfterResize(true);
     }
-
-    // Re-enable drag
-    if (typeof DragDropService !== 'undefined') {
-        DragDropService.setPreventDrag(false);
-    }
-
-    isResizing = false;
-    resizingBlock = null;
 }
 
 function initBlockResize() {

@@ -187,13 +187,13 @@ class HTMLCoordinator:
                 continue
             
             grid_start = data.get('_grid_start', 9 * 60)  # 09:00 по умолчанию
-            grid_end = data.get('_grid_end', 19 * 60 + 45)  # 19:45 по умолчанию
+            grid_end = data.get('_grid_end', 20 * 60)  # 20:00 по умолчанию
             
             logger.debug(f"Определены границы сетки: {grid_start//60:02d}:{grid_start%60:02d} - {grid_end//60:02d}:{grid_end%60:02d}")
             return grid_start, grid_end
         
         # Значения по умолчанию
-        default_start, default_end = 9 * 60, 19 * 60 + 45
+        default_start, default_end = 9 * 60, 20 * 60
         logger.warning(f"Используются границы сетки по умолчанию: {default_start//60:02d}:{default_start%60:02d} - {default_end//60:02d}:{default_end%60:02d}")
         return default_start, default_end
     

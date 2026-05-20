@@ -1,5 +1,21 @@
 // Модуль для создания и позиционирования новых блоков занятий
 
+function refreshCompactRowsAfterBlockPositioning() {
+    if (window.ScheduleCompactRows && typeof window.ScheduleCompactRows.refresh === 'function') {
+        window.ScheduleCompactRows.refresh();
+    } else if (typeof window.updateActivityPositions === 'function') {
+        window.updateActivityPositions();
+    }
+}
+
+function reapplyLessonTypeFilterAfterBlockPositioning() {
+    if (typeof reapplyLessonTypeFilter === 'function') {
+        reapplyLessonTypeFilter();
+        return;
+    }
+    refreshCompactRowsAfterBlockPositioning();
+}
+
 // Функция для создания и добавления нового блока в расписание
 function createNewBlock(building, day, colIndex, subject, teacher, students, room, timeRange, backgroundColor) {
     console.log(`Создание нового блока в здании: ${building}, день: ${day}, колонка: ${colIndex}`);
@@ -50,6 +66,7 @@ function createNewBlock(building, day, colIndex, subject, teacher, students, roo
 // Функция для позиционирования нового блока
 function positionNewBlock(block, timeRange) {
     var times = timeRange.match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
+    var syncedBlockContent = false;
     if (!times) {
         console.error('positionNewBlock: bad time format:', timeRange);
         return;
@@ -70,11 +87,14 @@ function positionNewBlock(block, timeRange) {
     block.removeAttribute('data-original-top');
     block.removeAttribute('data-compensated');
 
-    updateActivityPositions();
-
     // Sync block text so room name matches column header
     if (typeof syncBlockContent === 'function') {
         syncBlockContent(block);
+        syncedBlockContent = true;
+    }
+
+    if (!syncedBlockContent || typeof reapplyLessonTypeFilter !== 'function') {
+        reapplyLessonTypeFilterAfterBlockPositioning();
     }
 }
 

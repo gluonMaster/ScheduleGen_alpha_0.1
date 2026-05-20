@@ -1,5 +1,13 @@
 // Основной модуль с базовыми функциями расписания
 
+function refreshCompactRowsAfterUiChange() {
+    if (window.ScheduleCompactRows && typeof window.ScheduleCompactRows.refresh === 'function') {
+        window.ScheduleCompactRows.refresh();
+    } else if (typeof window.updateActivityPositions === 'function') {
+        window.updateActivityPositions();
+    }
+}
+
 // Функция переключения видимости дня
 window.toggleDay = function(btn, dayCode) {
     var hidden;
@@ -30,6 +38,5 @@ window.toggleDay = function(btn, dayCode) {
         btn.classList.remove("active");
     }
     
-    // Принудительно обновляем позиции всех блоков
-    updateActivityPositions();
+    refreshCompactRowsAfterUiChange();
 };
