@@ -24,22 +24,16 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
     # Путь к директории с JS модулями
     js_dir = os.path.join(os.path.dirname(__file__), 'js_modules')
     
-    # Формируем словарь с переменными для подстановки в JS
-    variables = {
-        'gridCellHeight': cellHeight,
-        'dayCellWidth': dayCellWidth,
-        'headerHeight': headerHeight,
-        'daysOrder': str(days_order),
-        'timeInterval': time_interval,
-        'borderWidth': float(borderWidth)
-    }
-    
+    # Emit the Python day model into JavaScript so runtime modules share one order.
+    days_order_json = json.dumps(list(days_order), ensure_ascii=False)
+
     # Инициализация JavaScript с переменными
     js_variables = f"""
         var gridCellHeight = {cellHeight};
         var dayCellWidth = {dayCellWidth};
         var headerHeight = {headerHeight};
-        var daysOrder = {str(days_order)};
+        var daysOrder = {days_order_json};
+        window.daysOrder = daysOrder;
         var timeInterval = {time_interval};
         var borderWidth = {float(borderWidth)};
         var gridStart = {int(grid_start)};

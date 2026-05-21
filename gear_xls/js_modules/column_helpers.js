@@ -1,7 +1,7 @@
 // Column helpers shared by add/remove/move flows across buildings.
 
 if (typeof window.daysOrder === "undefined") {
-    window.daysOrder = ["Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+    window.daysOrder = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 }
 
 function getScheduleTable(rootOrTable) {
@@ -380,7 +380,7 @@ function addColumnIfMissing(day, room, building) {
 
 function findInsertPositionInHeader(headerRow, day, insertionIndex) {
     var position = 1;
-    var daysOrder = window.daysOrder || ["Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+    var daysOrder = window.daysOrder || ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 
     for (var d = 0; d < daysOrder.length; d++) {
         if (daysOrder[d] === day) {

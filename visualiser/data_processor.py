@@ -6,7 +6,16 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from lesson_type_utils import classify_lesson_type
+try:
+    from .lesson_type_utils import classify_lesson_type
+except ImportError:
+    from lesson_type_utils import classify_lesson_type
+
+try:
+    from gear_xls.day_constants import DAY_TO_WEEKDAY, PUBLIC_SCHEDULE_DAYS
+except ImportError:
+    PUBLIC_SCHEDULE_DAYS = ("Mo", "Di", "Mi", "Do", "Fr", "Sa")
+    DAY_TO_WEEKDAY = {"Mo": 0, "Di": 1, "Mi": 2, "Do": 3, "Fr": 4, "Sa": 5, "So": 6}
 
 
 _COLUMN_ALIASES = {
@@ -164,6 +173,13 @@ def filter_by_lesson_type(df, lesson_type_filter='all'):
     return df[mask].reset_index(drop=True)
 
 
+def filter_final_visualization_days(df):
+    """Keep only public schedule days for final PDF/HTML outputs."""
+    if df is None or 'day' not in df.columns:
+        return df
+    return df[df['day'].isin(PUBLIC_SCHEDULE_DAYS)].reset_index(drop=True)
+
+
 def process_schedule_data(df):
     """
     Обрабатывает данные расписания, группируя их по дням недели
@@ -174,8 +190,10 @@ def process_schedule_data(df):
     Returns:
         tuple: (список дней недели, словарь с расписанием по дням)
     """
+    df = filter_final_visualization_days(df)
+
     # Порядок дней недели
-    day_order = {'Mo': 0, 'Di': 1, 'Mi': 2, 'Do': 3, 'Fr': 4, 'Sa': 5, 'So': 6}
+    day_order = DAY_TO_WEEKDAY
     
     # Получаем уникальные дни недели в правильном порядке
     unique_days = sorted(df['day'].unique(), key=lambda x: day_order.get(x, 99))

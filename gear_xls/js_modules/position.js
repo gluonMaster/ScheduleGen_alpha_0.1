@@ -2,7 +2,7 @@
 
 // Убеждаемся, что daysOrder определена
 if (typeof window.daysOrder === 'undefined') {
-    window.daysOrder = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+    window.daysOrder = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 }
 
 // Returns start row derived from time text in block content, or null on failure.

@@ -15,6 +15,7 @@ import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Alignment, Border, Side, Font
 from openpyxl.utils.dataframe import dataframe_to_rows
+from gear_xls.day_constants import TRIAL_ONLY_DAYS, WEB_EDITOR_DAY_SET
 
 # Настройка логирования
 logging.basicConfig(
@@ -22,6 +23,36 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger('excel_exporter')
+
+
+class ExcelExportValidationError(ValueError):
+    def __init__(self, message, code="INVALID_EXPORT_DATA"):
+        super().__init__(message)
+        self.message = message
+        self.code = code
+
+
+def validate_schedule_data_for_export(schedule_data):
+    if not isinstance(schedule_data, list):
+        raise ExcelExportValidationError("Schedule data must be a list")
+
+    for index, activity in enumerate(schedule_data):
+        if not isinstance(activity, dict):
+            raise ExcelExportValidationError(f"Schedule row {index} must be an object")
+
+        day = str(activity.get("day") or "").strip()
+        lesson_type = str(activity.get("lesson_type") or "group").strip() or "group"
+
+        if day not in WEB_EDITOR_DAY_SET:
+            raise ExcelExportValidationError(
+                f"Schedule row {index} has invalid day: {day or '<empty>'}",
+                code="INVALID_EXPORT_DAY",
+            )
+        if day in TRIAL_ONLY_DAYS and lesson_type != "trial":
+            raise ExcelExportValidationError(
+                "Sunday is allowed only for trial lessons",
+                code="SUNDAY_REGULAR_FORBIDDEN",
+            )
 
 def create_excel_from_html_data(schedule_data, output_file=None):
     """
@@ -38,6 +69,7 @@ def create_excel_from_html_data(schedule_data, output_file=None):
     if not schedule_data:
         logger.error("Нет данных для экспорта в Excel")
         return None
+    validate_schedule_data_for_export(schedule_data)
     
     # Если имя выходного файла не указано, создаем имя по умолчанию
     if not output_file:
@@ -244,9 +276,7 @@ def process_schedule_export_request(request_data, output_dir="excel_exports"):
             logger.info(f"Получены данные в формате {type(schedule_data)}")
         
         # Проверяем валидность данных
-        if not isinstance(schedule_data, list):
-            logger.error(f"Неверный формат данных. Ожидается список, получено: {type(schedule_data)}")
-            return None
+        validate_schedule_data_for_export(schedule_data)
         
         if not schedule_data:
             logger.error("Список занятий пуст")
@@ -281,6 +311,8 @@ def process_schedule_export_request(request_data, output_dir="excel_exports"):
         # Создаем Excel-файл
         return create_excel_from_html_data(schedule_data, output_file)
     
+    except ExcelExportValidationError:
+        raise
     except Exception as e:
         logger.error(f"Ошибка при обработке запроса на экспорт: {e}")
         import traceback

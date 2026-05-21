@@ -7,8 +7,15 @@
 """
 
 import logging
-from utils import time_to_minutes, get_color, room_sort_key
-from lesson_type_utils import classify_lesson_type
+
+try:
+    from .utils import time_to_minutes, get_color, room_sort_key
+    from .lesson_type_utils import classify_lesson_type
+    from .day_constants import WEB_EDITOR_DAYS
+except ImportError:
+    from utils import time_to_minutes, get_color, room_sort_key
+    from lesson_type_utils import classify_lesson_type
+    from day_constants import WEB_EDITOR_DAYS
 
 # Настройка логирования
 logging.basicConfig(
@@ -32,6 +39,21 @@ def _resolve_interval_color(details, lesson_type):
     if lesson_type == 'trial':
         return '#E8F5E9'
     return get_color(details.get('students', 'default'))
+
+
+def _default_room_for_building(building_data):
+    rooms = set()
+    for key, intervals in building_data.items():
+        if str(key).startswith('_') or not isinstance(intervals, list):
+            continue
+        for interval in intervals:
+            room = str(interval.get('room_display', '')).strip()
+            if room:
+                rooms.add(room)
+    if not rooms:
+        return ''
+    return sorted(rooms, key=room_sort_key)[0]
+
 
 def build_schedule_structure(activities, time_interval=5):
     """
@@ -63,7 +85,7 @@ def build_schedule_structure(activities, time_interval=5):
         dict: Структурированное расписание по зданиям
     """
     buildings = {}
-    days_order = ["Mo", "Di", "Mi", "Do", "Fr", "Sa"]
+    days_order = list(WEB_EDITOR_DAYS)
     
     # Определяем начало и конец сетки расписания
     grid_start = 9 * 60  # 09:00 в минутах
@@ -123,6 +145,7 @@ def build_schedule_structure(activities, time_interval=5):
         for building in buildings:
             max_cols = {}
             rooms_by_day = {}
+            default_room = _default_room_for_building(buildings[building])
 
             for day in days_order:
                 if day in buildings[building]:
@@ -130,22 +153,30 @@ def build_schedule_structure(activities, time_interval=5):
 
                     # Получаем и сортируем список уникальных кабинетов
                     unique_rooms_list = sorted(
-                        {interval['room_display'] for interval in intervals},
+                        {
+                            str(interval.get('room_display', '')).strip()
+                            for interval in intervals
+                            if str(interval.get('room_display', '')).strip()
+                        },
                         key=room_sort_key
                     )
+                    if not unique_rooms_list and default_room:
+                        unique_rooms_list = [default_room]
                     rooms_by_day[day] = unique_rooms_list
 
                     # Присваиваем индекс столбца согласно позиции в отсортированном списке кабинетов
                     for interval in intervals:
-                        interval['col'] = unique_rooms_list.index(interval['room_display'])
+                        room_display = str(interval.get('room_display', '')).strip()
+                        interval['col'] = unique_rooms_list.index(room_display) if room_display in unique_rooms_list else 0
 
-                    max_cols[day] = len(unique_rooms_list)
+                    max_cols[day] = len(unique_rooms_list) or 1
                 else:
                     max_cols[day] = 1
-                    rooms_by_day[day] = []
+                    rooms_by_day[day] = [default_room] if default_room else []
 
             buildings[building]['_max_cols'] = max_cols
             buildings[building]['_rooms'] = rooms_by_day
+            buildings[building]['_default_room'] = default_room
             buildings[building]['_grid_start'] = grid_start
             buildings[building]['_grid_end'] = grid_end
 

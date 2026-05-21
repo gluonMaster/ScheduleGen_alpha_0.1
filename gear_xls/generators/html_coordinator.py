@@ -11,6 +11,7 @@ import logging
 from .html_structure_generator import HTMLStructureGenerator
 from .html_table_generator import HTMLTableGenerator
 from .html_block_generator import HTMLBlockGenerator
+from gear_xls.day_constants import WEB_EDITOR_DAYS
 
 # Настройка логирования
 logging.basicConfig(
@@ -45,7 +46,7 @@ class HTMLCoordinator:
         self.block_generator = HTMLBlockGenerator(time_interval=time_interval, border_width=border_width)
         
         # Константы для расчетов
-        self.days_order = ["Mo", "Di", "Mi", "Do", "Fr", "Sa"]
+        self.days_order = list(WEB_EDITOR_DAYS)
         self.day_cell_width = 100
         self.time_col_width = 80
         

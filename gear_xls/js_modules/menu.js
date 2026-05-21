@@ -5,7 +5,9 @@ var BUILDING_ROOMS = {
     'Kolibri': ['0.3', '2.2', '2.3', '2.4', '2.5', '2.6', '2.7']
 };
 
-var MENU_DAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+var MENU_DAYS = Array.isArray(window.daysOrder)
+    ? window.daysOrder.slice()
+    : ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 var _menuModalEscapeHandler = null;
 var _menuInitialized = false;
 
@@ -225,7 +227,7 @@ function _buildAddColumnDialogHTML(prefillBuilding, prefillDay) {
         buildings = ['Villa', 'Kolibri'];
     }
 
-    var days = (typeof MENU_DAYS !== 'undefined' && MENU_DAYS) ? MENU_DAYS : ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+    var days = (typeof MENU_DAYS !== 'undefined' && MENU_DAYS) ? MENU_DAYS : ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
     if (prefillDay && days.indexOf(prefillDay) === -1) {
         days = days.slice();
         days.unshift(prefillDay);

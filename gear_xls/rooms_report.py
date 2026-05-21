@@ -16,6 +16,7 @@ from gear_xls.runtime_paths import (
     get_schedule_html_path,
     get_spiski_dir,
 )
+from gear_xls.day_constants import DAY_TO_WEEKDAY
 
 
 BASE_SCHEDULE_PATH = get_base_schedule_path()
@@ -27,7 +28,7 @@ SPISKI_ROOM_FILE_MAP = {
     "Kolibri": "kabinets_Kolibri.txt",
 }
 BUILDING_ORDER = ["Villa", "Kolibri"]
-DAY_ORDER = {"Mo": 0, "Di": 1, "Mi": 2, "Do": 3, "Fr": 4, "Sa": 5}
+DAY_ORDER = dict(DAY_TO_WEEKDAY)
 
 
 def _load_json_safe(path: str) -> dict:

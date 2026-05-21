@@ -7,12 +7,21 @@
 
 import os
 import logging
+import re
+import uuid
 from typing import Dict, Any, Optional
 
 # Импортируем существующие модули
-from excel_parser import parse_schedule
-from schedule_structure import build_schedule_structure
-from html_generator import generate_html_schedule
+try:
+    from ..excel_parser import parse_schedule
+    from ..schedule_structure import build_schedule_structure
+    from ..html_generator import generate_html_schedule
+    from ..time_utils import minutes_to_time
+except ImportError:
+    from excel_parser import parse_schedule
+    from schedule_structure import build_schedule_structure
+    from html_generator import generate_html_schedule
+    from time_utils import minutes_to_time
 
 
 # Настройка логирования
@@ -22,10 +31,118 @@ logging.basicConfig(
 )
 logger = logging.getLogger('schedule_pipeline')
 
+_HTML_ACTIVITY_BLOCK_PATTERN = re.compile(
+    r"<div(?P<attrs>[^>]*class=['\"][^'\"]*activity-block[^'\"]*['\"][^>]*)>"
+    r"(?P<body>.*?)</div>",
+    re.I | re.S,
+)
+
 
 class SchedulePipelineError(Exception):
     """Исключение для ошибок в пайплайне обработки расписания"""
     pass
+
+
+def _resolve_lesson_type(interval: dict) -> str:
+    lesson_type = str(interval.get("lesson_type") or "").strip().lower()
+    return lesson_type or "group"
+
+
+def _is_embedded_non_group_block(attrs_text: str) -> bool:
+    match = re.search(r"data-lesson-type=['\"]([^'\"]*)['\"]", attrs_text, re.I)
+    lesson_type = (match.group(1).strip().lower() if match else "")
+    if lesson_type and lesson_type != "group":
+        return True
+    class_match = re.search(r"class=['\"]([^'\"]*)['\"]", attrs_text, re.I)
+    classes = class_match.group(1).lower().split() if class_match else []
+    return any(
+        cls in ("lesson-type-individual", "lesson-type-nachhilfe", "lesson-type-trial")
+        for cls in classes
+    )
+
+
+def strip_non_group_activity_blocks_from_html(html: str) -> tuple[str, int]:
+    removed_count = 0
+
+    def replace(match):
+        nonlocal removed_count
+        if _is_embedded_non_group_block(match.group("attrs")):
+            removed_count += 1
+            return ""
+        return match.group(0)
+
+    return _HTML_ACTIVITY_BLOCK_PATTERN.sub(replace, html), removed_count
+
+
+def strip_non_group_activity_blocks_from_file(path: str) -> int:
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    stripped, removed_count = strip_non_group_activity_blocks_from_html(html)
+    if removed_count:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(stripped)
+    return removed_count
+
+
+def collect_individual_blocks_from_buildings(buildings: dict) -> list[dict]:
+    blocks = []
+    seen_signatures = set()
+
+    for building, building_data in buildings.items():
+        if str(building).startswith("_") or not isinstance(building_data, dict):
+            continue
+        for day, intervals in building_data.items():
+            if str(day).startswith("_") or not isinstance(intervals, list):
+                continue
+            for interval in intervals:
+                lesson_type = _resolve_lesson_type(interval)
+                if lesson_type == "group":
+                    continue
+                start_time = minutes_to_time(interval.get("start", 0))
+                end_time = minutes_to_time(interval.get("end", 0))
+                room = str(interval.get("room_display") or interval.get("room") or "").strip()
+                trial_dates = [
+                    str(value)
+                    for value in (interval.get("trial_dates") or [])
+                    if value is not None
+                ]
+                signature = (
+                    str(interval.get("id", "")),
+                    str(building),
+                    str(day),
+                    room,
+                    start_time,
+                    end_time,
+                    str(interval.get("subject", "")),
+                    str(interval.get("teacher", "")),
+                    str(interval.get("students", "")),
+                    lesson_type,
+                    tuple(trial_dates),
+                )
+                if signature in seen_signatures:
+                    continue
+                seen_signatures.add(signature)
+
+                block = {
+                    "id": str(interval.get("id") or uuid.uuid4()),
+                    "day": str(day),
+                    "building": str(building),
+                    "room": room,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "subject": str(interval.get("subject", "")),
+                    "teacher": str(interval.get("teacher", "")),
+                    "students": str(interval.get("students", "")),
+                    "lesson_type": lesson_type,
+                    "color": interval.get("color"),
+                    "start_row": interval.get("row_start"),
+                    "row_span": interval.get("rowspan"),
+                }
+                if lesson_type == "trial":
+                    block["trial_dates"] = trial_dates
+                blocks.append({key: value for key, value in block.items() if value is not None})
+
+    return blocks
 
 
 class SchedulePipeline:
@@ -95,6 +212,7 @@ class SchedulePipeline:
             if not buildings:
                 raise SchedulePipelineError("Не удалось создать структуру расписания из извлеченных данных.")
             
+            individual_blocks = collect_individual_blocks_from_buildings(buildings)
             buildings_count = len([b for b in buildings.keys() if not b.startswith('_')])
             logger.info(f"Успешно построена структура для {buildings_count} зданий")
             
@@ -114,9 +232,18 @@ class SchedulePipeline:
             logger.info(f"HTML файл создан: {html_file}")
             
             # Формируем результат
+            removed_embedded_blocks = strip_non_group_activity_blocks_from_file(html_file)
+            if removed_embedded_blocks:
+                logger.info(
+                    "Removed %d embedded non-group blocks from generated HTML; "
+                    "they will be initialized from individual_lessons.json",
+                    removed_embedded_blocks,
+                )
+
             result = {
                 'html_file': html_file,
                 'buildings': buildings,
+                'individual_blocks': individual_blocks,
                 'activities_count': activities_count,
                 'buildings_count': buildings_count
             }

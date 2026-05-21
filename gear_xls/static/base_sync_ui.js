@@ -1401,6 +1401,9 @@
     if (!building || !day || colIndex < 0) {
       return markInvalidGroupBlock(block, "Не заполнены координаты блока.");
     }
+    if (day === "So") {
+      return markInvalidGroupBlock(block, "Воскресенье доступно только для trial-занятий.");
+    }
     if (!room) {
       return markInvalidGroupBlock(block, "Не удалось определить кабинет блока.");
     }

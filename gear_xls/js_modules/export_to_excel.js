@@ -169,6 +169,22 @@ function collectScheduleData(options) {
     return scheduleData;
 }
 
+function validateScheduleDataForExcelExport(scheduleData) {
+    for (var i = 0; i < scheduleData.length; i++) {
+        var activity = scheduleData[i] || {};
+        var day = String(activity.day || '').trim();
+        var lessonType = String(activity.lesson_type || 'group').trim() || 'group';
+
+        if (day === 'So' && lessonType !== 'trial') {
+            return {
+                ok: false,
+                message: 'Экспорт остановлен: воскресенье доступно только для trial-занятий.'
+            };
+        }
+    }
+    return { ok: true };
+}
+
 // Вспомогательная функция преобразования минут в формат времени HH:MM
 function _prepareSearchForExcelExport(options) {
     var search = window.ScheduleSearch;
@@ -452,6 +468,13 @@ function exportScheduleToExcel(onDone, options) {
             _refreshIndividualBeforeExport(function() {
                 // Собираем данные расписания
                 var scheduleData = collectScheduleData();
+                var exportValidation = validateScheduleDataForExcelExport(scheduleData);
+                if (!exportValidation.ok) {
+                    hideExportProgress();
+                    alert(exportValidation.message);
+                    _callDone();
+                    return;
+                }
                 console.log('Собрано записей: ' + scheduleData.length);
                 
                 // Показываем индикатор процесса

@@ -14,6 +14,7 @@ if PROJECT_ROOT not in sys.path:
 
 from gear_xls.runtime_paths import get_base_schedule_path
 from gear_xls.room_name_utils import normalize_room_fields
+from gear_xls.day_constants import PUBLIC_SCHEDULE_DAY_SET
 
 
 BASE_SCHEDULE_PATH = get_base_schedule_path()
@@ -27,6 +28,13 @@ class BaseRevisionConflict(Exception):
         super().__init__("Base schedule revision conflict")
         self.expected_revision = expected_revision
         self.current_revision = current_revision
+
+
+class BaseScheduleValidationError(Exception):
+    def __init__(self, message, code="INVALID_BASE_DAY"):
+        super().__init__(message)
+        self.message = message
+        self.code = code
 
 
 def _empty_base():
@@ -115,6 +123,20 @@ def _normalize_base_blocks(blocks):
     return normalized_blocks
 
 
+def _validate_public_base_block(block, index):
+    day = str(block.get("day") or "").strip()
+    lesson_type = str(block.get("lesson_type") or "").strip() or "group"
+
+    if lesson_type != "group":
+        return
+    if day not in PUBLIC_SCHEDULE_DAY_SET:
+        code = "SUNDAY_REGULAR_FORBIDDEN" if day == "So" else "INVALID_BASE_DAY"
+        raise BaseScheduleValidationError(
+            f"Base/group block {index} has invalid public schedule day: {day or '<empty>'}",
+            code=code,
+        )
+
+
 def _normalize_revision(value):
     if value is None:
         return None
@@ -194,11 +216,14 @@ def publish_base(blocks, published_by, expected_base_revision=None):
             if expected_revision != current_revision:
                 raise BaseRevisionConflict(expected_revision, current_revision)
 
-            filtered_blocks = [
-                normalize_room_fields(block)
-                for block in (blocks or [])
-                if isinstance(block, dict) and block.get("lesson_type") == "group"
-            ]
+            filtered_blocks = []
+            for index, block in enumerate(blocks or []):
+                if not isinstance(block, dict):
+                    continue
+                normalized_block = normalize_room_fields(block)
+                _validate_public_base_block(normalized_block, index)
+                if normalized_block.get("lesson_type") == "group":
+                    filtered_blocks.append(normalized_block)
             if _base_blocks_signature(current_state.get("blocks", [])) == _base_blocks_signature(
                 filtered_blocks
             ):

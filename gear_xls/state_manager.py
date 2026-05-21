@@ -19,28 +19,31 @@ from gear_xls.runtime_paths import (
     get_individual_lessons_path,
     get_schedule_html_path,
 )
+from gear_xls.day_constants import DAY_TO_WEEKDAY, TRIAL_ONLY_DAYS, WEB_EDITOR_DAY_SET
 
-from base_schedule_manager import (
-    BASE_SCHEDULE_PATH,
-    base_has_group_lessons_in_column,
-    get_base_revision,
-    get_base_schedule,
-    publish_base,
-)
+try:
+    from .base_schedule_manager import (
+        BASE_SCHEDULE_PATH,
+        base_has_group_lessons_in_column,
+        get_base_revision,
+        get_base_schedule,
+        publish_base,
+    )
+except ImportError:
+    from base_schedule_manager import (
+        BASE_SCHEDULE_PATH,
+        base_has_group_lessons_in_column,
+        get_base_revision,
+        get_base_schedule,
+        publish_base,
+    )
 
 
 INDIVIDUAL_LESSONS_PATH = get_individual_lessons_path()
 INDIVIDUAL_LOCK_PATH = INDIVIDUAL_LESSONS_PATH + ".lock"
 SCHEDULE_HTML_PATH = get_schedule_html_path()
-VALID_DAYS = {"Mo", "Di", "Mi", "Do", "Fr", "Sa"}
-_DAY_TO_WEEKDAY = {
-    "Mo": 0,
-    "Di": 1,
-    "Mi": 2,
-    "Do": 3,
-    "Fr": 4,
-    "Sa": 5,
-}
+VALID_DAYS = WEB_EDITOR_DAY_SET
+_DAY_TO_WEEKDAY = DAY_TO_WEEKDAY
 _ISO_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _ind_mutex = threading.Lock()
 logger = logging.getLogger(__name__)
@@ -311,6 +314,8 @@ def _validate_block(block, role):
     allowed = _ROLE_ALLOWED_TYPES.get(role)
     if allowed is not None and block.get("lesson_type") not in allowed:
         return "Forbidden lesson_type"
+    if block["day"] in TRIAL_ONLY_DAYS and block.get("lesson_type") != "trial":
+        return "Sunday is allowed only for trial lessons"
     if block.get("lesson_type") == "trial":
         dates = block.get("trial_dates", [])
         if not isinstance(dates, list):
@@ -409,7 +414,11 @@ def delete_block(block_id, role=None):
 
 
 def convert_block_to_regular(block_id, role):
-    from lesson_type_utils import infer_regular_type_from_subject
+    try:
+        from .lesson_type_utils import infer_regular_type_from_subject
+    except ImportError:
+        from lesson_type_utils import infer_regular_type_from_subject
+
     with _ind_mutex:
         with _locked_individual_file():
             state = _read_individual()
@@ -420,6 +429,8 @@ def convert_block_to_regular(block_id, role):
                     return None, "NOT_TRIAL"
                 if role not in ("admin", "editor", "organizer"):
                     return None, "FORBIDDEN"
+                if block.get("day") in TRIAL_ONLY_DAYS:
+                    return None, "Sunday is allowed only for trial lessons"
                 merged = dict(block)
                 merged.pop("trial_dates", None)
                 merged["lesson_type"] = infer_regular_type_from_subject(merged.get("subject", ""))

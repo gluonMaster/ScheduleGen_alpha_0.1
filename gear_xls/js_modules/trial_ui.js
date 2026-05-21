@@ -219,6 +219,7 @@
     if (!blockElement || !container) return;
     if (_allowedConvertRoles.indexOf(role) === -1) return;
     if (blockElement.getAttribute("data-lesson-type") !== "trial") return;
+    if (blockElement.getAttribute("data-day") === "So") return;
 
     var btn = document.createElement("button");
     btn.type = "button";

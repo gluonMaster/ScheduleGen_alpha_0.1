@@ -20,6 +20,12 @@ from gear_xls.runtime_paths import (
     get_schedule_html_path,
     get_spiski_dir,
 )
+from gear_xls.day_constants import (
+    DAY_TO_WEEKDAY,
+    PUBLIC_SCHEDULE_DAY_SET,
+    TRIAL_ONLY_DAYS,
+    WEB_EDITOR_DAY_SET,
+)
 
 
 BACKUP_SCHEMA = "schedgen.web_editor_backup"
@@ -55,10 +61,10 @@ EXPECTED_ARCHIVE_PATHS = ("manifest.json", *EXPECTED_CONTENT_PATHS)
 EXPECTED_ARCHIVE_PATH_SET = set(EXPECTED_ARCHIVE_PATHS)
 EXPECTED_CONTENT_PATH_SET = set(EXPECTED_CONTENT_PATHS)
 
-VALID_DAYS = {"Mo", "Di", "Mi", "Do", "Fr", "Sa"}
+VALID_DAYS = WEB_EDITOR_DAY_SET
+VALID_PUBLIC_DAYS = PUBLIC_SCHEDULE_DAY_SET
 VALID_BASE_LESSON_TYPES = {"group"}
 VALID_INDIVIDUAL_LESSON_TYPES = {"individual", "nachhilfe", "trial"}
-DAY_TO_WEEKDAY = {"Mo": 0, "Di": 1, "Mi": 2, "Do": 3, "Fr": 4, "Sa": 5}
 TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 def _joined_marker(*parts: str) -> str:
@@ -255,6 +261,7 @@ def _validate_common_block(
     label: str,
     index: int,
     allowed_lesson_types: set[str],
+    allowed_days: set[str] | frozenset[str],
     require_id: bool,
 ) -> None:
     if not isinstance(block, dict):
@@ -276,7 +283,7 @@ def _validate_common_block(
             code="INVALID_JSON_STATE",
             status_code=400,
         )
-    if block["day"] not in VALID_DAYS:
+    if block["day"] not in allowed_days:
         raise BackupValidationError(
             f"{label} block {index}: invalid day",
             code="INVALID_JSON_STATE",
@@ -328,6 +335,7 @@ def validate_base_state(data: Any, *, label: str = "base_schedule.json") -> None
             label=label,
             index=index,
             allowed_lesson_types=VALID_BASE_LESSON_TYPES,
+            allowed_days=VALID_PUBLIC_DAYS,
             require_id=False,
         )
 
@@ -353,6 +361,7 @@ def validate_individual_state(data: Any, *, label: str = "individual_lessons.jso
             label=label,
             index=index,
             allowed_lesson_types=VALID_INDIVIDUAL_LESSON_TYPES,
+            allowed_days=VALID_DAYS,
             require_id=True,
         )
         block_id = block["id"]
@@ -363,6 +372,12 @@ def validate_individual_state(data: Any, *, label: str = "individual_lessons.jso
                 status_code=400,
             )
         seen_ids.add(block_id)
+        if block["day"] in TRIAL_ONLY_DAYS and block["lesson_type"] != "trial":
+            raise BackupValidationError(
+                f"{label} block {index}: Sunday is allowed only for trial lessons",
+                code="INVALID_JSON_STATE",
+                status_code=400,
+            )
         if block["lesson_type"] != "trial":
             continue
         trial_dates = block.get("trial_dates")

@@ -73,7 +73,7 @@ td.slot-free { background: #fff; }
       <option value="">Все</option>
     </select>
   </label>
-  <span>Дни:
+  <span id="day-filter-group" class="rooms-day-filter">Дни:
     <span class="day-toggle"><input type="checkbox" id="d-all" checked><label for="d-all">Все</label></span>
     <span class="day-toggle"><input type="checkbox" id="d-Mo"><label for="d-Mo">Mo</label></span>
     <span class="day-toggle"><input type="checkbox" id="d-Di"><label for="d-Di">Di</label></span>
@@ -81,6 +81,7 @@ td.slot-free { background: #fff; }
     <span class="day-toggle"><input type="checkbox" id="d-Do"><label for="d-Do">Do</label></span>
     <span class="day-toggle"><input type="checkbox" id="d-Fr"><label for="d-Fr">Fr</label></span>
     <span class="day-toggle"><input type="checkbox" id="d-Sa"><label for="d-Sa">Sa</label></span>
+    <span class="day-toggle"><input type="checkbox" id="d-So"><label for="d-So">So</label></span>
   </span>
   <label id="search-box-wrap">Поиск кабинета:
     <input type="text" id="search-box" placeholder="0.06 Kolibri ..." autocomplete="off" list="room-suggestions">

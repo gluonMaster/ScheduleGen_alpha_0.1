@@ -64,7 +64,7 @@ def run_script():
         # Выполняем основную обработку через пайплайн
         spiski_data = load_spiski_data()
         result = pipeline.process_excel_to_outputs(selected_file, output_dirs, spiski_data=spiski_data)
-        reset_web_editor_state()
+        reset_web_editor_state(result.get("individual_blocks"))
         print(f"Обработка завершена:")
         print(f"  - Занятий обработано: {result['activities_count']}")
         print(f"  - Зданий создано: {result['buildings_count']}")

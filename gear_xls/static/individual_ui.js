@@ -1425,6 +1425,12 @@
       return;
     }
 
+    if (payload.day === "So" && payload.lesson_type !== "trial") {
+      stopDomMutation(event);
+      alert("Воскресенье доступно только для trial-занятий.");
+      return;
+    }
+
     stopDomMutation(event);
     if (!isInEditMode()) {
       alert(
@@ -1900,6 +1906,9 @@
     }
     if (resolveCreateLessonType(form) === "trial" && collectCreateTrialDates(form).length === 0) {
       return "Для trial-занятия нужно указать хотя бы одну дату проведения.";
+    }
+    if (getFieldValue(form, "#new-day") === "So" && resolveCreateLessonType(form) !== "trial") {
+      return "Воскресенье доступно только для trial-занятий.";
     }
     return null;
   }

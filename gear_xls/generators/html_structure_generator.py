@@ -11,6 +11,7 @@ import uuid
 import logging
 from html_styles import get_css_styles
 from html_javascript import get_javascript
+from gear_xls.day_constants import WEB_EDITOR_DAYS
 
 # Настройка логирования
 logging.basicConfig(
@@ -57,7 +58,7 @@ class HTMLStructureGenerator:
         dayCellWidth = 100
         timeColWidth = 80
         headerHeight = 45
-        days_order = ["Mo", "Di", "Mi", "Do", "Fr", "Sa"]
+        days_order = list(WEB_EDITOR_DAYS)
 
         head_parts = [
             "<!DOCTYPE html>",
@@ -88,7 +89,7 @@ class HTMLStructureGenerator:
         Returns:
             list: Список строк HTML для панели управления
         """
-        days_order = ["Mo", "Di", "Mi", "Do", "Fr", "Sa"]
+        days_order = list(WEB_EDITOR_DAYS)
         csrf_token = str(uuid.uuid4())
         
         panel_parts = [

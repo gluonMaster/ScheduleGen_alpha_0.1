@@ -57,6 +57,44 @@ def test_publish_base_noop_preserves_revision(isolated_base_schedule):
     assert base_schedule_manager.get_base_schedule()["published_at"] == first["published_at"]
 
 
+def test_publish_base_rejects_group_on_sunday(isolated_base_schedule):
+    block = _sample_group_block()
+    block["day"] = "So"
+
+    with pytest.raises(base_schedule_manager.BaseScheduleValidationError) as exc_info:
+        base_schedule_manager.publish_base([block], "admin", None)
+
+    assert exc_info.value.code == "SUNDAY_REGULAR_FORBIDDEN"
+    assert not isolated_base_schedule.exists()
+
+
+def test_publish_route_returns_stable_code_for_invalid_base_day(monkeypatch):
+    from gear_xls import server_routes
+
+    def fail_publish(*args, **kwargs):
+        raise server_routes.BaseScheduleValidationError(
+            "Base/group block 0 has invalid public schedule day: So",
+            code="SUNDAY_REGULAR_FORBIDDEN",
+        )
+
+    monkeypatch.setattr(server_routes.lock_manager, "get_lock_status", lambda: {"holder": "admin"})
+    monkeypatch.setattr(server_routes.state_manager, "publish_base", fail_publish)
+
+    client = server_routes.app.test_client()
+    with client.session_transaction() as sess:
+        sess["login"] = "admin"
+        sess["display_name"] = "Admin"
+        sess["role"] = "admin"
+
+    response = client.post(
+        "/api/schedule/publish",
+        json={"blocks": [_sample_group_block()], "expected_base_revision": None},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["code"] == "SUNDAY_REGULAR_FORBIDDEN"
+
+
 def test_publish_route_requires_active_lock(monkeypatch):
     from gear_xls import server_routes
 

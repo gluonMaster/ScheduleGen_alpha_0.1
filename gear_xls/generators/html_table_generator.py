@@ -8,7 +8,11 @@
 
 import logging
 from html import escape as html_escape
-from utils import minutes_to_time
+
+try:
+    from ..utils import minutes_to_time
+except ImportError:
+    from utils import minutes_to_time
 
 # Настройка логирования
 logging.basicConfig(
@@ -172,7 +176,9 @@ class HTMLTableGenerator:
             str: Название кабинета
         """
         rooms = building_data.get('_rooms', {}).get(day, [])
-        return rooms[col] if col < len(rooms) else ""
+        if col < len(rooms):
+            return rooms[col]
+        return building_data.get('_default_room', "")
     
     def calculate_table_dimensions(self, building_data, days_order, grid_start, grid_end):
         """

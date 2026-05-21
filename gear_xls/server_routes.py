@@ -48,13 +48,13 @@ from gear_xls.runtime_paths import (
 
 from auth import authenticate, current_user, get_or_create_secret_key, login_required, role_required
 import backup_manager
-from excel_exporter import process_schedule_export_request
+from excel_exporter import ExcelExportValidationError, process_schedule_export_request
 import lock_manager
 import restore_manager
 import rooms_report
 import rooms_routes
 import state_manager
-from base_schedule_manager import BaseRevisionConflict
+from base_schedule_manager import BaseRevisionConflict, BaseScheduleValidationError
 
 
 def _build_log_handlers():
@@ -901,6 +901,20 @@ def api_publish_schedule():
                 "current_base_revision": exc.current_revision,
             }
         ), 409
+    except BaseScheduleValidationError as exc:
+        logger.warning(
+            "Publish rejected due to invalid base block day: login=%s code=%s error=%s",
+            user["login"],
+            exc.code,
+            exc.message,
+        )
+        return jsonify(
+            {
+                "ok": False,
+                "error": exc.message,
+                "code": exc.code,
+            }
+        ), 400
     return jsonify(
         {
             "ok": True,
@@ -1132,6 +1146,9 @@ def export_to_excel():
         logger.info("Excel-файл успешно отправлен: %s", output_file)
         return response
 
+    except ExcelExportValidationError as e:
+        logger.warning("Excel export validation failed: %s", e.message)
+        return jsonify({"error": e.message, "code": e.code}), 400
     except Exception as e:
         logger.error("Ошибка при экспорте в Excel: %s", e)
         import traceback

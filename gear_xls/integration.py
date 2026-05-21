@@ -15,11 +15,16 @@ import re
 import json
 import tempfile
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Импортируем новый сервис пайплайна
-from services.schedule_pipeline import SchedulePipeline, SchedulePipelineError
-from utils import create_output_directories
+try:
+    from .services.schedule_pipeline import SchedulePipeline, SchedulePipelineError
+    from .utils import create_output_directories
+except ImportError:
+    from services.schedule_pipeline import SchedulePipeline, SchedulePipelineError
+    from utils import create_output_directories
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(THIS_DIR)
@@ -125,12 +130,14 @@ def _write_json_atomic(path: str, payload: dict) -> None:
                 pass
 
 
-def reset_web_editor_state() -> None:
+def reset_web_editor_state(individual_blocks: list[dict] | None = None) -> None:
     """
     Reset runtime state of the web editor so a newly generated app starts
     from the current Excel/HTML outputs instead of stale persisted JSON state.
     """
     state_dir = get_schedule_state_dir()
+
+    individual_blocks = list(individual_blocks or [])
 
     _write_json_atomic(
         os.path.join(state_dir, "base_schedule.json"),
@@ -138,7 +145,10 @@ def reset_web_editor_state() -> None:
     )
     _write_json_atomic(
         os.path.join(state_dir, "individual_lessons.json"),
-        {"last_modified": None, "blocks": []},
+        {
+            "last_modified": datetime.now(timezone.utc).isoformat() if individual_blocks else None,
+            "blocks": individual_blocks,
+        },
     )
     _write_json_atomic(
         os.path.join(state_dir, "lock.json"),
@@ -292,7 +302,7 @@ def run_full_pipeline(excel_file_path: str,                     time_interval: i
         # Выполняем основную обработку
         logger.info("Запуск обработки через SchedulePipeline...")
         result = pipeline.process_excel_to_outputs(excel_file_path, output_dirs, spiski_data=spiski_data)
-        reset_web_editor_state()
+        reset_web_editor_state(result.get("individual_blocks"))
         logger.info("Обработка завершена успешно:")
         logger.info(f"  - Входной файл: {excel_file_path}")
         logger.info(f"  - Занятий обработано: {result['activities_count']}")

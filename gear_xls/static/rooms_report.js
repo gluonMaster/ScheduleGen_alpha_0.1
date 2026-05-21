@@ -8,7 +8,7 @@ var _searchMode = "room";
 var _requestedTimeFromMinutes = -1;
 var _requestedTimeToMinutes = -1;
 
-var DAY_ORDER = ["Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+var DAY_ORDER = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 var BUILDING_ORDER = ["Villa", "Kolibri"];
 var SLOT_MINUTES = 15;
 
@@ -1009,11 +1009,48 @@ function renderFreeWindows() {
   renderSingleRoomReport(target);
 }
 
+function ensureDayFilterControls() {
+  var allBox = document.getElementById("d-all");
+  var container = document.getElementById("day-filter-group");
+
+  if (!container && allBox && allBox.parentNode) {
+    container = allBox.parentNode.parentNode;
+  }
+  if (!container) return [];
+
+  return DAY_ORDER.map(function(day) {
+    var existing = document.getElementById("d-" + day);
+    var wrapper;
+    var input;
+    var label;
+
+    if (existing) return existing;
+
+    wrapper = document.createElement("span");
+    wrapper.className = "day-toggle";
+
+    input = document.createElement("input");
+    input.type = "checkbox";
+    input.id = "d-" + day;
+
+    label = document.createElement("label");
+    label.setAttribute("for", input.id);
+    label.textContent = day;
+
+    wrapper.appendChild(input);
+    wrapper.appendChild(label);
+    container.appendChild(document.createTextNode(" "));
+    container.appendChild(wrapper);
+
+    return input;
+  });
+}
+
 function _wireDayFilters() {
   var allBox = document.getElementById("d-all");
-  var boxes = DAY_ORDER.map(function(day) {
-    return document.getElementById("d-" + day);
-  });
+  var boxes = ensureDayFilterControls();
+
+  if (!allBox || !boxes.length) return;
 
   allBox.onchange = function() {
     if (!this.checked) return;
