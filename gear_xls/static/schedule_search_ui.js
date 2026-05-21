@@ -1335,3 +1335,46 @@
     init();
   }
 })();
+
+(function () {
+  "use strict";
+
+  function shouldLoadRoomsScheduleFocus() {
+    try {
+      return new URLSearchParams(window.location.search || "").get("rooms_nav") === "1";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function loadRoomsScheduleFocus() {
+    var script;
+
+    if (
+      !shouldLoadRoomsScheduleFocus() ||
+      window.__roomsScheduleFocusLoaded ||
+      window.__roomsScheduleFocusLoading
+    ) {
+      return;
+    }
+
+    window.__roomsScheduleFocusLoading = true;
+    script = document.createElement("script");
+    script.src = "/static/rooms_schedule_focus.js?v=20260521_3";
+    script.async = false;
+    script.onload = function () {
+      window.__roomsScheduleFocusLoading = false;
+    };
+    script.onerror = function () {
+      window.__roomsScheduleFocusLoading = false;
+      console.error("Failed to load rooms_schedule_focus.js");
+    };
+    document.head.appendChild(script);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", loadRoomsScheduleFocus);
+  } else {
+    loadRoomsScheduleFocus();
+  }
+})();

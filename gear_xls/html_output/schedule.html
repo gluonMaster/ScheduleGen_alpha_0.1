@@ -436,8 +436,10 @@
         var daysOrder = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
         window.daysOrder = daysOrder;
         var timeInterval = 5;
+        window.timeInterval = timeInterval;
         var borderWidth = 0.5;
         var gridStart = 540;
+        window.gridStart = gridStart;
 
         // Глобальные переменные для отслеживания состояния
         window.editDialogOpen = false;
@@ -9133,7 +9135,7 @@ function forceReinitializeApplication() {
 <button class="toggle-day-button" data-day="Sa" onclick="toggleDay(this, 'Sa')">+/- Sa</button>
 <button class="toggle-day-button" data-day="So" onclick="toggleDay(this, 'So')">+/- So</button>
 <button id="exportToExcel">Экспорт в Excel</button>
-<input type="hidden" id="csrf_token" value="04051dfa-1b95-4b56-aab4-cc7f01c22d14">
+<input type="hidden" id="csrf_token" value="5aaacbd0-c77d-41fb-916c-4381e2ce094a">
 </div>
 <h1>Расписание занятий</h1>
 <h2>Здание: Villa</h2>

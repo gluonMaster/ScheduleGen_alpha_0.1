@@ -502,6 +502,7 @@ def schedule():
         # Load the search scaffold after the existing schedule UI so it can
         # reuse the injected nav slot and exposed auth/base/individual APIs.
         '<script src="/static/schedule_search_ui.js"></script>\n'
+        '<script src="/static/rooms_schedule_focus.js?v=20260521_3"></script>\n'
         '<script src="/static/backup_ui.js"></script>\n'
     )
     if "</body>" in html:

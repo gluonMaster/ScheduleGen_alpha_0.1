@@ -22,6 +22,10 @@ body { font-family: sans-serif; margin: 0; padding-top: calc(var(--schedgen-nav-
 #duration-minutes { width: 110px; }
 #time-from, #time-to { width: 120px; }
 #rooms-table-wrap { overflow-x: auto; padding: 12px 16px; }
+#rooms-table-wrap[hidden] { display: none; }
+#btn-toggle-rooms-table { padding: 4px 10px; border: 1px solid #9aa7b5; border-radius: 4px;
+    background: #fff; cursor: pointer; font-size: 13px; }
+#btn-toggle-rooms-table:hover { background: #f1f5f9; }
 table.rooms-table { border-collapse: collapse; font-size: 12px; min-width: 600px; }
 table.rooms-table th, table.rooms-table td {
     border: 1px solid #ddd; padding: 3px 6px; text-align: center; white-space: nowrap; }
@@ -33,6 +37,14 @@ td.slot-free { background: #fff; }
 #free-windows h3 { margin: 0 0 8px; }
 #free-windows h4 { margin: 12px 0 6px; font-size: 13px; color: #355; }
 #free-windows ul { margin: 0; padding-left: 20px; }
+#rooms-navigation-status { margin: 10px 16px 0; padding: 10px 12px; border-radius: 6px;
+    border: 1px solid #c8d4e0; background: #f8fbff; color: #1f3349; font-size: 13px; }
+#rooms-navigation-status[hidden] { display: none; }
+#rooms-navigation-status.error { border-color: #f0b4b4; background: #fff5f5; color: #8a1f1f; }
+#rooms-navigation-status.success { border-color: #a8d5b5; background: #f3fff6; color: #1f6f35; }
+#rooms-navigation-status button { margin-left: 10px; padding: 4px 10px; border: 1px solid #9aa7b5;
+    border-radius: 4px; background: #fff; cursor: pointer; font-size: 12px; }
+#rooms-navigation-status button:hover { background: #f1f5f9; }
 .report-summary { margin-bottom: 12px; color: #223; }
 .available-report-building {
     margin: 14px 0; padding: 12px 14px; background: #fff; border: 1px solid #dde4ec; border-radius: 8px;
@@ -43,6 +55,14 @@ td.slot-free { background: #fff; }
 }
 .available-report-room-list { margin: 0; padding-left: 20px; }
 .available-report-room { margin: 4px 0; }
+.available-report-room-title { display: inline-block; min-width: 48px; font-weight: 600; }
+.available-report-window-list { display: inline; margin: 0; padding: 0; list-style: none; }
+.available-report-window-item { display: inline; }
+.available-report-window-item + .available-report-window-item::before { content: "; "; }
+.available-room-link { border: 0; padding: 0; background: none; color: #0b57d0; cursor: pointer;
+    font: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.available-room-link:hover { color: #063b8f; }
+.available-room-link:disabled { color: #667085; cursor: wait; text-decoration: none; }
 .day-toggle { display: inline-block; margin: 0 2px; }
 .day-toggle input { display: none; }
 .day-toggle label { display: inline-block; padding: 3px 8px; border: 1px solid #aaa;
@@ -98,8 +118,10 @@ td.slot-free { background: #fff; }
   </label>
   <button id="btn-search">Найти</button>
   <button id="btn-refresh" title="Обновить данные">&#8635;</button>
+  <button id="btn-toggle-rooms-table" type="button" aria-expanded="false">Показать таблицу занятости аудиторий</button>
 </div>
-<div id="rooms-table-wrap">
+<div id="rooms-navigation-status" hidden></div>
+<div id="rooms-table-wrap" hidden>
   <table class="rooms-table" id="rooms-table">
     <thead id="rooms-thead"></thead>
     <tbody id="rooms-tbody"></tbody>

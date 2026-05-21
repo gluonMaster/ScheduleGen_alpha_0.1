@@ -270,6 +270,58 @@ def test_rooms_page_exposes_sunday_day_filter():
     assert "ensureDayFilterControls" in js
 
 
+def test_rooms_page_hides_availability_table_by_default():
+    template = rooms_routes.ROOMS_PAGE_TEMPLATE
+
+    assert 'id="btn-toggle-rooms-table"' in template
+    assert "Показать таблицу занятости аудиторий" in template
+    assert 'id="rooms-navigation-status" hidden' in template
+    assert '<div id="rooms-table-wrap" hidden>' in template
+
+
+def test_rooms_available_results_link_to_schedule_preflight():
+    js = (PROJECT_ROOT / "gear_xls" / "static" / "rooms_report.js").read_text(encoding="utf-8")
+
+    assert "available-room-link" in js
+    assert "data-building" in js
+    assert "data-room" in js
+    assert "data-day" in js
+    assert "data-start" in js
+    assert "data-end" in js
+    assert 'params.set("rooms_nav", "1")' in js
+    assert 'lockApiRequest("/api/lock/acquire", "POST")' in js
+    assert 'lockApiRequest("/api/lock", "DELETE")' in js
+
+
+def test_schedule_loads_rooms_focus_script():
+    server_routes = (PROJECT_ROOT / "gear_xls" / "server_routes.py").read_text(encoding="utf-8")
+    focus_js = (PROJECT_ROOT / "gear_xls" / "static" / "rooms_schedule_focus.js").read_text(encoding="utf-8")
+    search_js = (PROJECT_ROOT / "gear_xls" / "static" / "schedule_search_ui.js").read_text(encoding="utf-8")
+    generator = (PROJECT_ROOT / "gear_xls" / "html_javascript.py").read_text(encoding="utf-8")
+
+    assert "/static/rooms_schedule_focus.js" in server_routes
+    assert "rooms_schedule_focus.js?v=20260521_3" in search_js
+    assert "/api/columns" in focus_js
+    assert "addColumnIfMissing" in focus_js
+    assert "toggleDay" in focus_js
+    assert "rooms-schedule-focus-cell" in focus_js
+    assert "window.gridStart = gridStart" in generator
+    assert "window.timeInterval = timeInterval" in generator
+
+
+def test_rooms_focus_clears_temporary_highlight_on_editor_actions():
+    focus_js = (PROJECT_ROOT / "gear_xls" / "static" / "rooms_schedule_focus.js").read_text(encoding="utf-8")
+    auth_js = (PROJECT_ROOT / "gear_xls" / "static" / "auth_ui.js").read_text(encoding="utf-8")
+
+    assert "MutationObserver" in focus_js
+    assert "blockMatchesActiveFocus" in focus_js
+    assert 'target.closest(".toggle-day-button")' in focus_js
+    assert 'event.key === "Escape"' in focus_js
+    assert '"schedgen:edit-mode-change"' in focus_js
+    assert "RoomsScheduleFocus" in focus_js
+    assert 'new CustomEvent("schedgen:edit-mode-change"' in auth_js
+
+
 def test_final_visualiser_filters_sunday_rows():
     from visualiser import data_processor as visualiser_data
 

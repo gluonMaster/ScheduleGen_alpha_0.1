@@ -618,6 +618,11 @@
     }
     if (isEditMode !== previousEditMode) {
       refreshCompactRowsAfterEditModeChange();
+      document.dispatchEvent(
+        new CustomEvent("schedgen:edit-mode-change", {
+          detail: { enabled: isEditMode },
+        })
+      );
     }
   }
 

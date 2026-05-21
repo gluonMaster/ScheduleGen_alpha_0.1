@@ -7,6 +7,7 @@ var _requestedDurationMinutes = 0;
 var _searchMode = "room";
 var _requestedTimeFromMinutes = -1;
 var _requestedTimeToMinutes = -1;
+var _roomsNavigationBusy = false;
 
 var DAY_ORDER = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 var BUILDING_ORDER = ["Villa", "Kolibri"];
@@ -135,12 +136,240 @@ function showError(msg) {
   var tableWrap = document.getElementById("rooms-table-wrap");
   var report = document.getElementById("free-windows");
 
-  if (tableWrap) {
+  if (tableWrap && !tableWrap.hidden) {
     tableWrap.innerHTML = '<p style="color:red;padding:12px">' + escapeHtml(msg) + "</p>";
   }
   if (report) {
-    report.innerHTML = "";
+    report.innerHTML = '<p style="color:red">' + escapeHtml(msg) + "</p>";
   }
+  showNavigationStatus(msg, "error");
+}
+
+function initRoomsTableToggle() {
+  var button = document.getElementById("btn-toggle-rooms-table");
+  var tableWrap = document.getElementById("rooms-table-wrap");
+  var controls = document.getElementById("rooms-controls");
+
+  if (!tableWrap) return;
+  if (!button && controls) {
+    button = document.createElement("button");
+    button.id = "btn-toggle-rooms-table";
+    button.type = "button";
+    controls.appendChild(button);
+  }
+  if (!button) return;
+
+  tableWrap.hidden = true;
+  button.setAttribute("aria-expanded", "false");
+  button.textContent = "Показать таблицу занятости аудиторий";
+
+  button.addEventListener("click", function() {
+    var shouldShow = tableWrap.hidden;
+
+    tableWrap.hidden = !shouldShow;
+    button.setAttribute("aria-expanded", shouldShow ? "true" : "false");
+    button.textContent = shouldShow
+      ? "Скрыть таблицу занятости аудиторий"
+      : "Показать таблицу занятости аудиторий";
+  });
+}
+
+function getNavigationStatusElement() {
+  var status = document.getElementById("rooms-navigation-status");
+  var controls = document.getElementById("rooms-controls");
+
+  if (!status) {
+    status = document.createElement("div");
+    status.id = "rooms-navigation-status";
+    status.hidden = true;
+    if (controls && controls.parentNode) {
+      controls.parentNode.insertBefore(status, controls.nextSibling);
+    } else {
+      document.body.insertBefore(status, document.body.firstChild);
+    }
+  }
+  return status;
+}
+
+function clearNavigationStatus() {
+  var status = getNavigationStatusElement();
+
+  if (!status) return;
+  status.hidden = true;
+  status.className = "";
+  status.textContent = "";
+}
+
+function showNavigationStatus(message, type, buttonOptions) {
+  var status = getNavigationStatusElement();
+  var button;
+
+  if (!status) return;
+  status.hidden = false;
+  status.className = type || "";
+  status.textContent = message;
+
+  if (buttonOptions && buttonOptions.label && typeof buttonOptions.onClick === "function") {
+    button = document.createElement("button");
+    button.type = "button";
+    button.textContent = buttonOptions.label;
+    button.addEventListener("click", buttonOptions.onClick);
+    status.appendChild(button);
+  }
+}
+
+function isEditableRole() {
+  return ["admin", "editor", "organizer"].indexOf(window.USER_ROLE || "") !== -1;
+}
+
+function setAvailableRoomLinksBusy(busy) {
+  _roomsNavigationBusy = !!busy;
+  Array.prototype.slice.call(document.querySelectorAll(".available-room-link")).forEach(function(button) {
+    button.disabled = !!busy;
+  });
+}
+
+function readNavigationTarget(button) {
+  return {
+    building: button.getAttribute("data-building") || "",
+    room: button.getAttribute("data-room") || "",
+    day: button.getAttribute("data-day") || "",
+    start: button.getAttribute("data-start") || "",
+    end: button.getAttribute("data-end") || "",
+  };
+}
+
+function buildScheduleNavigationUrl(target) {
+  var params = new URLSearchParams();
+
+  params.set("rooms_nav", "1");
+  params.set("rooms_building", target.building);
+  params.set("rooms_room", target.room);
+  params.set("rooms_day", target.day);
+  params.set("rooms_start", target.start);
+  params.set("rooms_end", target.end);
+  return "/schedule?" + params.toString();
+}
+
+function navigateToScheduleTarget(target) {
+  window.location.href = buildScheduleNavigationUrl(target);
+}
+
+function lockApiRequest(url, method) {
+  return fetch(url, {
+    method: method || "GET",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: method && method !== "GET" && method !== "DELETE" ? "{}" : undefined,
+  }).then(function(response) {
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return null;
+    }
+    return response.text().then(function(text) {
+      var data = {};
+
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch (error) {
+          data = {};
+        }
+      }
+      return { response: response, data: data };
+    });
+  });
+}
+
+function showLockUnavailable(target, data) {
+  var holder = (data && data.holder) || "другой пользователь";
+  var message = "Редактирование сейчас невозможно: расписание редактирует " + holder + ".";
+
+  if ((window.USER_ROLE || "") !== "admin") {
+    showNavigationStatus(message, "error");
+    return;
+  }
+
+  showNavigationStatus(message, "error", {
+    label: "Снять блокировку",
+    onClick: function() {
+      forceReleaseLockAndNavigate(target, holder);
+    },
+  });
+}
+
+function acquireLockAndNavigate(target) {
+  if (!isEditableRole()) {
+    showNavigationStatus("Для подготовки места в расписании нужен доступ к редактированию.", "error");
+    return;
+  }
+  if (_roomsNavigationBusy) {
+    return;
+  }
+
+  setAvailableRoomLinksBusy(true);
+  showNavigationStatus("Проверяю доступ к редактированию...", "");
+
+  lockApiRequest("/api/lock/acquire", "POST")
+    .then(function(result) {
+      var data;
+
+      if (!result) return;
+      data = result.data || {};
+      if (data.ok || data.holder === window.CURRENT_USER) {
+        navigateToScheduleTarget(target);
+        return;
+      }
+
+      showLockUnavailable(target, data);
+      setAvailableRoomLinksBusy(false);
+    })
+    .catch(function(error) {
+      showNavigationStatus("Не удалось проверить доступ к редактированию: " + error.message, "error");
+      setAvailableRoomLinksBusy(false);
+    });
+}
+
+function forceReleaseLockAndNavigate(target, holder) {
+  if (!window.confirm("Принудительно завершить сессию редактирования пользователя " + holder + "?")) {
+    return;
+  }
+
+  setAvailableRoomLinksBusy(true);
+  showNavigationStatus("Снимаю блокировку редактирования...", "");
+
+  lockApiRequest("/api/lock", "DELETE")
+    .then(function(result) {
+      if (!result) return;
+      if (!result.response.ok || !result.data || !result.data.ok) {
+        showNavigationStatus("Не удалось снять блокировку редактирования.", "error");
+        setAvailableRoomLinksBusy(false);
+        return;
+      }
+
+      setAvailableRoomLinksBusy(false);
+      acquireLockAndNavigate(target);
+    })
+    .catch(function(error) {
+      showNavigationStatus("Не удалось снять блокировку: " + error.message, "error");
+      setAvailableRoomLinksBusy(false);
+    });
+}
+
+function initAvailableRoomNavigation() {
+  var report = document.getElementById("free-windows");
+
+  if (!report) return;
+
+  report.addEventListener("click", function(event) {
+    var button = event.target.closest ? event.target.closest(".available-room-link") : null;
+
+    if (!button || !report.contains(button)) return;
+    event.preventDefault();
+    acquireLockAndNavigate(readNavigationTarget(button));
+  });
 }
 
 function compareText(a, b) {
@@ -559,6 +788,7 @@ function renderTable() {
 
   if (!_availData || !thead || !tbody) return;
 
+  clearNavigationStatus();
   columns = buildColumns(_availData);
   buildSlotLookup(columns);
 
@@ -712,6 +942,35 @@ function formatFloorLabel(floor) {
     return "Прочие";
   }
   return "Этаж " + floor;
+}
+
+function buildAvailableRoomWindowButton(windowEntry) {
+  var label =
+    windowEntry.day +
+    ": " +
+    windowEntry.start +
+    " - " +
+    windowEntry.end +
+    " (" +
+    formatDuration(windowEntry.duration) +
+    ")";
+
+  return (
+    '<button type="button" class="available-room-link"' +
+    ' data-building="' +
+    escapeHtml(windowEntry.building) +
+    '" data-room="' +
+    escapeHtml(windowEntry.room) +
+    '" data-day="' +
+    escapeHtml(windowEntry.day) +
+    '" data-start="' +
+    escapeHtml(windowEntry.start) +
+    '" data-end="' +
+    escapeHtml(windowEntry.end) +
+    '">' +
+    escapeHtml(label) +
+    "</button>"
+  );
 }
 
 function renderSingleRoomReport(target) {
@@ -905,7 +1164,7 @@ function renderAvailableRoomsReport(target) {
 
   targets.forEach(function(item) {
     var buildingData = _availData.buildings[item.building] || { days: {} };
-    var dayLines = [];
+    var availableWindows = [];
     var buildingSection;
     var floorSection;
     var floorName;
@@ -925,10 +1184,19 @@ function renderAvailableRoomsReport(target) {
       );
 
       if (!free.length) return;
-      dayLines.push(day + ": " + formatWindowList(free, true));
+      free.forEach(function(windowItem) {
+        availableWindows.push({
+          building: item.building,
+          room: item.room,
+          day: day,
+          start: windowItem.start,
+          end: windowItem.end,
+          duration: windowItem.duration,
+        });
+      });
     });
 
-    if (!dayLines.length) {
+    if (!availableWindows.length) {
       return;
     }
 
@@ -958,7 +1226,7 @@ function renderAvailableRoomsReport(target) {
 
     floorSection.rooms.push({
       room: item.room,
-      lines: dayLines,
+      windows: availableWindows,
     });
   });
 
@@ -978,13 +1246,18 @@ function renderAvailableRoomsReport(target) {
       parts.push("<h4>" + escapeHtml(formatFloorLabel(floorSection.floor)) + "</h4>");
       parts.push('<ul class="available-report-room-list">');
       floorSection.rooms.forEach(function(roomEntry) {
-        parts.push(
-          '<li class="available-report-room"><strong>' +
-            escapeHtml(roomEntry.room) +
-            "</strong> - " +
-            escapeHtml(roomEntry.lines.join("; ")) +
-            "</li>"
-        );
+        parts.push('<li class="available-report-room">');
+        parts.push('<span class="available-report-room-title">' + escapeHtml(roomEntry.room) + "</span> - ");
+        parts.push('<ul class="available-report-window-list">');
+        roomEntry.windows.forEach(function(windowEntry) {
+          parts.push(
+            '<li class="available-report-window-item">' +
+              buildAvailableRoomWindowButton(windowEntry) +
+              "</li>"
+          );
+        });
+        parts.push("</ul>");
+        parts.push("</li>");
       });
       parts.push("</ul>");
       parts.push("</div>");
@@ -1086,6 +1359,8 @@ document.addEventListener("DOMContentLoaded", function() {
   var timeFromInput = document.getElementById("time-from");
   var timeToInput = document.getElementById("time-to");
 
+  initRoomsTableToggle();
+  initAvailableRoomNavigation();
   applySearchStateFromInputs();
   syncSearchModeUI();
   loadAvailability();

@@ -35,8 +35,10 @@ def get_javascript(cellHeight, dayCellWidth, headerHeight, days_order, time_inte
         var daysOrder = {days_order_json};
         window.daysOrder = daysOrder;
         var timeInterval = {time_interval};
+        window.timeInterval = timeInterval;
         var borderWidth = {float(borderWidth)};
         var gridStart = {int(grid_start)};
+        window.gridStart = gridStart;
 
         // Глобальные переменные для отслеживания состояния
         window.editDialogOpen = false;
