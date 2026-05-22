@@ -7,7 +7,8 @@ import tempfile
 import threading
 import uuid
 from contextlib import contextmanager
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import date, datetime
 from html import unescape
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -305,6 +306,114 @@ _ROLE_ALLOWED_TYPES = {
 }
 
 
+@dataclass
+class IndividualMutationResult:
+    value: object = None
+    error: str | None = None
+    individual_revision: str | None = None
+    individual_cleanup_removed: int = 0
+    cleanup_removed_ids: list | None = None
+
+    def __iter__(self):
+        yield self.value
+        yield self.error
+
+    @property
+    def force_individual_refresh(self):
+        return self.individual_cleanup_removed > 0
+
+
+def _today_local_date() -> date:
+    return datetime.now().date()
+
+
+def _parse_iso_date_or_none(value):
+    if not isinstance(value, str) or not _ISO_DATE_PATTERN.fullmatch(value):
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _eligible_trial_dates_for_cleanup(block):
+    if not isinstance(block, dict):
+        return None
+    if block.get("lesson_type") != "trial":
+        return None
+
+    trial_dates = block.get("trial_dates")
+    if not isinstance(trial_dates, list) or not trial_dates:
+        return None
+
+    day = str(block.get("day", "")).strip()
+    expected_weekday = _DAY_TO_WEEKDAY.get(day)
+    if expected_weekday is None:
+        return None
+
+    parsed_dates = []
+    for value in trial_dates:
+        parsed = _parse_iso_date_or_none(value)
+        if parsed is None:
+            return None
+        if parsed.weekday() != expected_weekday:
+            return None
+        parsed_dates.append(parsed)
+
+    return parsed_dates
+
+
+def _is_expired_trial_block(block, today=None):
+    parsed_dates = _eligible_trial_dates_for_cleanup(block)
+    if not parsed_dates:
+        return False
+    today = today or _today_local_date()
+    return max(parsed_dates) < today
+
+
+def _prune_expired_trial_blocks(state, today=None):
+    blocks = state.get("blocks", []) if isinstance(state, dict) else []
+    if not isinstance(blocks, list) or not blocks:
+        return {"removed": 0, "removed_ids": []}
+
+    today = today or _today_local_date()
+    remaining = []
+    removed_ids = []
+
+    for block in blocks:
+        if _is_expired_trial_block(block, today=today):
+            removed_ids.append(block.get("id") if isinstance(block, dict) else None)
+        else:
+            remaining.append(block)
+
+    if removed_ids:
+        state["blocks"] = remaining
+
+    return {"removed": len(removed_ids), "removed_ids": removed_ids}
+
+
+def _validate_trial_not_expired_for_write(block, today=None):
+    if _is_expired_trial_block(block, today=today):
+        return "trial_dates must include today or a future date"
+    return None
+
+
+def _mutation_result(value, error, state, cleanup):
+    return IndividualMutationResult(
+        value=value,
+        error=error,
+        individual_revision=state.get("last_modified") if isinstance(state, dict) else None,
+        individual_cleanup_removed=int(cleanup.get("removed") or 0) if isinstance(cleanup, dict) else 0,
+        cleanup_removed_ids=list(cleanup.get("removed_ids") or []) if isinstance(cleanup, dict) else [],
+    )
+
+
+def _finish_mutation(value, error, state, cleanup, should_write):
+    if should_write:
+        _write_individual(state)
+    return _mutation_result(value, error, state, cleanup)
+
+
 def _validate_block(block, role):
     for field in ("day", "start_time", "end_time", "lesson_type", "subject", "room", "building"):
         if not str(block.get(field, "")).strip():
@@ -359,31 +468,47 @@ def get_individual_lessons():
     with _ind_mutex:
         with _locked_individual_file():
             state = _read_individual()
-            return _bootstrap_individual_from_html_if_needed(state)
+            state = _bootstrap_individual_from_html_if_needed(state)
+            cleanup = _prune_expired_trial_blocks(state)
+            if cleanup["removed"]:
+                _write_individual(state)
+                logger.info(
+                    "Removed %d expired trial blocks from individual state",
+                    cleanup["removed"],
+                )
+            return state
 
 
-def get_individual_revision():
-    return get_individual_lessons().get("last_modified")
+def get_individual_revision(prune_expired=True):
+    if prune_expired:
+        return get_individual_lessons().get("last_modified")
+    with _ind_mutex:
+        with _locked_individual_file():
+            return _read_individual().get("last_modified")
 
 
 def add_block(block, role):
     with _ind_mutex:
         with _locked_individual_file():
             state = _read_individual()
+            cleanup = _prune_expired_trial_blocks(state)
             new_block = _normalize_block(block)
             error = _validate_block(new_block, role)
             if error:
-                return None, error
+                return _finish_mutation(None, error, state, cleanup, cleanup["removed"] > 0)
+            error = _validate_trial_not_expired_for_write(new_block)
+            if error:
+                return _finish_mutation(None, error, state, cleanup, cleanup["removed"] > 0)
             new_block["id"] = str(uuid.uuid4())
             state["blocks"].append(new_block)
-            _write_individual(state)
-            return new_block, None
+            return _finish_mutation(new_block, None, state, cleanup, True)
 
 
 def update_block(block_id, updates, role):
     with _ind_mutex:
         with _locked_individual_file():
             state = _read_individual()
+            cleanup = _prune_expired_trial_blocks(state)
             for index, block in enumerate(state["blocks"]):
                 if block.get("id") != block_id:
                     continue
@@ -392,25 +517,29 @@ def update_block(block_id, updates, role):
                 merged["id"] = block_id
                 error = _validate_block(merged, role)
                 if error:
-                    return None, error
+                    return _finish_mutation(None, error, state, cleanup, cleanup["removed"] > 0)
+                error = _validate_trial_not_expired_for_write(merged)
+                if error:
+                    return _finish_mutation(None, error, state, cleanup, cleanup["removed"] > 0)
                 state["blocks"][index] = merged
-                _write_individual(state)
-                return merged, None
-            return None, "NOT_FOUND"
+                return _finish_mutation(merged, None, state, cleanup, True)
+            error = "EXPIRED_TRIAL_PRUNED" if block_id in cleanup.get("removed_ids", []) else "NOT_FOUND"
+            return _finish_mutation(None, error, state, cleanup, cleanup["removed"] > 0)
 
 
 def delete_block(block_id, role=None):
     with _ind_mutex:
         with _locked_individual_file():
             state = _read_individual()
+            cleanup = _prune_expired_trial_blocks(state)
             target = next((b for b in state["blocks"] if b.get("id") == block_id), None)
             if target is None:
-                return False, None
+                error = "EXPIRED_TRIAL_PRUNED" if block_id in cleanup.get("removed_ids", []) else None
+                return _finish_mutation(False, error, state, cleanup, cleanup["removed"] > 0)
             if role == "organizer" and target.get("lesson_type") != "trial":
-                return False, "FORBIDDEN"
+                return _finish_mutation(False, "FORBIDDEN", state, cleanup, cleanup["removed"] > 0)
             state["blocks"] = [b for b in state["blocks"] if b.get("id") != block_id]
-            _write_individual(state)
-            return True, None
+            return _finish_mutation(True, None, state, cleanup, True)
 
 
 def convert_block_to_regular(block_id, role):
@@ -422,26 +551,35 @@ def convert_block_to_regular(block_id, role):
     with _ind_mutex:
         with _locked_individual_file():
             state = _read_individual()
+            cleanup = _prune_expired_trial_blocks(state)
             for index, block in enumerate(state["blocks"]):
                 if block.get("id") != block_id:
                     continue
                 if block.get("lesson_type") != "trial":
-                    return None, "NOT_TRIAL"
+                    return _finish_mutation(None, "NOT_TRIAL", state, cleanup, cleanup["removed"] > 0)
                 if role not in ("admin", "editor", "organizer"):
-                    return None, "FORBIDDEN"
+                    return _finish_mutation(None, "FORBIDDEN", state, cleanup, cleanup["removed"] > 0)
                 if block.get("day") in TRIAL_ONLY_DAYS:
-                    return None, "Sunday is allowed only for trial lessons"
+                    return _finish_mutation(
+                        None,
+                        "Sunday is allowed only for trial lessons",
+                        state,
+                        cleanup,
+                        cleanup["removed"] > 0,
+                    )
                 merged = dict(block)
                 merged.pop("trial_dates", None)
                 merged["lesson_type"] = infer_regular_type_from_subject(merged.get("subject", ""))
                 state["blocks"][index] = merged
-                _write_individual(state)
-                return merged, None
-            return None, "NOT_FOUND"
+                return _finish_mutation(merged, None, state, cleanup, True)
+            error = "EXPIRED_TRIAL_PRUNED" if block_id in cleanup.get("removed_ids", []) else "NOT_FOUND"
+            return _finish_mutation(None, error, state, cleanup, cleanup["removed"] > 0)
 
 
 def individual_column_has_non_trial_blocks(building, day, room):
-    state = get_individual_lessons()
+    with _ind_mutex:
+        with _locked_individual_file():
+            state = _read_individual()
     return any(
         block.get("building") == building
         and block.get("day") == day
@@ -456,6 +594,7 @@ def delete_column_blocks(building, day, room):
     with _ind_mutex:
         with _locked_individual_file():
             state = _read_individual()
+            cleanup = _prune_expired_trial_blocks(state)
             remaining = []
             removed = 0
             for block in state["blocks"]:
@@ -465,5 +604,4 @@ def delete_column_blocks(building, day, room):
                     remaining.append(block)
             if removed:
                 state["blocks"] = remaining
-                _write_individual(state)
-            return removed
+            return _finish_mutation(removed, None, state, cleanup, bool(removed or cleanup["removed"]))

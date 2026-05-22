@@ -2,6 +2,8 @@
   "use strict";
 
   var individualRevision = null;
+  var pendingIndividualRevision = null;
+  var pendingRevisionNotice = null;
   var syncNoticeTimer = null;
   var activeEditedBlock = null;
   var pendingDragStart = null;
@@ -185,6 +187,26 @@
       });
   }
 
+  function responseRequiresIndividualRefresh(data) {
+    return !!(
+      data &&
+      (data.force_individual_refresh ||
+        Number(data.individual_cleanup_removed || 0) > 0)
+    );
+  }
+
+  function resultRequiresIndividualRefresh(result) {
+    return !!(result && responseRequiresIndividualRefresh(result.data));
+  }
+
+  function refreshIndividualLayerForCleanup(result) {
+    if (!resultRequiresIndividualRefresh(result)) {
+      return false;
+    }
+    refreshIndividualLayer();
+    return true;
+  }
+
   function isDayHidden(day, container) {
     var button;
     var header;
@@ -215,6 +237,7 @@
     ensureExplicitLessonTypeUpdater();
     attachOpenEditDialogHook();
     attachGlobalInterceptors();
+    attachEditModeChangeListener();
     attachManagedDragHandlers();
     attachCreateDialogEnhancer();
     window.refreshIndividualLayer = refreshIndividualLayer;
@@ -223,6 +246,7 @@
         return individualRevision;
       },
       handleIndividualRevision: handleIndividualRevision,
+      flushPendingRevision: flushPendingRevision,
       refreshIndividualLayer: refreshIndividualLayer,
     };
     refreshIndividualLayer();
@@ -593,6 +617,18 @@
     );
   }
 
+  function attachEditModeChangeListener() {
+    if (document.__individualEditModeFlushAttached) {
+      return;
+    }
+    document.__individualEditModeFlushAttached = true;
+    document.addEventListener("schedgen:edit-mode-change", function (event) {
+      if (event && event.detail && event.detail.enabled === false) {
+        flushPendingRevision();
+      }
+    });
+  }
+
   function attachOpenEditDialogHook() {
     if (
       typeof window.openEditDialog !== "function" ||
@@ -626,19 +662,45 @@
   }
 
   function handleIndividualRevision(revision) {
-    if (!revision || revision === individualRevision) {
+    if (!revision) {
+      return;
+    }
+    if (revision === individualRevision) {
+      if (pendingIndividualRevision === revision) {
+        pendingIndividualRevision = null;
+        pendingRevisionNotice = null;
+      }
       return;
     }
     if (!isInEditMode()) {
+      pendingIndividualRevision = null;
+      pendingRevisionNotice = null;
       refreshIndividualLayer();
       return;
     }
-    individualRevision = revision;
+    pendingIndividualRevision = revision;
+    if (pendingRevisionNotice === revision) {
+      return;
+    }
+    pendingRevisionNotice = revision;
     showNotice(
       "Индивидуальные занятия обновлены на сервере. Завершите редактирование для синхронизации.",
       "warning",
       6000
     );
+  }
+
+  function flushPendingRevision() {
+    var revision = pendingIndividualRevision;
+
+    if (isInEditMode() || !revision) {
+      return;
+    }
+    pendingIndividualRevision = null;
+    pendingRevisionNotice = null;
+    if (revision !== individualRevision) {
+      refreshIndividualLayer();
+    }
   }
 
   function refreshIndividualLayer(preloaded) {
@@ -673,6 +735,8 @@
       blocks = data.blocks;
       individualRevision = data.last_modified || data.individual_revision || null;
     }
+    pendingIndividualRevision = null;
+    pendingRevisionNotice = null;
 
     removeIndividualBlocks();
     blocks.forEach(function (block) {
@@ -1309,6 +1373,9 @@
           );
           return;
         }
+        if (refreshIndividualLayerForCleanup(result)) {
+          return;
+        }
         individualRevision = result.data.individual_revision || individualRevision;
         removeBlockById(blockId);
         renderIndividualBlock(result.data.block, true);
@@ -1448,6 +1515,11 @@
         handleMutationError(result, "Недостаточно прав для создания этого типа занятия.");
         return;
       }
+      if (resultRequiresIndividualRefresh(result)) {
+        closeOverlay(form);
+        refreshIndividualLayer();
+        return;
+      }
       individualRevision = result.data.individual_revision || individualRevision;
       closeOverlay(form);
       renderIndividualBlock(result.data.block, true);
@@ -1516,6 +1588,12 @@
         }
         if (!result.ok) {
           handleMutationError(result, "Недостаточно прав для изменения этого типа занятия.");
+          return;
+        }
+        if (resultRequiresIndividualRefresh(result)) {
+          activeEditedBlock = null;
+          closeOverlay(form);
+          refreshIndividualLayer();
           return;
         }
         individualRevision = result.data.individual_revision || individualRevision;
@@ -1603,6 +1681,9 @@
         }
         if (!result.ok) {
           handleMutationError(result, "Недостаточно прав для удаления этого типа занятия.");
+          return;
+        }
+        if (refreshIndividualLayerForCleanup(result)) {
           return;
         }
         individualRevision = result.data.individual_revision || individualRevision;
@@ -1777,6 +1858,13 @@
       }
       if (!result.ok) {
         handleMutationError(result, "Недостаточно прав для удаления колонки.");
+        return;
+      }
+      if (resultRequiresIndividualRefresh(result)) {
+        if (typeof removeColumn === "function") {
+          removeColumn(building, day, colIndex);
+        }
+        refreshIndividualLayer();
         return;
       }
       individualRevision = result.data.individual_revision || individualRevision;
@@ -1956,6 +2044,7 @@
 
   function handleMutationError(result, forbiddenMessage) {
     var code = result.data && result.data.code;
+    refreshIndividualLayerForCleanup(result);
     var error = (result.data && result.data.error) || "Ошибка сервера";
 
     if (result.status === 403 && code === "NO_LOCK") {

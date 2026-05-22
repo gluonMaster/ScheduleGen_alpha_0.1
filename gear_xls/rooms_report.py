@@ -18,6 +18,11 @@ from gear_xls.runtime_paths import (
 )
 from gear_xls.day_constants import DAY_TO_WEEKDAY
 
+try:
+    from . import state_manager
+except ImportError:
+    import state_manager
+
 
 BASE_SCHEDULE_PATH = get_base_schedule_path()
 INDIVIDUAL_LESSONS_PATH = get_individual_lessons_path()
@@ -191,7 +196,7 @@ def _load_base_blocks() -> list[dict]:
 
 def compute_availability() -> dict:
     base_blocks = _load_base_blocks()
-    ind_data = _load_json_safe(INDIVIDUAL_LESSONS_PATH)
+    ind_data = state_manager.get_individual_lessons()
     ind_blocks = ind_data.get("blocks", []) if isinstance(ind_data.get("blocks"), list) else []
     combined = list(base_blocks) + list(ind_blocks)
     configured_rooms = _load_configured_rooms()

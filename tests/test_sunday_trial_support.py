@@ -250,7 +250,14 @@ def test_rooms_report_includes_sunday_trial_blocks(tmp_path, monkeypatch):
     individual_path.write_text(json.dumps({"blocks": [_trial_block()]}), encoding="utf-8")
 
     monkeypatch.setattr(rooms_report, "BASE_SCHEDULE_PATH", str(base_path))
-    monkeypatch.setattr(rooms_report, "INDIVIDUAL_LESSONS_PATH", str(individual_path))
+    monkeypatch.setattr(state_manager, "INDIVIDUAL_LESSONS_PATH", str(individual_path))
+    monkeypatch.setattr(state_manager, "INDIVIDUAL_LOCK_PATH", str(individual_path) + ".lock")
+    monkeypatch.setattr(state_manager, "SCHEDULE_HTML_PATH", str(tmp_path / "missing_schedule.html"))
+    monkeypatch.setattr(
+        state_manager,
+        "get_base_schedule",
+        lambda: {"published_at": "2026-05-21T10:00:00", "blocks": []},
+    )
     monkeypatch.setattr(rooms_report, "_load_configured_rooms", lambda: {"Villa": ["1.01"]})
 
     data = rooms_report.compute_availability()

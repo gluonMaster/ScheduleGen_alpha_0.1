@@ -215,6 +215,25 @@
     button.textContent = "Сделать регулярным занятием";
   }
 
+  function responseRequiresIndividualRefresh(data) {
+    return !!(
+      data &&
+      (data.force_individual_refresh ||
+        Number(data.individual_cleanup_removed || 0) > 0)
+    );
+  }
+
+  function refreshIndividualLayerForCleanup(data) {
+    if (
+      responseRequiresIndividualRefresh(data) &&
+      typeof window.refreshIndividualLayer === "function"
+    ) {
+      window.refreshIndividualLayer();
+      return true;
+    }
+    return false;
+  }
+
   function renderConvertButton(blockElement, role, container, onSuccess) {
     if (!blockElement || !container) return;
     if (_allowedConvertRoles.indexOf(role) === -1) return;
@@ -244,10 +263,20 @@
         })
         .then(function (data) {
           if (data && data.ok) {
-            if (typeof onSuccess === "function") onSuccess(data.block);
+            if (responseRequiresIndividualRefresh(data)) {
+              if (typeof onSuccess === "function") {
+                onSuccess(data.block, data);
+              } else {
+                refreshIndividualLayerForCleanup(data);
+              }
+              resetConvertButton(btn);
+              return;
+            }
+            if (typeof onSuccess === "function") onSuccess(data.block, data);
             return;
           }
           alert("Ошибка: " + (data && data.error ? data.error : "неизвестная ошибка"));
+          refreshIndividualLayerForCleanup(data);
           resetConvertButton(btn);
         })
         .catch(function (error) {

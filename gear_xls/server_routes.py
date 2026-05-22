@@ -223,6 +223,20 @@ def _restore_block_response(status):
     return jsonify(_restore_error_payload(status)), RESTORE_LOCKED_STATUS
 
 
+def _individual_mutation_payload(result, include_revision=False):
+    payload = {}
+    cleanup_removed = int(getattr(result, "individual_cleanup_removed", 0) or 0)
+    revision = getattr(result, "individual_revision", None)
+    if include_revision and revision is not None:
+        payload["individual_revision"] = revision
+    if cleanup_removed:
+        payload["individual_cleanup_removed"] = cleanup_removed
+        payload["force_individual_refresh"] = True
+        if revision is not None:
+            payload["individual_revision"] = revision
+    return payload
+
+
 def _is_backup_download_path(path):
     return re.fullmatch(r"/api/backups/[^/]+/download", path or "") is not None
 
@@ -615,6 +629,7 @@ def api_lock_force_release():
 def api_status():
     lock_state = lock_manager.get_lock_status()
     restore_status = restore_manager.get_restore_status()
+    restore_blocks = _restore_blocks_requests(restore_status)
     return jsonify(
         {
             "lock": {
@@ -624,7 +639,9 @@ def api_status():
                 "last_heartbeat": lock_state.get("last_heartbeat"),
             },
             "base_revision": state_manager.get_base_revision(),
-            "individual_revision": state_manager.get_individual_revision(),
+            "individual_revision": state_manager.get_individual_revision(
+                prune_expired=not restore_blocks
+            ),
             "base_updated": False,
             "restore": _restore_status_summary(restore_status),
         }
@@ -937,14 +954,17 @@ def api_create_block():
     if err:
         return jsonify(err), 403
     data = request.get_json(force=True, silent=True) or {}
-    block, error = state_manager.add_block(data, user["role"])
+    result = state_manager.add_block(data, user["role"])
+    block, error = result
     if error:
-        return jsonify({"ok": False, "error": error, "code": "VALIDATION_ERROR"}), 400
+        payload = {"ok": False, "error": error, "code": "VALIDATION_ERROR"}
+        payload.update(_individual_mutation_payload(result))
+        return jsonify(payload), 400
     return jsonify(
         {
             "ok": True,
             "block": block,
-            "individual_revision": state_manager.get_individual_revision(),
+            **_individual_mutation_payload(result, include_revision=True),
         }
     )
 
@@ -959,16 +979,25 @@ def api_update_block(block_id):
     if err:
         return jsonify(err), 403
     data = request.get_json(force=True, silent=True) or {}
-    block, error = state_manager.update_block(block_id, data, user["role"])
+    result = state_manager.update_block(block_id, data, user["role"])
+    block, error = result
+    if error == "EXPIRED_TRIAL_PRUNED":
+        payload = {"ok": False, "error": "Block expired and was pruned", "code": "EXPIRED_TRIAL_PRUNED"}
+        payload.update(_individual_mutation_payload(result))
+        return jsonify(payload), 404
     if error == "NOT_FOUND":
-        return jsonify({"ok": False, "error": "Block not found", "code": "NOT_FOUND"}), 404
+        payload = {"ok": False, "error": "Block not found", "code": "NOT_FOUND"}
+        payload.update(_individual_mutation_payload(result))
+        return jsonify(payload), 404
     if error:
-        return jsonify({"ok": False, "error": error, "code": "VALIDATION_ERROR"}), 400
+        payload = {"ok": False, "error": error, "code": "VALIDATION_ERROR"}
+        payload.update(_individual_mutation_payload(result))
+        return jsonify(payload), 400
     return jsonify(
         {
             "ok": True,
             "block": block,
-            "individual_revision": state_manager.get_individual_revision(),
+            **_individual_mutation_payload(result, include_revision=True),
         }
     )
 
@@ -982,15 +1011,24 @@ def api_delete_block(block_id):
     err = _require_lock(user["login"])
     if err:
         return jsonify(err), 403
-    deleted, del_err = state_manager.delete_block(block_id, user["role"])
+    result = state_manager.delete_block(block_id, user["role"])
+    deleted, del_err = result
     if del_err == "FORBIDDEN":
-        return jsonify({"ok": False, "error": "Forbidden lesson_type", "code": "FORBIDDEN"}), 403
+        payload = {"ok": False, "error": "Forbidden lesson_type", "code": "FORBIDDEN"}
+        payload.update(_individual_mutation_payload(result))
+        return jsonify(payload), 403
+    if del_err == "EXPIRED_TRIAL_PRUNED":
+        payload = {"ok": False, "error": "Block expired and was pruned", "code": "EXPIRED_TRIAL_PRUNED"}
+        payload.update(_individual_mutation_payload(result))
+        return jsonify(payload), 404
     if not deleted:
-        return jsonify({"ok": False, "error": "Block not found", "code": "NOT_FOUND"}), 404
+        payload = {"ok": False, "error": "Block not found", "code": "NOT_FOUND"}
+        payload.update(_individual_mutation_payload(result))
+        return jsonify(payload), 404
     return jsonify(
         {
             "ok": True,
-            "individual_revision": state_manager.get_individual_revision(),
+            **_individual_mutation_payload(result, include_revision=True),
         }
     )
 
@@ -1004,20 +1042,33 @@ def api_convert_block(block_id):
     err = _require_lock(user["login"])
     if err:
         return jsonify(err), 403
-    block, error = state_manager.convert_block_to_regular(block_id, user["role"])
+    result = state_manager.convert_block_to_regular(block_id, user["role"])
+    block, error = result
+    if error == "EXPIRED_TRIAL_PRUNED":
+        payload = {"ok": False, "error": "Block expired and was pruned", "code": "EXPIRED_TRIAL_PRUNED"}
+        payload.update(_individual_mutation_payload(result))
+        return jsonify(payload), 404
     if error == "NOT_FOUND":
-        return jsonify({"ok": False, "error": "Block not found", "code": "NOT_FOUND"}), 404
+        payload = {"ok": False, "error": "Block not found", "code": "NOT_FOUND"}
+        payload.update(_individual_mutation_payload(result))
+        return jsonify(payload), 404
     if error == "NOT_TRIAL":
-        return jsonify({"ok": False, "error": "Block is not a trial lesson", "code": "NOT_TRIAL"}), 400
+        payload = {"ok": False, "error": "Block is not a trial lesson", "code": "NOT_TRIAL"}
+        payload.update(_individual_mutation_payload(result))
+        return jsonify(payload), 400
     if error == "FORBIDDEN":
-        return jsonify({"ok": False, "error": "Forbidden", "code": "FORBIDDEN"}), 403
+        payload = {"ok": False, "error": "Forbidden", "code": "FORBIDDEN"}
+        payload.update(_individual_mutation_payload(result))
+        return jsonify(payload), 403
     if error:
-        return jsonify({"ok": False, "error": error}), 400
+        payload = {"ok": False, "error": error}
+        payload.update(_individual_mutation_payload(result))
+        return jsonify(payload), 400
     return jsonify(
         {
             "ok": True,
             "block": block,
-            "individual_revision": state_manager.get_individual_revision(),
+            **_individual_mutation_payload(result, include_revision=True),
         }
     )
 
@@ -1082,12 +1133,13 @@ def api_delete_column():
                     "code": "COLUMN_HAS_NON_TRIAL_BLOCKS",
                 }
             ), 403
-    count = state_manager.delete_column_blocks(building, day, room)
+    result = state_manager.delete_column_blocks(building, day, room)
+    count, _error = result
     return jsonify(
         {
             "ok": True,
             "blocks_removed": count,
-            "individual_revision": state_manager.get_individual_revision(),
+            **_individual_mutation_payload(result, include_revision=True),
         }
     )
 
