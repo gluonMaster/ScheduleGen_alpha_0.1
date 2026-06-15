@@ -7,9 +7,11 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(ROOT_DIR, "visualiser"))
 
 from lesson_label_utils import (  # noqa: E402
+    format_pdf_group_label,
     group_name_contains_subject,
     normalize_label_text,
     should_show_subject_line,
+    should_prefix_russisch_to_group,
 )
 
 
@@ -56,6 +58,45 @@ def test_normalization_and_short_subjects():
     assert group_name_contains_subject("Ukr. Mus.", "Ukrainische Musik Di 5-6J") is True
     assert should_show_subject_line(_lesson("M", "Mathe Mo")) is True
     assert should_show_subject_line(_lesson("M", "M")) is True
+
+
+def test_pdf_group_label_prefixes_russisch_for_plain_russian_group_codes():
+    cases = [
+        ("Russisch", "3A", "Russisch 3A"),
+        ("Russisch", "10B", "Russisch 10B"),
+        ("Russisch", "3-4J", "Russisch 3-4J"),
+        ("Russisch", "4-5JC", "Russisch 4-5JC"),
+        ("Russish", "3JC", "Russisch 3JC"),
+    ]
+
+    for subject, group, expected in cases:
+        lesson = _lesson(subject, group)
+        assert should_prefix_russisch_to_group(subject, group) is True
+        assert format_pdf_group_label(lesson) == expected
+        assert should_show_subject_line({**lesson, "group": format_pdf_group_label(lesson)}) is False
+
+
+def test_pdf_group_label_does_not_prefix_non_russian_or_marked_groups():
+    cases = [
+        ("Russisch", "Russisch 3A"),
+        ("Russisch", "Ru 3A"),
+        ("Russisch", "3-4JC Log"),
+        ("Russisch", "4-5J_Log"),
+        ("Kunst", "Kunst Mo 3D"),
+        ("Schach", "Schach Sa C"),
+        ("Tanz", "Tanz Mo 7-8J"),
+        ("Ukrainisch", "Ukrainisch Di 5-6J"),
+        ("Deutsch", "Deutsch ab 4J Fr"),
+        ("Theater", "Theater ab 11J"),
+        ("Gitarre", "Gitarre A Mo"),
+        ("Mathe", "Mathe 3A"),
+        ("Baby", "Baby Sa"),
+        ("Logorithmika", "4JA_Log"),
+    ]
+
+    for subject, group in cases:
+        assert should_prefix_russisch_to_group(subject, group) is False
+        assert format_pdf_group_label(_lesson(subject, group)) == group
 
 
 if __name__ == "__main__":

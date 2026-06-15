@@ -4,7 +4,7 @@
 """
 
 from color_manager import get_group_color, get_building_color, get_text_color
-from lesson_label_utils import label_text_or_empty, should_show_subject_line
+from lesson_label_utils import format_pdf_group_label, label_text_or_empty, should_show_subject_line
 
 
 class BlockRenderingMixin:
@@ -29,6 +29,7 @@ class BlockRenderingMixin:
         teacher_val = label_text_or_empty(lesson.get('teacher', ''))
         room_val = label_text_or_empty(lesson.get('room', ''))
         subject_val_pdf = label_text_or_empty(lesson.get('subject', ''))
+        group_val_pdf = format_pdf_group_label(lesson)
         start_time = label_text_or_empty(lesson.get('start_time', ''))
         end_time = label_text_or_empty(lesson.get('end_time', ''))
 
@@ -57,7 +58,8 @@ class BlockRenderingMixin:
         max_width = width - 2 * text_padding
 
         # Вычисляем размер шрифта в зависимости от высоты блока
-        has_subject_line = should_show_subject_line(lesson)
+        pdf_lesson = dict(lesson, group=group_val_pdf)
+        has_subject_line = should_show_subject_line(pdf_lesson)
 
         if has_subject_line:
             font_size = min(9, height / 7)
@@ -80,7 +82,7 @@ class BlockRenderingMixin:
         # Рисуем группу
         bold_font = f"{font_name}-Bold"
         canvas.setFont(bold_font, font_size + 1)
-        group_text = self.truncate_text(group_val, max_width, font_name, font_size + 1, canvas)
+        group_text = self.truncate_text(group_val_pdf, max_width, font_name, font_size + 1, canvas)
         canvas.drawCentredString(center_x, text_y - current_line * line_height, group_text)
         current_line += 1
         

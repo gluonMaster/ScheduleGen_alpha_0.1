@@ -10,11 +10,27 @@ from lesson_type_utils import classify_lesson_type
 
 
 SUBJECT_GROUP_ALIASES = {
+    "russish": ("russisch",),
+    "russisch": ("russish",),
     "ukr mus": ("ukrainische musik",),
     "ukrainische musik": ("ukr mus",),
 }
 
 _SEPARATOR_RE = re.compile(r"[\s\._\-/+(),]+")
+_RUSSIAN_GROUP_CODE_RE = re.compile(r"^\d{1,2}(?:-\d{1,2})?[A-Z]{1,3}$", re.IGNORECASE)
+_RUSSIAN_MARKER_RE = re.compile(r"(^|[\s\._\-/+(),])(?:ru|russisch)(?=$|[\s\._\-/+(),])", re.IGNORECASE)
+_NON_RUSSIAN_GROUP_PREFIXES = (
+    "kunst",
+    "schach",
+    "tanz",
+    "ukrainisch",
+    "deutsch",
+    "theater",
+    "gitarre",
+    "mathe",
+    "baby",
+    "log",
+)
 
 
 def _is_missing_value(value):
@@ -120,3 +136,35 @@ def should_show_subject_line(lesson):
         return True
 
     return not group_name_contains_subject(subject, lesson.get("group"))
+
+
+def should_prefix_russisch_to_group(subject, group):
+    """
+    Return True when a PDF group label should be shown as 'Russisch <group>'.
+    """
+    subject_text = normalize_label_text(subject)
+    group_text = label_text_or_empty(group)
+    group_normalized = normalize_label_text(group)
+    if not subject_text or not group_text:
+        return False
+
+    if not subject_text.startswith(("ru", "russ")):
+        return False
+    if "log" in group_normalized:
+        return False
+    if _RUSSIAN_MARKER_RE.search(group_text):
+        return False
+    if group_normalized.startswith(_NON_RUSSIAN_GROUP_PREFIXES):
+        return False
+
+    return bool(_RUSSIAN_GROUP_CODE_RE.fullmatch(group_text))
+
+
+def format_pdf_group_label(lesson):
+    """
+    Return the group label used in PDF lesson blocks.
+    """
+    group = label_text_or_empty(lesson.get("group"))
+    if should_prefix_russisch_to_group(lesson.get("subject"), group):
+        return f"Russisch {group}"
+    return group

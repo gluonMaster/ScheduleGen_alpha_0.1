@@ -5,6 +5,7 @@
 """
 
 from color_manager import get_group_color, get_building_color, get_text_color
+from lesson_label_utils import format_pdf_group_label
 
 class BlockRenderingMixin:
     """Миксин с методами для рендеринга блоков расписания"""
@@ -27,6 +28,7 @@ class BlockRenderingMixin:
         fill_color = get_group_color(lesson['group'])
         border_color = get_building_color(lesson['building'])
         text_color = get_text_color(fill_color)
+        group_label = format_pdf_group_label(lesson)
         
         # Устанавливаем цвета
         canvas.setFillColor(fill_color)
@@ -43,7 +45,7 @@ class BlockRenderingMixin:
         center_x = x + width / 2
         
         # DEBUG: Добавляем отладочную информацию
-        print(f"DEBUG draw_lesson_block: is_weekday={is_weekday}, lesson={lesson.get('group', 'N/A')}")
+        print(f"DEBUG draw_lesson_block: is_weekday={is_weekday}, lesson={group_label or lesson.get('group', 'N/A')}")
         
         # Используем рассчитанные размеры шрифтов для рабочих дней или выходных дней
         if is_weekday and hasattr(self, 'weekday_font_size'):
@@ -99,7 +101,7 @@ class BlockRenderingMixin:
         current_y -= (line_heights[0] + line_spacing)
         bold_font = f"{font_name}-Bold"
         canvas.setFont(bold_font, group_font_size)
-        group_text = self.truncate_text(lesson['group'], width - 2 * text_padding, bold_font, group_font_size, canvas)
+        group_text = self.truncate_text(group_label, width - 2 * text_padding, bold_font, group_font_size, canvas)
         canvas.drawCentredString(center_x, current_y, group_text)
         
         # Строка 3: Преподаватель

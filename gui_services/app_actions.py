@@ -555,6 +555,54 @@ class AppActions:
 
         self.log_action(f"ОШИБКА: визуализатор завершился с кодом {returncode}")
         return False
+
+    def run_tv_visualiser(self):
+        """Starts the TV visualizer without copying output artifacts."""
+        if not self._check_directory():
+            return
+
+        self.log_action("Starting TV visualizer...")
+
+        def run_in_thread():
+            if not self._run_tv_visualiser_command():
+                self._show_error(
+                    "TV visualizer error",
+                    "TV visualizer finished with an error. Details are shown in the log.",
+                )
+                return
+
+            output_path = FileManager.get_file_path(
+                self.program_directory,
+                "visualiserTV",
+                "enhanced_schedule_visualization_tv.pdf",
+            )
+            self.log_action(f"TV visualizer finished: {output_path}")
+
+        threading.Thread(target=run_in_thread, daemon=True).start()
+
+    def _run_tv_visualiser_command(self):
+        """Runs the TV visualizer and waits for completion."""
+        visualiser_tv_dir = FileManager.get_file_path(self.program_directory, "visualiserTV")
+        commands = ["python -X utf8 -u example_usage_enhanced.py"]
+
+        tv_process, reader_thread = self.process_manager.execute_command_capture(
+            commands, visualiser_tv_dir, self.log_action
+        )
+
+        if not tv_process:
+            self.log_action("Failed to start TV visualizer")
+            return False
+
+        tv_process.wait()
+        if reader_thread:
+            reader_thread.join(timeout=10)
+
+        returncode = tv_process.returncode
+        if returncode == 0:
+            return True
+
+        self.log_action(f"ERROR: TV visualizer finished with code {returncode}")
+        return False
     
     def open_pdf_visualization(self):
         """Обработчик для кнопки 4.1: Открытие PDF-визуализации"""

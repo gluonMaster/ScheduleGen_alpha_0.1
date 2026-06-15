@@ -16,12 +16,12 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 # Импортируем модули проекта
-from data_processor import load_data, process_schedule_data
+from data_processor import load_data, process_schedule_data, filter_by_lesson_type
 from enhanced_layout_manager import EnhancedScheduleLayout
 from enhanced_export_manager import EnhancedExportManager
 
 
-def main(excel_file_path, output_pdf_path, export_html=True):
+def main(excel_file_path, output_pdf_path, export_html=False, lesson_type_filter='group'):
     """
     Основная функция для генерации PDF с расписанием и HTML-экспорта
     
@@ -34,6 +34,7 @@ def main(excel_file_path, output_pdf_path, export_html=True):
     
     # Загружаем данные из Excel-файла
     df = load_data(excel_file_path)
+    df = filter_by_lesson_type(df, lesson_type_filter)
     
     # Обрабатываем данные расписания
     days_of_week, schedule_by_day = process_schedule_data(df)
@@ -190,9 +191,9 @@ def create_pdf(layout_manager, output_path):
 
 if __name__ == "__main__":
     # Путь к файлу расписания
-    excel_file = "optimized_schedule.xlsx"
+    excel_file = os.path.join("..", "visualiser", "optimized_schedule.xlsx")
     # Путь для сохранения PDF
-    pdf_file = "enhanced_schedule_visualization.pdf"
+    pdf_file = "enhanced_schedule_visualization_tv.pdf"
     
     # Запускаем визуализацию только со сводным расписанием и HTML-экспортом
-    main(excel_file, pdf_file, export_html=True)
+    main(excel_file, pdf_file, export_html=False, lesson_type_filter='group')

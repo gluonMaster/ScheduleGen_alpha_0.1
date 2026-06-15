@@ -43,6 +43,64 @@ var ConflictDetector = (function() {
         return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
     }
 
+    function normalizeText(value) {
+        return String(value || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function normalizeLessonType(value) {
+        var lessonType = normalizeText(value).toLowerCase();
+        return lessonType || 'group';
+    }
+
+    function extractGroupMarkers(students) {
+        var normalized = normalizeText(students);
+        var markers = [];
+
+        if (!normalized) {
+            return markers;
+        }
+
+        normalized.split(/\s+/).forEach(function(part) {
+            if (!/\d/.test(part)) {
+                return;
+            }
+
+            if (part.indexOf('+') !== -1) {
+                part.split('+').forEach(function(groupPart) {
+                    groupPart = normalizeText(groupPart);
+                    if (groupPart) {
+                        markers.push(groupPart);
+                    }
+                });
+                return;
+            }
+
+            markers.push(part);
+        });
+
+        return markers.length ? markers : [normalized];
+    }
+
+    function findSharedGroupMarker(block1, block2) {
+        var markers1;
+        var markers2;
+
+        if (block1.lessonType !== 'group' || block2.lessonType !== 'group') {
+            return '';
+        }
+
+        markers1 = block1.groupMarkers || [];
+        markers2 = block2.groupMarkers || [];
+
+        for (var i = 0; i < markers1.length; i++) {
+            if (markers2.indexOf(markers1[i]) !== -1) {
+                return markers1[i];
+            }
+        }
+
+        return '';
+    }
+
     function parseBlock(blockElement) {
         var lines = normalizeBlockLines(blockElement);
         var day = blockElement.getAttribute('data-day') || '';
@@ -52,6 +110,7 @@ var ConflictDetector = (function() {
         var students = lines[2] || '';
         var room = lines[3] || '';
         var timeRange = lines[4] || '';
+        var lessonType = normalizeLessonType(blockElement.getAttribute('data-lesson-type'));
         var parsedTime = null;
 
         if (typeof parseTimeRange === 'function' && timeRange) {
@@ -66,6 +125,8 @@ var ConflictDetector = (function() {
             teacher: teacher,
             students: students,
             room: room,
+            lessonType: lessonType,
+            groupMarkers: lessonType === 'group' ? extractGroupMarkers(students) : [],
             timeRange: timeRange,
             startMinutes: parsedTime ? parsedTime.startMinutes : null,
             endMinutes: parsedTime ? parsedTime.endMinutes : null
@@ -79,16 +140,40 @@ var ConflictDetector = (function() {
     }
 
     function detectConflictType(block1, block2) {
+        var sharedGroupMarker;
+
         if (block1.teacher && block1.teacher === block2.teacher) {
-            return 'teacher';
+            return {
+                type: 'teacher',
+                label: block1.teacher
+            };
         }
 
         if (block1.room && block1.room === block2.room && block1.building === block2.building) {
-            return 'room';
+            return {
+                type: 'room',
+                label: block1.room + (block1.building ? ' (' + block1.building + ')' : '')
+            };
         }
 
-        if (block1.students && block1.students === block2.students) {
-            return 'group';
+        sharedGroupMarker = findSharedGroupMarker(block1, block2);
+        if (sharedGroupMarker) {
+            return {
+                type: 'group',
+                label: sharedGroupMarker
+            };
+        }
+
+        if (
+            block1.lessonType !== 'group' &&
+            block2.lessonType !== 'group' &&
+            block1.students &&
+            block1.students === block2.students
+        ) {
+            return {
+                type: 'student',
+                label: block1.students
+            };
         }
 
         return null;
@@ -132,7 +217,8 @@ var ConflictDetector = (function() {
                 conflicts.push({
                     block1: block1,
                     block2: block2,
-                    type: conflictType
+                    type: conflictType.type,
+                    label: conflictType.label
                 });
             }
         }
@@ -160,13 +246,10 @@ var ConflictDetector = (function() {
     }
 
     function getConflictLabel(conflict) {
-        if (conflict.type === 'teacher') {
-            return conflict.block1.teacher;
+        if (conflict.label) {
+            return conflict.label;
         }
-        if (conflict.type === 'room') {
-            return conflict.block1.room + (conflict.block1.building ? ' (' + conflict.block1.building + ')' : '');
-        }
-        return conflict.block1.students;
+        return conflict.block1.students || '';
     }
 
     function getConflictTimeLabel(conflict) {
@@ -226,3 +309,13 @@ var ConflictDetector = (function() {
 })();
 
 window.ConflictDetector = ConflictDetector;
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+        ConflictDetector.highlightConflicts();
+    });
+} else {
+    window.setTimeout(function() {
+        ConflictDetector.highlightConflicts();
+    }, 0);
+}

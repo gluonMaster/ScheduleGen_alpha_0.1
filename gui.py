@@ -161,6 +161,11 @@ class ApplicationInterface:
             "7. Учесть изменения", self.app_actions.run_scheduler_newpref
         )
 
+        UIBuilder.create_single_button(
+            buttons_frame,
+            "8. Запустить TV-визуализатор", self.app_actions.run_tv_visualiser
+        )
+
 
 if __name__ == "__main__":
     # Создаем экземпляр Tk
