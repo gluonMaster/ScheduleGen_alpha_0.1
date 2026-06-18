@@ -6,6 +6,8 @@ import unicodedata
 _SEPARATOR_RE = re.compile(r"[\s\._\-/+(),]+")
 _RUSSIAN_GROUP_CODE_RE = re.compile(r"^\d{1,2}(?:-\d{1,2})?[A-Z]{1,3}$", re.IGNORECASE)
 _RUSSIAN_MARKER_RE = re.compile(r"(^|[\s\._\-/+(),])(?:ru|russisch)(?=$|[\s\._\-/+(),])", re.IGNORECASE)
+_RUSSIAN_SUBJECT_PREFIXES = ("ru", "russ")
+_RUSSIAN_TODDLER_SUBJECT_MARKERS = ("jahrige", "jährige", "jaehrige")
 _NON_RUSSIAN_GROUP_PREFIXES = (
     "kunst",
     "schach",
@@ -52,6 +54,13 @@ def normalize_label_text(value):
     return text.strip()
 
 
+def _is_russian_subject_text(subject_text):
+    return (
+        subject_text.startswith(_RUSSIAN_SUBJECT_PREFIXES)
+        or any(marker in subject_text for marker in _RUSSIAN_TODDLER_SUBJECT_MARKERS)
+    )
+
+
 def should_prefix_russisch_to_group(subject, group):
     subject_text = normalize_label_text(subject)
     group_text = label_text_or_empty(group)
@@ -59,7 +68,7 @@ def should_prefix_russisch_to_group(subject, group):
     if not subject_text or not group_text:
         return False
 
-    if not subject_text.startswith(("ru", "russ")):
+    if not _is_russian_subject_text(subject_text):
         return False
     if "log" in group_normalized:
         return False

@@ -67,6 +67,8 @@ def test_pdf_group_label_prefixes_russisch_for_plain_russian_group_codes():
         ("Russisch", "3-4J", "Russisch 3-4J"),
         ("Russisch", "4-5JC", "Russisch 4-5JC"),
         ("Russish", "3JC", "Russisch 3JC"),
+        ("4Jahrige", "4JA", "Russisch 4JA"),
+        ("4Jährige", "4JB", "Russisch 4JB"),
     ]
 
     for subject, group, expected in cases:
@@ -81,6 +83,7 @@ def test_pdf_group_label_does_not_prefix_non_russian_or_marked_groups():
         ("Russisch", "Russisch 3A"),
         ("Russisch", "Ru 3A"),
         ("Russisch", "3-4JC Log"),
+        ("4Jahrige", "4JA Log"),
         ("Russisch", "4-5J_Log"),
         ("Kunst", "Kunst Mo 3D"),
         ("Schach", "Schach Sa C"),

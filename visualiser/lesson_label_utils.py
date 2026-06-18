@@ -19,6 +19,8 @@ SUBJECT_GROUP_ALIASES = {
 _SEPARATOR_RE = re.compile(r"[\s\._\-/+(),]+")
 _RUSSIAN_GROUP_CODE_RE = re.compile(r"^\d{1,2}(?:-\d{1,2})?[A-Z]{1,3}$", re.IGNORECASE)
 _RUSSIAN_MARKER_RE = re.compile(r"(^|[\s\._\-/+(),])(?:ru|russisch)(?=$|[\s\._\-/+(),])", re.IGNORECASE)
+_RUSSIAN_SUBJECT_PREFIXES = ("ru", "russ")
+_RUSSIAN_TODDLER_SUBJECT_MARKERS = ("jahrige", "jährige", "jaehrige")
 _NON_RUSSIAN_GROUP_PREFIXES = (
     "kunst",
     "schach",
@@ -73,6 +75,13 @@ def normalize_label_text(value):
     return text.strip()
 
 
+def _is_russian_subject_text(subject_text):
+    return (
+        subject_text.startswith(_RUSSIAN_SUBJECT_PREFIXES)
+        or any(marker in subject_text for marker in _RUSSIAN_TODDLER_SUBJECT_MARKERS)
+    )
+
+
 def get_lesson_type(lesson):
     """
     Resolve lesson type using explicit lesson_type first, then subject rules.
@@ -113,6 +122,12 @@ def group_name_contains_subject(subject, group):
     if not subject_text or not group_text:
         return False
 
+    if _is_russian_subject_text(subject_text):
+        if _contains_normalized_phrase(group_text, "russisch", allow_short=True):
+            return True
+        if _contains_normalized_phrase(group_text, "ru", allow_short=True):
+            return True
+
     if _contains_normalized_phrase(group_text, subject_text):
         return True
 
@@ -148,7 +163,7 @@ def should_prefix_russisch_to_group(subject, group):
     if not subject_text or not group_text:
         return False
 
-    if not subject_text.startswith(("ru", "russ")):
+    if not _is_russian_subject_text(subject_text):
         return False
     if "log" in group_normalized:
         return False
