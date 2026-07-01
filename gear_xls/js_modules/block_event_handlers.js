@@ -3,11 +3,31 @@
 
 // Функция для добавления обработчиков событий новому блоку
 function addEventListenersToBlock(block) {
+    function canUseLegacyBlockEvents(targetBlock) {
+        var authUi = window.SchedGenAuthUI || null;
+        var role = window.USER_ROLE || 'viewer';
+        var lessonType = targetBlock ? (targetBlock.getAttribute('data-lesson-type') || 'group') : 'group';
+
+        if (!targetBlock) return false;
+        if (lessonType === 'veranstaltung') return false;
+        if (authUi && typeof authUi.isEditMode === 'function' && !authUi.isEditMode()) return false;
+        if (authUi && typeof authUi.canMutateBlock === 'function') {
+            return authUi.canMutateBlock(role, targetBlock);
+        }
+        if (role === 'admin') return true;
+        if (role === 'editor') return lessonType !== 'group';
+        if (role === 'organizer') return lessonType === 'trial';
+        return false;
+    }
+
     // Отслеживаем состояние для определения двойного клика
     let clickTimeout = null;
     let isPotentialDoubleClick = false;
     
     block.addEventListener('mousedown', function(e) {
+        if (!canUseLegacyBlockEvents(block)) {
+            return;
+        }
         // Если открыт диалог редактирования, не начинаем drag
         if (window.editDialogOpen || isPotentialDoubleClick) {
             e.preventDefault();
@@ -37,6 +57,9 @@ function addEventListenersToBlock(block) {
     
     // Обработчик двойного клика
     block.addEventListener('dblclick', function(e) {
+        if (!canUseLegacyBlockEvents(block)) {
+            return;
+        }
         // Очищаем таймаут и сбрасываем флаг
         if (clickTimeout) {
             clearTimeout(clickTimeout);

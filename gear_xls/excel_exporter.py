@@ -16,6 +16,7 @@ from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Alignment, Border, Side, Font
 from openpyxl.utils.dataframe import dataframe_to_rows
 from gear_xls.day_constants import TRIAL_ONLY_DAYS, WEB_EDITOR_DAY_SET
+from gear_xls.event_domain import EVENT_SUBJECT, LESSON_TYPE_EVENT
 
 # Настройка логирования
 logging.basicConfig(
@@ -30,6 +31,26 @@ class ExcelExportValidationError(ValueError):
         super().__init__(message)
         self.message = message
         self.code = code
+
+
+def _is_event_export_row(activity):
+    if not isinstance(activity, dict):
+        return False
+    lesson_type = str(activity.get("lesson_type") or "").strip()
+    subject = str(activity.get("subject") or "").strip()
+    return lesson_type == LESSON_TYPE_EVENT or subject == EVENT_SUBJECT
+
+
+def filter_exportable_schedule_data(schedule_data):
+    if not isinstance(schedule_data, list):
+        raise ExcelExportValidationError("Schedule data must be a list")
+    exportable = [activity for activity in schedule_data if not _is_event_export_row(activity)]
+    if schedule_data and not exportable:
+        raise ExcelExportValidationError(
+            "No exportable schedule rows remain after filtering Veranstaltung blocks",
+            code="NO_EXPORTABLE_ROWS",
+        )
+    return exportable
 
 
 def validate_schedule_data_for_export(schedule_data):
@@ -66,9 +87,13 @@ def create_excel_from_html_data(schedule_data, output_file=None):
     Returns:
         str: Путь к созданному Excel-файлу
     """
+    schedule_data = filter_exportable_schedule_data(schedule_data)
     if not schedule_data:
         logger.error("Нет данных для экспорта в Excel")
-        return None
+        raise ExcelExportValidationError(
+            "No exportable schedule rows",
+            code="NO_EXPORTABLE_ROWS",
+        )
     validate_schedule_data_for_export(schedule_data)
     
     # Если имя выходного файла не указано, создаем имя по умолчанию
@@ -275,12 +300,17 @@ def process_schedule_export_request(request_data, output_dir="excel_exports"):
             schedule_data = request_data
             logger.info(f"Получены данные в формате {type(schedule_data)}")
         
+        schedule_data = filter_exportable_schedule_data(schedule_data)
+
         # Проверяем валидность данных
         validate_schedule_data_for_export(schedule_data)
         
         if not schedule_data:
             logger.error("Список занятий пуст")
-            return None
+            raise ExcelExportValidationError(
+                "No exportable schedule rows",
+                code="NO_EXPORTABLE_ROWS",
+            )
         
         # Проверяем наличие необходимых полей в первой записи
         required_fields = ['subject', 'day', 'start_time', 'end_time']

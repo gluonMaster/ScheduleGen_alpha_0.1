@@ -13,6 +13,19 @@
   var managedLegacyDragReleaseTimer = null;
   var compactRowsManagedDragPaused = false;
   var compactRowsManagedResizePaused = false;
+  var eventMutationInFlight = 0;
+  var eventManagersRequest = null;
+  var eventManagers = null;
+  var EVENT_SUBJECT = "Veranstaltung";
+  var EVENT_LESSON_TYPE = "veranstaltung";
+  var EVENT_DEFAULT_COLOR = "#7c3aed";
+  var EVENT_ROOM_SCOPE = {
+    Villa: ["0.04", "0.06", "0.08", "2.04"],
+    Kolibri: ["0.3", "0.2"],
+  };
+  if (window.EVENT_ROOM_SCOPE && typeof window.EVENT_ROOM_SCOPE === "object") {
+    EVENT_ROOM_SCOPE = window.EVENT_ROOM_SCOPE;
+  }
 
   function authUi() {
     return window.SchedGenAuthUI || null;
@@ -110,9 +123,35 @@
     return !!(authUi() && authUi().isEditMode() && isEditableRole());
   }
 
+  function canUseEventEditor() {
+    return !!(
+      authUi() &&
+      typeof authUi().canUseEventEditor === "function" &&
+      authUi().canUseEventEditor(currentRole())
+    );
+  }
+
+  function isEventBlock(block) {
+    return getBlockLessonType(block) === EVENT_LESSON_TYPE;
+  }
+
   function canRoleMutateBlock(role, block) {
     var lessonType = getBlockLessonType(block);
 
+    if (authUi() && typeof authUi().canMutateBlock === "function") {
+      return authUi().canMutateBlock(role, block);
+    }
+    if (lessonType === EVENT_LESSON_TYPE) {
+      if (role === "admin") {
+        return true;
+      }
+      return (
+        role === "event_manager" &&
+        block &&
+        (block.getAttribute("data-owner-kind") || "event_manager") === "event_manager" &&
+        (block.getAttribute("data-created-by") || "") === (window.CURRENT_USER || "")
+      );
+    }
     if (role === "admin") {
       return true;
     }
@@ -143,7 +182,20 @@
         ? "Недостаточно прав для удаления групповых занятий."
         : "Недостаточно прав для изменения этого типа занятия.";
     }
+    if (lessonType === EVENT_LESSON_TYPE) {
+      return "Veranstaltung доступна для изменения только администратору или владельцу event-manager.";
+    }
     return "Недостаточно прав для этого действия.";
+  }
+
+  function canInteractWithManagedBlock(block) {
+    if (!block || !canCurrentRoleMutateBlock(block)) {
+      return false;
+    }
+    if (isEventBlock(block)) {
+      return canUseEventEditor();
+    }
+    return isInEditMode();
   }
 
   function handleSessionExpired() {
@@ -185,6 +237,14 @@
         console.error("Individual API request failed:", error);
         return null;
       });
+  }
+
+  function beginEventMutation() {
+    eventMutationInFlight += 1;
+  }
+
+  function endEventMutation() {
+    eventMutationInFlight = Math.max(0, eventMutationInFlight - 1);
   }
 
   function responseRequiresIndividualRefresh(data) {
@@ -234,6 +294,7 @@
     if (!authUi()) {
       return;
     }
+    ensureEventStyles();
     ensureExplicitLessonTypeUpdater();
     attachOpenEditDialogHook();
     attachGlobalInterceptors();
@@ -250,6 +311,46 @@
       refreshIndividualLayer: refreshIndividualLayer,
     };
     refreshIndividualLayer();
+  }
+
+  function ensureEventStyles() {
+    var style;
+
+    if (document.getElementById("schedgen-event-styles")) {
+      return;
+    }
+    style = document.createElement("style");
+    style.id = "schedgen-event-styles";
+    style.textContent = [
+      '.activity-block[data-lesson-type="veranstaltung"],',
+      ".activity-block.lesson-type-veranstaltung {",
+      "  border: 2px solid #6d28d9 !important;",
+      "  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.26), 0 0 0 1px rgba(109,40,217,0.24);",
+      "  padding-top: 18px !important;",
+      "  overflow: hidden;",
+      "}",
+      '.activity-block[data-lesson-type="veranstaltung"]::before,',
+      ".activity-block.lesson-type-veranstaltung::before {",
+      "  content: 'EVENT';",
+      "  position: absolute;",
+      "  top: 4px;",
+      "  right: 4px;",
+      "  padding: 2px 6px;",
+      "  border-radius: 999px;",
+      "  background: #4c1d95;",
+      "  color: #fff;",
+      "  font-size: 10px;",
+      "  font-weight: 700;",
+      "  letter-spacing: 0.08em;",
+      "  z-index: 2;",
+      "  pointer-events: none;",
+      "}",
+      '.activity-block[data-lesson-type="veranstaltung"] strong,',
+      ".activity-block.lesson-type-veranstaltung strong { display: block; width: 100%; margin-bottom: 2px; }",
+      ".event-owner-wrapper { margin-bottom: 10px; display: flex; flex-direction: column; }",
+      ".event-owner-wrapper small, .event-form-hint { margin-top: 6px; color: #51606b; font-size: 12px; line-height: 1.4; }",
+    ].join("\n");
+    document.head.appendChild(style);
   }
 
   function ensureExplicitLessonTypeUpdater() {
@@ -305,7 +406,7 @@
     }
 
     block.className = (block.className || "")
-      .replace(/\slesson-type-(group|individual|nachhilfe|trial)\b/g, "")
+      .replace(/\slesson-type-(group|individual|nachhilfe|trial|veranstaltung)\b/g, "")
       .trim();
     block.classList.add("lesson-type-" + normalizedType);
     block.setAttribute("data-lesson-type", normalizedType);
@@ -351,10 +452,9 @@
     }
 
     canInteract =
-      isInEditMode() &&
+      canInteractWithManagedBlock(block) &&
       !window.editDialogOpen &&
-      !document.body.classList.contains("delete-mode") &&
-      canCurrentRoleMutateBlock(block);
+      !document.body.classList.contains("delete-mode");
 
     if (!canInteract) {
       block.removeAttribute("data-resize-hover");
@@ -437,7 +537,7 @@
     var typeWrapper;
     var typeSelect = form ? form.querySelector("#new-lesson-type") : null;
     var typeHint = form ? form.querySelector("#create-lesson-type-hint") : null;
-    var datesSection = form ? form.querySelector("#create-trial-dates-section") : null;
+    var datesSection = form ? form.querySelector("#create-trial-dates-section, #create-event-dates-section") : null;
     var trialOption;
     var autoOption;
 
@@ -506,11 +606,12 @@
       if (!typeSelect.__trialCreateBound) {
         typeSelect.__trialCreateBound = true;
         typeSelect.addEventListener("change", function () {
-          syncCreateDialogTrialUi(form);
+          syncCreateDialogTypeUi(form);
         });
       }
 
-      syncCreateDialogTrialUi(form, role === "organizer");
+      ensureCreateLessonTypeOptions(form, typeSelect, role);
+      syncCreateDialogTypeUi(form, role === "organizer");
       enhancementSucceeded = true;
     } finally {
       form.__trialCreateEnhancing = false;
@@ -520,21 +621,99 @@
     }
   }
 
-  function syncCreateDialogTrialUi(form, forceTrialColor) {
+  function ensureCreateLessonTypeOptions(form, typeSelect, role) {
+    var eventOption;
+
+    if (!form || !typeSelect) {
+      return;
+    }
+
+    if (role === "event_manager") {
+      typeSelect.textContent = "";
+      eventOption = document.createElement("option");
+      eventOption.value = EVENT_LESSON_TYPE;
+      eventOption.textContent = "Veranstaltung";
+      typeSelect.appendChild(eventOption);
+      typeSelect.value = EVENT_LESSON_TYPE;
+      typeSelect.disabled = true;
+      return;
+    }
+
+    if (role === "admin" && !typeSelect.querySelector('option[value="' + EVENT_LESSON_TYPE + '"]')) {
+      eventOption = document.createElement("option");
+      eventOption.value = EVENT_LESSON_TYPE;
+      eventOption.textContent = "Veranstaltung";
+      typeSelect.appendChild(eventOption);
+    }
+  }
+
+  function syncCreateDialogTypeUi(form, forceTrialColor) {
     var typeSelect = form ? form.querySelector("#new-lesson-type") : null;
     var typeHint = form ? form.querySelector("#create-lesson-type-hint") : null;
-    var datesSection = form ? form.querySelector("#create-trial-dates-section") : null;
+    var datesSection = form ? form.querySelector("#create-trial-dates-section, #create-event-dates-section") : null;
     var isTrial = !!(typeSelect && typeSelect.value === "trial");
+    var isEvent = !!(typeSelect && typeSelect.value === EVENT_LESSON_TYPE);
+    var ownerSelect;
+    var subjectInput;
+    var teacherInput;
+    var studentsInput;
+    var roomInput;
 
     if (!form || !typeSelect || !datesSection) {
       return;
     }
 
-    datesSection.style.display = isTrial ? "" : "none";
+    if (isEvent) {
+      datesSection.id = "create-event-dates-section";
+      relabelDatesSection(datesSection, "Даты Veranstaltung (опционально):");
+    } else {
+      datesSection.id = "create-trial-dates-section";
+      relabelDatesSection(datesSection, "Даты занятия:");
+    }
+
+    ownerSelect = ensureEventOwnerSelector(form);
+    if (ownerSelect && ownerSelect.closest) {
+      ownerSelect.closest("#event-owner-wrapper").style.display = isEvent ? "" : "none";
+    }
+
+    subjectInput = form.querySelector("#new-subject");
+    teacherInput = form.querySelector("#new-teacher");
+    studentsInput = form.querySelector("#new-students");
+    roomInput = form.querySelector("#new-room");
+
+    if (isEvent) {
+      studentsInput = replaceInputWithoutAutocomplete(studentsInput, "Целевая аудитория");
+      if (subjectInput) {
+        subjectInput.value = EVENT_SUBJECT;
+        subjectInput.readOnly = true;
+      }
+      if (teacherInput) {
+        teacherInput.value = getSelectedEventAuthorName(form);
+        teacherInput.readOnly = true;
+      }
+      if (studentsInput) {
+        studentsInput.placeholder = "Целевая аудитория";
+      }
+      if (roomInput) {
+        roomInput.placeholder = "0.04";
+      }
+      setCreateDialogColor(form, EVENT_DEFAULT_COLOR);
+    } else {
+      if (subjectInput) {
+        subjectInput.readOnly = false;
+      }
+      if (teacherInput) {
+        teacherInput.readOnly = false;
+      }
+    }
+
+    datesSection.style.display = isTrial || isEvent ? "" : "none";
     if (typeHint) {
       typeHint.textContent =
         currentRole() === "organizer"
           ? "Организатор создаёт только trial-занятия. Ниже обязательно укажите даты проведения."
+          : isEvent
+            ? "Для Veranstaltung укажите свободный текст целевой аудитории; он не сохраняется в список групп. Даты можно оставить пустыми."
           : isTrial
             ? "Для trial-занятия ниже нужно указать одну или несколько дат проведения."
             : "Оставьте авто-режим для обычного индивидуального или группового занятия.";
@@ -672,7 +851,7 @@
       }
       return;
     }
-    if (!isInEditMode()) {
+    if (!shouldDeferIndividualRefresh()) {
       pendingIndividualRevision = null;
       pendingRevisionNotice = null;
       refreshIndividualLayer();
@@ -693,7 +872,7 @@
   function flushPendingRevision() {
     var revision = pendingIndividualRevision;
 
-    if (isInEditMode() || !revision) {
+    if (shouldDeferIndividualRefresh() || !revision) {
       return;
     }
     pendingIndividualRevision = null;
@@ -718,8 +897,27 @@
     });
   }
 
+  function shouldDeferIndividualRefresh() {
+    return !!(
+      isInEditMode() ||
+      (currentRole() === "event_manager" &&
+        (eventMutationInFlight > 0 ||
+          window.editDialogOpen ||
+          activeDrag ||
+          pendingDragStart ||
+          pendingResize ||
+          document.body.classList.contains("delete-mode")))
+    );
+  }
+
   function applyIndividualState(data) {
     var blocks = [];
+    if (
+      window.SchedGenEventManagerView &&
+      typeof window.SchedGenEventManagerView.filterSchedulePayload === "function"
+    ) {
+      data = window.SchedGenEventManagerView.filterSchedulePayload(data);
+    }
     if (
       baseSyncUi() &&
       typeof baseSyncUi().applyBaseScheduleData === "function" &&
@@ -751,7 +949,7 @@
   function removeIndividualBlocks() {
     document
       .querySelectorAll(
-        '.activity-block[data-block-id], .activity-block[data-lesson-type="individual"], .activity-block[data-lesson-type="nachhilfe"], .activity-block[data-lesson-type="trial"]'
+        '.activity-block[data-block-id], .activity-block[data-lesson-type="individual"], .activity-block[data-lesson-type="nachhilfe"], .activity-block[data-lesson-type="trial"], .activity-block[data-lesson-type="veranstaltung"]'
       )
       .forEach(function (block) {
         if (activeEditedBlock === block) {
@@ -803,6 +1001,15 @@
     element.setAttribute("data-end-time", block.end_time || "");
     element.setAttribute("data-start-row", String(rows.start_row));
     element.setAttribute("data-row-span", String(rows.row_span));
+    if (block.lesson_type === EVENT_LESSON_TYPE) {
+      element.setAttribute("data-created-by", block.created_by || "");
+      element.setAttribute("data-created-by-name", block.created_by_name || block.teacher || "");
+      element.setAttribute("data-owner-kind", block.owner_kind || "");
+      element.setAttribute("data-version", String(block.version || 1));
+      if (Array.isArray(block.event_dates) && block.event_dates.length > 0) {
+        element.setAttribute("data-event-dates", JSON.stringify(block.event_dates));
+      }
+    }
     element.style.backgroundColor = block.color || defaultColor(block.lesson_type);
     element.style.width = "100px";
     if (isDayHidden(day, container)) {
@@ -884,10 +1091,7 @@
     if (window.editDialogOpen || document.body.classList.contains("delete-mode")) {
       return;
     }
-    if (!isInEditMode()) {
-      return;
-    }
-    if (!canCurrentRoleMutateBlock(block)) {
+    if (!canInteractWithManagedBlock(block)) {
       return;
     }
 
@@ -920,7 +1124,7 @@
         ? event.target.closest(".activity-block[data-block-id]")
         : null;
 
-    if (!block || event.button !== 0 || !isInEditMode()) {
+    if (!block || event.button !== 0 || !canInteractWithManagedBlock(block)) {
       return;
     }
 
@@ -930,7 +1134,6 @@
     stopDomMutation(event);
 
     if (
-      !canCurrentRoleMutateBlock(block) ||
       window.editDialogOpen ||
       document.body.classList.contains("delete-mode")
     ) {
@@ -959,7 +1162,7 @@
         ? event.target.closest(".activity-block[data-block-id]")
         : null;
 
-    if (!block || !isInEditMode()) {
+    if (!block || !canInteractWithManagedBlock(block)) {
       return;
     }
 
@@ -1002,8 +1205,7 @@
     if (
       !block ||
       event.button !== 0 ||
-      !isInEditMode() ||
-      !canCurrentRoleMutateBlock(block) ||
+      !canInteractWithManagedBlock(block) ||
       window.editDialogOpen ||
       document.body.classList.contains("delete-mode")
     ) {
@@ -1069,8 +1271,7 @@
     if (
       !block ||
       !block.parentElement ||
-      !isInEditMode() ||
-      !canCurrentRoleMutateBlock(block)
+      !canInteractWithManagedBlock(block)
     ) {
       clearPendingDragStart();
       return;
@@ -1215,6 +1416,60 @@
       form.removeAttribute("data-block-id");
     }
     activeEditedBlock = block;
+    enhanceEditDialogForBlock(form, block);
+  }
+
+  function enhanceEditDialogForBlock(form, block) {
+    var buttonRow;
+    var datesSection;
+    var subjectInput;
+    var teacherInput;
+    var studentsInput;
+    var roomInput;
+    var ownerNote;
+    var ownerName;
+
+    if (!form || !block || getBlockLessonType(block) !== EVENT_LESSON_TYPE || form.__eventEditEnhanced) {
+      return;
+    }
+    form.__eventEditEnhanced = true;
+
+    subjectInput = form.querySelector("#edit-subject");
+    teacherInput = form.querySelector("#edit-teacher");
+    studentsInput = form.querySelector("#edit-students");
+    roomInput = form.querySelector("#edit-room");
+
+    studentsInput = replaceInputWithoutAutocomplete(studentsInput, "Целевая аудитория");
+    roomInput = replaceInputWithoutAutocomplete(roomInput, "0.04");
+
+    if (subjectInput) {
+      subjectInput.value = EVENT_SUBJECT;
+      subjectInput.readOnly = true;
+    }
+    if (teacherInput) {
+      teacherInput.value = block.getAttribute("data-created-by-name") || teacherInput.value || "";
+      teacherInput.readOnly = true;
+    }
+    if (studentsInput) {
+      studentsInput.placeholder = "Целевая аудитория";
+    }
+
+    buttonRow = form.querySelector(".button-row");
+    if (window.TrialUI && buttonRow && !form.querySelector("#edit-event-dates-section")) {
+      datesSection = window.TrialUI.buildTrialDatesSection(parseJsonArrayAttribute(block, "data-event-dates"));
+      datesSection.id = "edit-event-dates-section";
+      relabelDatesSection(datesSection, "Даты Veranstaltung (опционально):");
+      form.insertBefore(datesSection, buttonRow);
+    }
+
+    ownerName = block.getAttribute("data-created-by-name") || block.getAttribute("data-created-by") || "";
+    if (ownerName && buttonRow && !form.querySelector("#edit-event-owner-note")) {
+      ownerNote = document.createElement("small");
+      ownerNote.id = "edit-event-owner-note";
+      ownerNote.className = "event-form-hint";
+      ownerNote.textContent = "Владелец: " + ownerName + ". Владелец при редактировании не меняется.";
+      form.insertBefore(ownerNote, buttonRow);
+    }
   }
 
   function resolveEditedBlock(form) {
@@ -1247,6 +1502,11 @@
         "data-col-index": block.getAttribute("data-col-index"),
         "data-lesson-type": block.getAttribute("data-lesson-type"),
         "data-trial-dates": block.getAttribute("data-trial-dates"),
+        "data-event-dates": block.getAttribute("data-event-dates"),
+        "data-created-by": block.getAttribute("data-created-by"),
+        "data-created-by-name": block.getAttribute("data-created-by-name"),
+        "data-owner-kind": block.getAttribute("data-owner-kind"),
+        "data-version": block.getAttribute("data-version"),
         "data-room": block.getAttribute("data-room"),
         "data-start-row": block.getAttribute("data-start-row"),
         "data-row-span": block.getAttribute("data-row-span"),
@@ -1280,10 +1540,22 @@
   }
 
   function buildBlockPayloadFromElement(block) {
-    var parts = (block.innerHTML || "").split(/<br\s*\/?>/i);
-    var timeText = stripHtml(parts[4] || "").trim();
-    var timeInfo = parseTimeRange(timeText);
     var lessonType = getBlockLessonType(block);
+    if (
+      lessonType === EVENT_LESSON_TYPE &&
+      window.SchedGenEventManagerView &&
+      typeof window.SchedGenEventManagerView.syncEventBlockFromRows === "function"
+    ) {
+      window.SchedGenEventManagerView.syncEventBlockFromRows(block);
+    }
+    var parts = (block.innerHTML || "").split(/<br\s*\/?>/i);
+    var attrStart = (block.getAttribute("data-start-time") || "").trim();
+    var attrEnd = (block.getAttribute("data-end-time") || "").trim();
+    var timeText =
+      lessonType === EVENT_LESSON_TYPE && attrStart && attrEnd
+        ? attrStart + "-" + attrEnd
+        : stripHtml(parts[4] || "").trim();
+    var timeInfo = parseTimeRange(timeText);
     var colIndex = toInteger(block.getAttribute("data-col-index"), -1);
     var startRow = toInteger(
       block.getAttribute("data-start-row"),
@@ -1299,7 +1571,7 @@
       !timeInfo ||
       !block.getAttribute("data-building") ||
       !block.getAttribute("data-day") ||
-      !stripHtml(parts[3] || "").trim() ||
+      !(block.getAttribute("data-room") || stripHtml(parts[3] || "").trim()) ||
       !getBlockSubject(block)
     ) {
       return null;
@@ -1316,9 +1588,12 @@
     var payload = {
       building: (block.getAttribute("data-building") || "").trim(),
       day: (block.getAttribute("data-day") || "").trim(),
-      room: stripHtml(parts[3] || "").trim(),
-      subject: getBlockSubject(block).trim(),
-      teacher: stripHtml(parts[1] || "").trim(),
+      room: (block.getAttribute("data-room") || stripHtml(parts[3] || "")).trim(),
+      subject: lessonType === EVENT_LESSON_TYPE ? EVENT_SUBJECT : getBlockSubject(block).trim(),
+      teacher:
+        lessonType === EVENT_LESSON_TYPE
+          ? block.getAttribute("data-created-by-name") || stripHtml(parts[1] || "").trim()
+          : stripHtml(parts[1] || "").trim(),
       students: stripHtml(parts[2] || "").trim(),
       lesson_type: lessonType,
       start_time: timeInfo.start_time,
@@ -1330,6 +1605,11 @@
     };
     if (lessonType === "trial" && Array.isArray(trialDates)) {
       payload.trial_dates = trialDates;
+    }
+    if (lessonType === EVENT_LESSON_TYPE) {
+      payload.room = normalizeEventRoom(payload.room, payload.building);
+      payload.event_dates = parseJsonArrayAttribute(block, "data-event-dates");
+      payload.expected_version = toInteger(block.getAttribute("data-version"), 0);
     }
     return payload;
   }
@@ -1345,6 +1625,7 @@
   function persistChangedBlock(block, snapshot, networkErrorMessage) {
     var blockId = block ? block.getAttribute("data-block-id") : "";
     var payload = block ? buildBlockPayloadFromElement(block) : null;
+    var isEventPayload;
 
     if (!block || !blockId || !payload) {
       restoreBlockSnapshot(block, snapshot);
@@ -1358,8 +1639,19 @@
       return;
     }
 
-    requestJson("/api/blocks/" + encodeURIComponent(blockId), "PUT", payload).then(
+    isEventPayload = payload.lesson_type === EVENT_LESSON_TYPE;
+    if (isEventPayload) {
+      beginEventMutation();
+    }
+    requestJson(
+      (payload.lesson_type === EVENT_LESSON_TYPE ? "/api/events/" : "/api/blocks/") + encodeURIComponent(blockId),
+      "PUT",
+      payload
+    ).then(
       function (result) {
+        if (isEventPayload) {
+          endEventMutation();
+        }
         if (!result) {
           restoreBlockSnapshot(block, snapshot);
           alert(networkErrorMessage || "Не удалось сохранить изменения занятия из-за ошибки сети.");
@@ -1412,6 +1704,9 @@
     if (colIndex >= 0) {
       return colIndex;
     }
+    if (currentRole() === "event_manager") {
+      return -1;
+    }
     return createDynamicColumn(building, day, room);
   }
 
@@ -1426,7 +1721,18 @@
     var startRow = toInteger(block.start_row, -1);
     var rowSpan = toInteger(block.row_span, -1);
     var minutes;
+    var eventRows;
 
+    if (
+      currentRole() === "event_manager" &&
+      window.SchedGenEventManagerView &&
+      typeof window.SchedGenEventManagerView.resolveRowsForBlock === "function"
+    ) {
+      eventRows = window.SchedGenEventManagerView.resolveRowsForBlock(block);
+      if (eventRows) {
+        return eventRows;
+      }
+    }
     if (startRow >= 0 && rowSpan >= 1) {
       return { start_row: startRow, row_span: rowSpan };
     }
@@ -1461,6 +1767,8 @@
     return {
       start_time: match[1] + ":" + match[2],
       end_time: match[3] + ":" + match[4],
+      startMinutes: startMinutes,
+      endMinutes: endMinutes,
       start_row: Math.floor((startMinutes - gridStartValue) / interval),
       row_span: Math.floor((endMinutes - startMinutes) / interval),
     };
@@ -1475,6 +1783,39 @@
     if (validationError || !payload) {
       stopDomMutation(event);
       alert(validationError || "Пожалуйста, проверьте данные занятия.");
+      return;
+    }
+
+    if (payload.lesson_type === EVENT_LESSON_TYPE) {
+      stopDomMutation(event);
+      if (!canUseEventEditor()) {
+        alert("Недостаточно прав для создания Veranstaltung.");
+        return;
+      }
+      beginEventMutation();
+      requestJson("/api/events", "POST", payload).then(function (result) {
+        endEventMutation();
+        if (!result) {
+          alert("Не удалось создать Veranstaltung из-за ошибки сети.");
+          return;
+        }
+        if (!result.ok) {
+          handleMutationError(result, "Недостаточно прав для создания Veranstaltung.");
+          return;
+        }
+        if (resultRequiresIndividualRefresh(result)) {
+          closeOverlay(form);
+          refreshIndividualLayer();
+          return;
+        }
+        individualRevision = result.data.individual_revision || individualRevision;
+        closeOverlay(form);
+        renderIndividualBlock(result.data.block, true);
+        reapplyLessonTypeFilterAfterIndividualMutation();
+        if (typeof ConflictDetector !== "undefined") {
+          ConflictDetector.highlightConflicts();
+        }
+      });
       return;
     }
 
@@ -1555,6 +1896,48 @@
     if (payload.lesson_type === "group" && currentRole() === "editor") {
       stopDomMutation(event);
       alert("Недостаточно прав для изменения этого типа занятия.");
+      return;
+    }
+
+    if (currentLessonType === EVENT_LESSON_TYPE || payload.lesson_type === EVENT_LESSON_TYPE) {
+      stopDomMutation(event);
+      if (!blockId) {
+        alert("Блок Veranstaltung не найден на сервере.");
+        return;
+      }
+      if (!canUseEventEditor() || !canCurrentRoleMutateBlock(block)) {
+        alert("Недостаточно прав для изменения Veranstaltung.");
+        return;
+      }
+      beginEventMutation();
+      requestJson("/api/events/" + encodeURIComponent(blockId), "PUT", payload).then(
+        function (result) {
+          endEventMutation();
+          if (!result) {
+            alert("Не удалось обновить Veranstaltung из-за ошибки сети.");
+            return;
+          }
+          if (!result.ok) {
+            handleMutationError(result, "Недостаточно прав для изменения Veranstaltung.");
+            return;
+          }
+          if (resultRequiresIndividualRefresh(result)) {
+            activeEditedBlock = null;
+            closeOverlay(form);
+            refreshIndividualLayer();
+            return;
+          }
+          individualRevision = result.data.individual_revision || individualRevision;
+          activeEditedBlock = null;
+          closeOverlay(form);
+          removeBlockById(blockId);
+          renderIndividualBlock(result.data.block, true);
+          reapplyLessonTypeFilterAfterIndividualMutation();
+          if (typeof ConflictDetector !== "undefined") {
+            ConflictDetector.highlightConflicts();
+          }
+        }
+      );
       return;
     }
 
@@ -1639,6 +2022,58 @@
     if (lessonType !== "trial" && currentRole() === "organizer") {
       stopDomMutation(event);
       alert("Организатор может удалять только пробные/разовые занятия.");
+      return;
+    }
+
+    if (lessonType === EVENT_LESSON_TYPE) {
+      stopDomMutation(event);
+      if (!blockId) {
+        alert("Блок Veranstaltung не найден на сервере.");
+        return;
+      }
+      if (!canUseEventEditor()) {
+        alert("Недостаточно прав для удаления Veranstaltung.");
+        return;
+      }
+      info = describeBlock(block);
+      if (
+        !confirm(
+          "Вы действительно хотите удалить Veranstaltung?\n\n" +
+            "Здание: " +
+            info.building +
+            "\nДень: " +
+            info.day +
+            "\nЦелевая аудитория: " +
+            info.students +
+            "\nВремя: " +
+            info.time
+        )
+      ) {
+        return;
+      }
+      beginEventMutation();
+      requestJson("/api/events/" + encodeURIComponent(blockId), "DELETE", {
+        expected_version: toInteger(block.getAttribute("data-version"), 0),
+      }).then(function (result) {
+        endEventMutation();
+        if (!result) {
+          alert("Не удалось удалить Veranstaltung из-за ошибки сети.");
+          return;
+        }
+        if (!result.ok) {
+          handleMutationError(result, "Недостаточно прав для удаления Veranstaltung.");
+          return;
+        }
+        if (refreshIndividualLayerForCleanup(result)) {
+          return;
+        }
+        individualRevision = result.data.individual_revision || individualRevision;
+        if (block.parentNode) {
+          block.parentNode.removeChild(block);
+        }
+        refreshCompactRowsAfterIndividualMutation();
+        showNotice("Veranstaltung удалена: " + info.time, "success");
+      });
       return;
     }
 
@@ -1817,6 +2252,15 @@
       return;
     }
 
+    if (columnHasEventBlocks(container, building, day, colIndex)) {
+      alert(
+        "Нельзя удалить кабинет " +
+          room +
+          ": он содержит Veranstaltung blocks."
+      );
+      return;
+    }
+
     if (currentRole() === "editor" && columnHasGroupBlocks(container, building, day, colIndex)) {
       alert(
         "Нельзя удалить кабинет " +
@@ -1879,8 +2323,9 @@
     var building = getFieldValue(form, "#new-building");
     var day = getFieldValue(form, "#new-day");
     var room = getFieldValue(form, "#new-room").trim();
-    var subject = getFieldValue(form, "#new-subject");
-    var teacher = getFieldValue(form, "#new-teacher");
+    var resolvedType = resolveCreateLessonType(form);
+    var subject = resolvedType === EVENT_LESSON_TYPE ? EVENT_SUBJECT : getFieldValue(form, "#new-subject");
+    var teacher = resolvedType === EVENT_LESSON_TYPE ? getSelectedEventAuthorName(form) : getFieldValue(form, "#new-teacher");
     var students = getFieldValue(form, "#new-students");
     var timeRange = getFieldValue(form, "#new-time").trim();
     var color = getFieldValue(form, "#color-value").trim();
@@ -1894,12 +2339,10 @@
       return null;
     }
 
-    var resolvedType = resolveCreateLessonType(form);
-
     var createPayload = {
       building: building,
       day: day,
-      room: room,
+      room: resolvedType === EVENT_LESSON_TYPE ? normalizeEventRoom(room, building) : room,
       subject: subject,
       teacher: teacher,
       students: students,
@@ -1914,6 +2357,10 @@
     if (resolvedType === "trial" && window.TrialUI) {
       createPayload.trial_dates = collectCreateTrialDates(form);
     }
+    if (resolvedType === EVENT_LESSON_TYPE) {
+      createPayload.event_dates = collectCreateEventDates(form);
+      createPayload.author_login = getSelectedEventAuthorLogin(form);
+    }
     return createPayload;
   }
 
@@ -1921,6 +2368,9 @@
     var typeSelectEl = form ? form.querySelector("#new-lesson-type") : null;
     var explicitType = typeSelectEl ? typeSelectEl.value : "";
 
+    if (currentRole() === "event_manager" || explicitType === EVENT_LESSON_TYPE) {
+      return EVENT_LESSON_TYPE;
+    }
     if (currentRole() === "organizer" || explicitType === "trial") {
       return "trial";
     }
@@ -1937,10 +2387,191 @@
     return window.TrialUI ? window.TrialUI.collectTrialDates(datesSectionEl || form) : [];
   }
 
+  function collectCreateEventDates(form) {
+    var datesSectionEl = form ? form.querySelector("#create-event-dates-section, #create-trial-dates-section") : null;
+    return window.TrialUI ? window.TrialUI.collectTrialDates(datesSectionEl || form) : [];
+  }
+
+  function collectEditEventDates(form) {
+    var datesSectionEl = form ? form.querySelector("#edit-event-dates-section") : null;
+    return window.TrialUI ? window.TrialUI.collectTrialDates(datesSectionEl || form) : [];
+  }
+
+  function parseJsonArrayAttribute(element, name) {
+    var raw = element ? element.getAttribute(name) : "";
+    if (!raw) {
+      return [];
+    }
+    try {
+      var parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function normalizeEventRoom(room, building) {
+    var normalized = (room || "").trim();
+    if (building === "Villa" && normalized.length > 1 && normalized.charAt(0).toUpperCase() === "V") {
+      return normalized.slice(1).trim();
+    }
+    if (building === "Kolibri" && normalized.length > 1 && normalized.charAt(0).toUpperCase() === "K") {
+      return normalized.slice(1).trim();
+    }
+    return normalized;
+  }
+
+  function isEventRoom(building, room) {
+    var rooms = EVENT_ROOM_SCOPE[building] || [];
+    return rooms.indexOf(normalizeEventRoom(room, building)) !== -1;
+  }
+
+  function isQuarterHourTimeRange(timeInfo) {
+    return !!(
+      timeInfo &&
+      timeInfo.startMinutes % 15 === 0 &&
+      timeInfo.endMinutes % 15 === 0
+    );
+  }
+
+  function isEventTimeInsideGrid(timeInfo) {
+    if (
+      !timeInfo ||
+      !window.SchedGenEventManagerView ||
+      typeof window.SchedGenEventManagerView.isTimeRangeInsideGrid !== "function"
+    ) {
+      return true;
+    }
+    return window.SchedGenEventManagerView.isTimeRangeInsideGrid(
+      timeInfo.start_time,
+      timeInfo.end_time
+    );
+  }
+
+  function getSelectedEventAuthorLogin(form) {
+    var ownerSelect = form ? form.querySelector("#event-author-login") : null;
+    if (ownerSelect) {
+      return (ownerSelect.value || "").trim();
+    }
+    return currentRole() === "admin" ? (window.CURRENT_USER || "") : "";
+  }
+
+  function getSelectedEventAuthorName(form) {
+    var ownerSelect = form ? form.querySelector("#event-author-login") : null;
+    var selected;
+    if (ownerSelect && ownerSelect.selectedIndex >= 0) {
+      selected = ownerSelect.options[ownerSelect.selectedIndex];
+      return selected.getAttribute("data-display-name") || selected.textContent || "";
+    }
+    return window.DISPLAY_NAME || window.CURRENT_USER || "";
+  }
+
+  function ensureEventOwnerSelector(form) {
+    var typeWrapper;
+    var ownerWrapper;
+    var select;
+    var adminLogin;
+    var adminName;
+
+    if (!form || currentRole() !== "admin") {
+      return null;
+    }
+    ownerWrapper = form.querySelector("#event-owner-wrapper");
+    if (ownerWrapper) {
+      return ownerWrapper.querySelector("#event-author-login");
+    }
+
+    adminLogin = window.CURRENT_USER || "";
+    adminName = window.DISPLAY_NAME || adminLogin || "Admin";
+    typeWrapper = form.querySelector("#create-lesson-type-wrapper");
+    ownerWrapper = document.createElement("label");
+    ownerWrapper.id = "event-owner-wrapper";
+    ownerWrapper.className = "event-owner-wrapper";
+    ownerWrapper.textContent = "Владелец Veranstaltung:";
+
+    select = document.createElement("select");
+    select.id = "event-author-login";
+    appendEventOwnerOption(select, adminLogin, adminName, "admin");
+    ownerWrapper.appendChild(select);
+
+    var hint = document.createElement("small");
+    hint.textContent = "Администратор может создать событие от своего имени или от имени event-manager.";
+    ownerWrapper.appendChild(hint);
+
+    form.insertBefore(ownerWrapper, typeWrapper && typeWrapper.nextSibling ? typeWrapper.nextSibling : form.querySelector(".button-row"));
+    select.addEventListener("change", function () {
+      syncCreateDialogTypeUi(form);
+    });
+    loadEventManagers().then(function (users) {
+      users.forEach(function (user) {
+        appendEventOwnerOption(select, user.login, user.display_name || user.login, "event_manager");
+      });
+      syncCreateDialogTypeUi(form);
+    });
+    return select;
+  }
+
+  function appendEventOwnerOption(select, login, displayName, role) {
+    var option;
+    if (!select || !login || select.querySelector('option[value="' + cssEscape(login) + '"]')) {
+      return;
+    }
+    option = document.createElement("option");
+    option.value = login;
+    option.textContent = displayName || login;
+    option.setAttribute("data-display-name", displayName || login);
+    option.setAttribute("data-role", role || "");
+    select.appendChild(option);
+  }
+
+  function loadEventManagers() {
+    if (Array.isArray(eventManagers)) {
+      return Promise.resolve(eventManagers);
+    }
+    if (eventManagersRequest) {
+      return eventManagersRequest;
+    }
+    eventManagersRequest = requestJson("/api/users/event_managers").then(function (result) {
+      if (!result || !result.ok || !Array.isArray(result.data && result.data.users)) {
+        eventManagers = [];
+        return eventManagers;
+      }
+      eventManagers = result.data.users;
+      return eventManagers;
+    });
+    return eventManagersRequest;
+  }
+
+  function replaceInputWithoutAutocomplete(input, placeholder) {
+    var clone;
+    if (!input || input.getAttribute("data-event-plain-input") === "1") {
+      return input;
+    }
+    clone = input.cloneNode(true);
+    clone.setAttribute("autocomplete", "off");
+    clone.setAttribute("data-event-plain-input", "1");
+    if (placeholder) {
+      clone.placeholder = placeholder;
+    }
+    input.parentNode.replaceChild(clone, input);
+    return clone;
+  }
+
+  function relabelDatesSection(section, labelText) {
+    var label = section ? section.querySelector("label") : null;
+    if (label) {
+      label.textContent = labelText;
+    }
+  }
+
   function buildEditPayload(form, block) {
     var building = getFieldValue(form, "#edit-building");
-    var subject = getFieldValue(form, "#edit-subject");
-    var teacher = getFieldValue(form, "#edit-teacher");
+    var currentType = getBlockLessonType(block);
+    var subject = currentType === EVENT_LESSON_TYPE ? EVENT_SUBJECT : getFieldValue(form, "#edit-subject");
+    var teacher =
+      currentType === EVENT_LESSON_TYPE
+        ? (block.getAttribute("data-created-by-name") || getFieldValue(form, "#edit-teacher"))
+        : getFieldValue(form, "#edit-teacher");
     var students = getFieldValue(form, "#edit-students");
     var room = getFieldValue(form, "#edit-room").trim();
     var timeRange = getFieldValue(form, "#edit-time").trim();
@@ -1955,13 +2586,17 @@
       return null;
     }
 
-    var currentType = getBlockLessonType(block);
-    var editResolvedType = currentType === "trial" ? "trial" : inferLessonType(subject);
+    var editResolvedType =
+      currentType === EVENT_LESSON_TYPE
+        ? EVENT_LESSON_TYPE
+        : currentType === "trial"
+          ? "trial"
+          : inferLessonType(subject);
 
     var editPayload = {
       building: building,
       day: day,
-      room: room,
+      room: editResolvedType === EVENT_LESSON_TYPE ? normalizeEventRoom(room, building) : room,
       subject: subject,
       teacher: teacher,
       students: students,
@@ -1977,25 +2612,45 @@
       var editDatesSection = form ? form.querySelector("#edit-trial-dates-section") : null;
       editPayload.trial_dates = window.TrialUI.collectTrialDates(editDatesSection || form);
     }
+    if (editResolvedType === EVENT_LESSON_TYPE) {
+      editPayload.event_dates = collectEditEventDates(form);
+      editPayload.expected_version = toInteger(block.getAttribute("data-version"), 0);
+    }
     return editPayload;
   }
 
   function getCreateValidationError(form) {
+    var lessonType = resolveCreateLessonType(form);
+    var timeInfo = parseTimeRange(getFieldValue(form, "#new-time").trim());
     var error = validateBlockInputs(
       getFieldValue(form, "#new-building"),
       getFieldValue(form, "#new-day"),
       getFieldValue(form, "#new-room").trim(),
-      getFieldValue(form, "#new-subject"),
+      lessonType === EVENT_LESSON_TYPE ? EVENT_SUBJECT : getFieldValue(form, "#new-subject"),
       getFieldValue(form, "#new-time").trim()
     );
 
     if (error) {
       return error;
     }
-    if (resolveCreateLessonType(form) === "trial" && collectCreateTrialDates(form).length === 0) {
+    if (lessonType === EVENT_LESSON_TYPE) {
+      if (!canUseEventEditor()) {
+        return "Недостаточно прав для создания Veranstaltung.";
+      }
+      if (!isEventRoom(getFieldValue(form, "#new-building"), getFieldValue(form, "#new-room").trim())) {
+        return "Veranstaltung можно создать только в разрешённых event-кабинетах.";
+      }
+      if (!isEventTimeInsideGrid(timeInfo)) {
+        return "Veranstaltung time is outside the visible event grid.";
+      }
+      if (!isQuarterHourTimeRange(timeInfo)) {
+        return "Время Veranstaltung должно начинаться и заканчиваться на 15-минутной границе.";
+      }
+    }
+    if (lessonType === "trial" && collectCreateTrialDates(form).length === 0) {
       return "Для trial-занятия нужно указать хотя бы одну дату проведения.";
     }
-    if (getFieldValue(form, "#new-day") === "So" && resolveCreateLessonType(form) !== "trial") {
+    if (getFieldValue(form, "#new-day") === "So" && lessonType !== "trial") {
       return "Воскресенье доступно только для trial-занятий.";
     }
     return null;
@@ -2003,16 +2658,32 @@
 
   function getEditValidationError(form) {
     var editedBlock = resolveEditedBlock(form);
+    var lessonType = editedBlock ? getBlockLessonType(editedBlock) : "";
+    var timeInfo = parseTimeRange(getFieldValue(form, "#edit-time").trim());
     var error = validateBlockInputs(
       getFieldValue(form, "#edit-building"),
       "x",
       getFieldValue(form, "#edit-room").trim(),
-      getFieldValue(form, "#edit-subject"),
+      lessonType === EVENT_LESSON_TYPE ? EVENT_SUBJECT : getFieldValue(form, "#edit-subject"),
       getFieldValue(form, "#edit-time").trim()
     );
 
     if (error) {
       return error;
+    }
+    if (lessonType === EVENT_LESSON_TYPE) {
+      if (!canUseEventEditor() || !canCurrentRoleMutateBlock(editedBlock)) {
+        return "Недостаточно прав для изменения Veranstaltung.";
+      }
+      if (!isEventRoom(getFieldValue(form, "#edit-building"), getFieldValue(form, "#edit-room").trim())) {
+        return "Veranstaltung можно сохранить только в разрешённых event-кабинетах.";
+      }
+      if (!isEventTimeInsideGrid(timeInfo)) {
+        return "Veranstaltung time is outside the visible event grid.";
+      }
+      if (!isQuarterHourTimeRange(timeInfo)) {
+        return "Время Veranstaltung должно начинаться и заканчиваться на 15-минутной границе.";
+      }
     }
     if (
       editedBlock &&
@@ -2055,6 +2726,23 @@
     }
     if (result.status === 403 && code === "FORBIDDEN") {
       alert(forbiddenMessage);
+      return;
+    }
+    if (result.status === 409 && code === "EVENT_VERSION_CONFLICT") {
+      alert("Veranstaltung уже изменена другим пользователем. Обновите расписание и повторите действие.");
+      refreshIndividualLayer();
+      return;
+    }
+    if (result.status === 409 && code === "EVENT_ROOM_CONFLICT") {
+      alert("Кабинет уже занят в это время. Измените время или кабинет Veranstaltung.");
+      return;
+    }
+    if (result.status === 423 && code === "SCHEDULE_MUTATION_BUSY") {
+      alert("Расписание сейчас изменяется другим процессом. Повторите действие позже.");
+      return;
+    }
+    if (result.status === 503 && code === "OCCUPANCY_UNAVAILABLE") {
+      alert("Проверка занятости кабинетов временно недоступна. Veranstaltung не сохранена.");
       return;
     }
     if (result.status === 400 && error === "Forbidden lesson_type") {
@@ -2154,11 +2842,15 @@
       day: block.getAttribute("data-day") || "",
       subject: subject ? subject.textContent.trim() : "",
       teacher: stripHtml(parts[1] || ""),
+      students: stripHtml(parts[2] || ""),
       time: stripHtml(parts[4] || ""),
     };
   }
 
   function getBlockLessonType(block) {
+    if (!block) {
+      return "group";
+    }
     return block.getAttribute("data-lesson-type") || inferLessonType(getBlockSubject(block));
   }
 
@@ -2204,6 +2896,23 @@
     });
   }
 
+  function columnHasEventBlocks(container, building, day, colIndex) {
+    return Array.from(
+      container.querySelectorAll(
+        '.activity-block[data-building="' +
+          cssEscape(building) +
+          '"][data-day="' +
+          cssEscape(day) +
+          '"]'
+      )
+    ).some(function (block) {
+      return (
+        toInteger(block.getAttribute("data-col-index"), -1) === colIndex &&
+        getBlockLessonType(block) === EVENT_LESSON_TYPE
+      );
+    });
+  }
+
   function resolveHeaderDay(th) {
     var dayClass = Array.from(th.classList).find(function (cls) {
       return cls.indexOf("day-") === 0;
@@ -2227,6 +2936,7 @@
   function defaultColor(lessonType) {
     if (lessonType === "nachhilfe") return "#D8F0FF";
     if (lessonType === "trial") return "#E8F5E9";
+    if (lessonType === EVENT_LESSON_TYPE) return EVENT_DEFAULT_COLOR;
     return "#FFF1BF";
   }
 

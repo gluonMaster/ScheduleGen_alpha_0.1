@@ -1,8 +1,8 @@
 // Полный набор кабинетов для каждого здания
 var BUILDING_ROOMS = {
-    'Villa': ['K.06', 'K.07', 'K.08', 'K.11', '0.05', '0.06', '0.08',
+    'Villa': ['K.06', 'K.07', 'K.08', 'K.11', '0.04', '0.05', '0.06', '0.08',
               '1.03', '1.05', '1.06', '1.09', '2.03', '2.04', '2.05', '2.07', '2.09'],
-    'Kolibri': ['0.3', '2.2', '2.3', '2.4', '2.5', '2.6', '2.7']
+    'Kolibri': ['0.2', '0.3', '2.2', '2.3', '2.4', '2.5', '2.6', '2.7']
 };
 
 var MENU_DAYS = Array.isArray(window.daysOrder)
@@ -21,10 +21,16 @@ function currentMenuRole() {
 }
 
 function canManageScheduleStructure() {
+    if (window.SchedGenAuthUI && typeof window.SchedGenAuthUI.canPublish === 'function') {
+        return window.SchedGenAuthUI.canPublish(currentMenuRole());
+    }
     return currentMenuRole() === 'admin';
 }
 
 function canAddColumn() {
+    if (window.SchedGenAuthUI && typeof window.SchedGenAuthUI.canManageColumns === 'function') {
+        return window.SchedGenAuthUI.canManageColumns(currentMenuRole());
+    }
     return ['admin', 'editor', 'organizer'].indexOf(currentMenuRole()) !== -1;
 }
 
@@ -55,7 +61,7 @@ function _initPublishMenuItem() {
     var publishItem = document.getElementById('menu-publish-item');
     if (!publishItem) return;
 
-    publishItem.style.display = (window.USER_ROLE === 'admin') ? '' : 'none';
+    publishItem.style.display = canManageScheduleStructure() ? '' : 'none';
     if (publishItem.__publishBound) return;
     publishItem.__publishBound = true;
 
@@ -574,6 +580,7 @@ function initMenu() {
             { label: 'Только индивидуальные', value: 'individual' },
             { label: 'Только наххильфе', value: 'nachhilfe' },
             { label: 'Пробные занятия', value: 'trial' },
+            { label: 'Только Veranstaltung', value: 'veranstaltung' },
             { label: 'Негрупповые', value: 'non-group' }
         ];
 
@@ -614,7 +621,7 @@ window.openAddColumnDialog = openAddColumnDialog;
         _initPublishMenuItem();
         _syncStructureMenuVisibility();
         var publishItem = document.getElementById('menu-publish-item');
-        if (publishItem && window.USER_ROLE !== 'admin') {
+        if (publishItem && !canManageScheduleStructure()) {
             publishItem.style.display = 'none';
         }
     }

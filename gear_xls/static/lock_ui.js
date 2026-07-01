@@ -36,7 +36,10 @@
     syncLockBannerMetrics();
     refreshLockStatus();
     stopPolling();
-    pollingTimer = window.setInterval(pollStatus, 30000);
+    pollingTimer = window.setInterval(
+      pollStatus,
+      currentRole() === "event_manager" ? 7000 : 30000
+    );
 
     window.addEventListener("beforeunload", function () {
       if (lockVersion === null || !navigator.sendBeacon) {

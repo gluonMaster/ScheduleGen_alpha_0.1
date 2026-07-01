@@ -437,5 +437,37 @@ def get_css_styles(cellHeight, dayCellWidth, timeColWidth, borderWidth=1):
          width: 100%;
          margin-bottom: 2px;
       }}
+
+      .activity-block[data-lesson-type="veranstaltung"],
+      .activity-block.lesson-type-veranstaltung {{
+         border: 2px solid #6d28d9 !important;
+         box-shadow: inset 0 0 0 1px rgba(255,255,255,0.26), 0 0 0 1px rgba(109,40,217,0.24);
+         padding-top: 18px !important;
+         overflow: hidden;
+      }}
+
+      .activity-block[data-lesson-type="veranstaltung"]::before,
+      .activity-block.lesson-type-veranstaltung::before {{
+         content: "EVENT";
+         position: absolute;
+         top: 4px;
+         right: 4px;
+         padding: 2px 6px;
+         border-radius: 999px;
+         background: #4c1d95;
+         color: #fff;
+         font-size: 10px;
+         font-weight: 700;
+         letter-spacing: 0.08em;
+         z-index: 2;
+         pointer-events: none;
+      }}
+
+      .activity-block[data-lesson-type="veranstaltung"] strong,
+      .activity-block.lesson-type-veranstaltung strong {{
+         display: block;
+         width: 100%;
+         margin-bottom: 2px;
+      }}
     </style>
     """

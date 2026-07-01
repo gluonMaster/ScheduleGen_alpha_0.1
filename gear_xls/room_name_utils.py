@@ -7,6 +7,14 @@ _BUILDING_PREFIXES = {
     "Villa": "V",
     "Kolibri": "K",
 }
+_CANONICAL_BUILDINGS = {name.casefold(): name for name in _BUILDING_PREFIXES}
+
+
+def normalize_building_name(building):
+    """Return the canonical building spelling when the building is known."""
+
+    value = str(building or "").strip()
+    return _CANONICAL_BUILDINGS.get(value.casefold(), value)
 
 
 def normalize_room_name(room, building=None):
@@ -20,7 +28,7 @@ def normalize_room_name(room, building=None):
     """
 
     normalized_room = str(room or "").strip()
-    building_name = str(building or "").strip()
+    building_name = normalize_building_name(building)
     prefix = _BUILDING_PREFIXES.get(building_name)
 
     if not normalized_room or not prefix:
@@ -40,6 +48,8 @@ def normalize_room_fields(block):
         return block
 
     normalized = dict(block)
+    if "building" in normalized:
+        normalized["building"] = normalize_building_name(normalized.get("building"))
     normalized_room = normalize_room_name(
         normalized.get("room"), normalized.get("building")
     )

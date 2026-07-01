@@ -234,6 +234,14 @@ def get_individual_lessons_path(project_root: str | None = None) -> str:
     return os.path.join(get_schedule_state_dir(project_root), "individual_lessons.json")
 
 
+def get_group_occupancy_snapshot_path(project_root: str | None = None) -> str:
+    return os.path.join(get_schedule_state_dir(project_root), "group_occupancy_snapshot.json")
+
+
+def get_schedule_mutation_lock_path(project_root: str | None = None) -> str:
+    return os.path.join(get_schedule_state_dir(project_root), "schedule_mutation.lock")
+
+
 def get_lock_json_path(project_root: str | None = None) -> str:
     return os.path.join(get_schedule_state_dir(project_root), "lock.json")
 

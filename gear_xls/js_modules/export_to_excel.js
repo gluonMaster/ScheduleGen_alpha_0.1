@@ -130,6 +130,9 @@ function collectScheduleData(options) {
             // Создаем запись активности для экспорта
             var lessonType = block.getAttribute('data-lesson-type') || 'group';
             var trialDatesJson = '';
+            if (String(lessonType).trim() === 'veranstaltung' || String(subject).trim() === 'Veranstaltung') {
+                return;
+            }
 
             if (lessonType === 'trial') {
                 var rawTrialDates = block.getAttribute('data-trial-dates');

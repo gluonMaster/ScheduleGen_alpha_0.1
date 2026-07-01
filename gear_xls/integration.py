@@ -15,6 +15,8 @@ import re
 import json
 import tempfile
 import sys
+import hashlib
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -39,6 +41,12 @@ from gear_xls.runtime_paths import (
     get_schedule_state_dir,
     get_spiski_dir,
 )
+from gear_xls.group_occupancy_snapshot import (
+    build_snapshot_from_buildings,
+    replace_group_occupancy_snapshot,
+)
+from gear_xls.schedule_mutation_coordinator import schedule_mutation
+from gear_xls import state_manager
 
 # Настройка логирования
 logging.basicConfig(
@@ -50,6 +58,29 @@ logger = logging.getLogger('integration')
 # Константы конфигурации
 DEFAULT_TIME_INTERVAL = 5
 DEFAULT_BORDER_WIDTH = 0.5
+
+
+class RegenerationEventConflict(RuntimeError):
+    def __init__(self, conflict):
+        super().__init__("Regenerated schedule conflicts with saved Veranstaltung")
+        self.conflict = conflict
+
+
+@contextmanager
+def _state_manager_paths_for_state_dir(state_dir: str):
+    target_individual_path = os.path.join(state_dir, "individual_lessons.json")
+    original_individual_path = state_manager.INDIVIDUAL_LESSONS_PATH
+    original_lock_path = state_manager.INDIVIDUAL_LOCK_PATH
+    if os.path.abspath(original_individual_path) == os.path.abspath(target_individual_path):
+        yield
+        return
+    state_manager.INDIVIDUAL_LESSONS_PATH = target_individual_path
+    state_manager.INDIVIDUAL_LOCK_PATH = target_individual_path + ".lock"
+    try:
+        yield
+    finally:
+        state_manager.INDIVIDUAL_LESSONS_PATH = original_individual_path
+        state_manager.INDIVIDUAL_LOCK_PATH = original_lock_path
 
 
 def _spiski_sort_key(value: str):
@@ -130,7 +161,35 @@ def _write_json_atomic(path: str, payload: dict) -> None:
                 pass
 
 
-def reset_web_editor_state(individual_blocks: list[dict] | None = None) -> None:
+def _replace_file_atomic(source_path: str, target_path: str) -> None:
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=os.path.dirname(target_path),
+            delete=False,
+            suffix=".tmp",
+            mode="wb",
+        ) as tmp:
+            with open(source_path, "rb") as source:
+                shutil.copyfileobj(source, tmp)
+            tmp_path = tmp.name
+        os.replace(tmp_path, target_path)
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
+def reset_web_editor_state(
+    individual_blocks: list[dict] | None = None,
+    *,
+    group_buildings: dict | None = None,
+    snapshot_source: str | None = None,
+    html_source_path: str | None = None,
+) -> None:
     """
     Reset runtime state of the web editor so a newly generated app starts
     from the current Excel/HTML outputs instead of stale persisted JSON state.
@@ -138,31 +197,59 @@ def reset_web_editor_state(individual_blocks: list[dict] | None = None) -> None:
     state_dir = get_schedule_state_dir()
 
     individual_blocks = list(individual_blocks or [])
+    revision = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    source = snapshot_source or "generated_schedule"
+    generation_id = "regen:" + hashlib.sha256(f"{source}|{revision}".encode("utf-8")).hexdigest()[:24]
+    snapshot = None
+    if group_buildings is not None:
+        snapshot = build_snapshot_from_buildings(
+            group_buildings,
+            source=source,
+            generation_id=generation_id,
+        )
 
-    _write_json_atomic(
-        os.path.join(state_dir, "base_schedule.json"),
-        {"published_at": None, "published_by": None, "blocks": []},
-    )
-    _write_json_atomic(
-        os.path.join(state_dir, "individual_lessons.json"),
-        {
-            "last_modified": datetime.now(timezone.utc).isoformat() if individual_blocks else None,
-            "blocks": individual_blocks,
-        },
-    )
-    _write_json_atomic(
-        os.path.join(state_dir, "lock.json"),
-        {
-            "holder": None,
-            "version": 0,
-            "acquired_at": None,
-            "last_heartbeat": None,
-            "last_holder": None,
-            "released_at": None,
-            "released_by": None,
-            "release_reason": None,
-        },
-    )
+    with _state_manager_paths_for_state_dir(state_dir):
+        with schedule_mutation("web_editor_state_reset"):
+            prepared = state_manager.prepare_regeneration_individual_state(
+                individual_blocks,
+                revision=revision,
+            )
+            if snapshot is not None:
+                conflict = state_manager.find_room_time_conflict_with_events(
+                    snapshot.get("blocks", []),
+                    prepared.get("preserved_events", []),
+                )
+                if conflict:
+                    raise RegenerationEventConflict(conflict)
+
+            state_manager.write_regeneration_individual_state(prepared["state"])
+            _write_json_atomic(
+                os.path.join(state_dir, "base_schedule.json"),
+                {"published_at": None, "published_by": None, "blocks": []},
+            )
+            if snapshot is not None:
+                replace_group_occupancy_snapshot(
+                    snapshot,
+                    path=os.path.join(state_dir, "group_occupancy_snapshot.json"),
+                )
+            if html_source_path:
+                _replace_file_atomic(
+                    html_source_path,
+                    os.path.join(get_html_output_dir(), "schedule.html"),
+                )
+            _write_json_atomic(
+                os.path.join(state_dir, "lock.json"),
+                {
+                    "holder": None,
+                    "version": 0,
+                    "acquired_at": None,
+                    "last_heartbeat": None,
+                    "last_holder": None,
+                    "released_at": None,
+                    "released_by": None,
+                    "release_reason": None,
+                },
+            )
     logger.info("Web editor runtime state reset in %s", state_dir)
 
 
@@ -299,10 +386,24 @@ def run_full_pipeline(excel_file_path: str,                     time_interval: i
         # Load suggestion lists from spiski/ files.
         spiski_data = load_spiski_data()
         
-        # Выполняем основную обработку
+        # Выполняем основную обработку во временной HTML-директории. Active
+        # schedule.html заменяется только после event-conflict validation.
         logger.info("Запуск обработки через SchedulePipeline...")
-        result = pipeline.process_excel_to_outputs(excel_file_path, output_dirs, spiski_data=spiski_data)
-        reset_web_editor_state(result.get("individual_blocks"))
+        with tempfile.TemporaryDirectory(prefix="schedgen_html_stage_") as staged_html_dir:
+            staged_output_dirs = dict(output_dirs)
+            staged_output_dirs["html"] = staged_html_dir
+            result = pipeline.process_excel_to_outputs(
+                excel_file_path,
+                staged_output_dirs,
+                spiski_data=spiski_data,
+            )
+            reset_web_editor_state(
+                result.get("individual_blocks"),
+                group_buildings=result.get("buildings"),
+                snapshot_source=excel_file_path,
+                html_source_path=result.get("html_file"),
+            )
+            result["html_file"] = os.path.join(output_dirs["html"], "schedule.html")
         logger.info("Обработка завершена успешно:")
         logger.info(f"  - Входной файл: {excel_file_path}")
         logger.info(f"  - Занятий обработано: {result['activities_count']}")

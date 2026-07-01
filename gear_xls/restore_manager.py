@@ -11,11 +11,24 @@ from typing import Any
 from gear_xls import backup_manager, lock_manager
 from gear_xls.runtime_paths import (
     get_base_schedule_path,
+    get_group_occupancy_snapshot_path,
     get_individual_lessons_path,
     get_project_root_id,
     get_restore_status_path,
     get_schedule_html_path,
     get_spiski_dir,
+)
+from gear_xls.schedule_mutation_coordinator import ScheduleMutationBusy, schedule_mutation
+from gear_xls.event_domain import (
+    EVENT_DEFAULT_COLOR,
+    EVENT_OWNER_ADMIN,
+    EVENT_OWNER_KINDS,
+    EVENT_SUBJECT,
+    LESSON_TYPE_EVENT,
+)
+from gear_xls.group_occupancy_snapshot import (
+    build_snapshot_from_base_state,
+    validate_group_occupancy_snapshot,
 )
 
 
@@ -378,8 +391,30 @@ def _normalize_base_state(data: Any, *, restore_revision: str, login: str) -> di
     }
 
 
+def _normalize_event_block_for_restore(block: dict[str, Any]) -> None:
+    block["lesson_type"] = LESSON_TYPE_EVENT
+    block["subject"] = EVENT_SUBJECT
+    if block.get("owner_kind") not in EVENT_OWNER_KINDS:
+        block["owner_kind"] = EVENT_OWNER_ADMIN
+    try:
+        version = int(block.get("version"))
+    except (TypeError, ValueError):
+        version = 1
+    block["version"] = version if version > 0 else 1
+    event_dates = block.get("event_dates") or []
+    if isinstance(event_dates, list):
+        block["event_dates"] = sorted(dict.fromkeys(str(item).strip() for item in event_dates if item is not None))
+    else:
+        block["event_dates"] = []
+    created_by = str(block.get("created_by") or "").strip()
+    created_by_name = str(block.get("created_by_name") or block.get("teacher") or created_by).strip()
+    block["created_by"] = created_by
+    block["created_by_name"] = created_by_name
+    block["teacher"] = created_by_name
+    block["color"] = str(block.get("color") or EVENT_DEFAULT_COLOR)
+
+
 def _normalize_individual_state(data: Any, *, restore_revision: str) -> dict[str, Any]:
-    backup_manager.validate_individual_state(data, label="state/individual_lessons.json")
     state = _normalized_json_value(data)
 
     for block in state.get("blocks", []):
@@ -389,8 +424,11 @@ def _normalize_individual_state(data: Any, *, restore_revision: str) -> dict[str
             trial_dates = block.get("trial_dates") or []
             normalized_dates = sorted(dict.fromkeys(str(item).strip() for item in trial_dates))
             block["trial_dates"] = normalized_dates
+        elif block.get("lesson_type") == LESSON_TYPE_EVENT:
+            _normalize_event_block_for_restore(block)
         else:
             block.pop("trial_dates", None)
+            block.pop("event_dates", None)
 
     backup_manager.validate_individual_state(state, label="state/individual_lessons.json")
     return {
@@ -405,6 +443,22 @@ def _normalize_spiski_bytes(data: bytes, *, label: str) -> bytes:
     normalized = text.encode("utf-8")
     backup_manager.validate_spiski_bytes(normalized, label=label)
     return normalized
+
+
+def _snapshot_bytes_for_restore(
+    entries: dict[str, bytes],
+    *,
+    normalized_base: dict[str, Any],
+) -> bytes | None:
+    if backup_manager.GROUP_OCCUPANCY_ARCHIVE_PATH in entries:
+        snapshot = _load_json_entry(entries, backup_manager.GROUP_OCCUPANCY_ARCHIVE_PATH)
+        validate_group_occupancy_snapshot(snapshot)
+        return _json_bytes(snapshot)
+    if normalized_base.get("published_at"):
+        snapshot = build_snapshot_from_base_state(normalized_base)
+        validate_group_occupancy_snapshot(snapshot)
+        return _json_bytes(snapshot)
+    return None
 
 
 def _load_validated_backup(
@@ -485,6 +539,7 @@ def _prepare_restore_payload(
 
     schedule_html = entries["html/schedule.html"]
     backup_manager.validate_schedule_html_bytes(schedule_html)
+    snapshot_bytes = _snapshot_bytes_for_restore(entries, normalized_base=normalized_base)
 
     spiski = {}
     for filename in backup_manager.ALLOWED_SPISKI_FILENAMES:
@@ -494,6 +549,7 @@ def _prepare_restore_payload(
     return {
         "base": _json_bytes(normalized_base),
         "individual": _json_bytes(normalized_individual),
+        "occupancy_snapshot": snapshot_bytes,
         "schedule_html": schedule_html,
         "spiski": spiski,
         "base_revision": normalized_base.get("published_at"),
@@ -501,16 +557,24 @@ def _prepare_restore_payload(
     }
 
 
-def _restore_operations(payload: dict[str, Any], project_root: str | None = None) -> list[tuple[str, bytes]]:
-    operations: list[tuple[str, bytes]] = [
+def _restore_operations(payload: dict[str, Any], project_root: str | None = None) -> list[tuple[str, bytes | None]]:
+    operations: list[tuple[str, bytes | None]] = [
         (get_base_schedule_path(project_root), payload["base"]),
         (get_individual_lessons_path(project_root), payload["individual"]),
+        (get_group_occupancy_snapshot_path(project_root), payload.get("occupancy_snapshot")),
     ]
     spiski_dir = get_spiski_dir(project_root)
     for filename in backup_manager.ALLOWED_SPISKI_FILENAMES:
         operations.append((os.path.join(spiski_dir, filename), payload["spiski"][filename]))
     operations.append((get_schedule_html_path(project_root), payload["schedule_html"]))
     return operations
+
+
+def _delete_file_if_exists(path: str) -> None:
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        return
 
 
 def _replace_file(path: str, data: bytes) -> None:
@@ -543,7 +607,10 @@ def _apply_restore_payload(
     replaced: list[str] = []
     for path, data in _restore_operations(payload, project_root):
         try:
-            _replace_file(path, data)
+            if data is None:
+                _delete_file_if_exists(path)
+            else:
+                _replace_file(path, data)
             replaced.append(path)
         except Exception as exc:
             raise _RestoreApplyFailure(
@@ -586,18 +653,19 @@ def _rollback_from_safety_backup(
     login: str,
     project_root: str | None = None,
 ) -> list[str]:
-    _, _, safety_entries = _load_validated_backup(
-        safety_backup_id,
-        allow_foreign_project=True,
-        project_root=project_root,
-    )
-    payload = _prepare_restore_payload(
-        safety_entries,
-        login=login,
-        restore_revision=_format_timestamp(),
-        update_revisions=False,
-    )
-    return _apply_restore_payload(payload, project_root=project_root)
+    with schedule_mutation("restore_rollback"):
+        _, _, safety_entries = _load_validated_backup(
+            safety_backup_id,
+            allow_foreign_project=True,
+            project_root=project_root,
+        )
+        payload = _prepare_restore_payload(
+            safety_entries,
+            login=login,
+            restore_revision=_format_timestamp(),
+            update_revisions=False,
+        )
+        return _apply_restore_payload(payload, project_root=project_root)
 
 
 def restore_backup(
@@ -638,43 +706,50 @@ def restore_backup(
     restore_started = False
     try:
         try:
-            begin_restore(
-                login,
-                f"Restoring from backup {backup_id}",
-                project_root=project_root,
-            )
-            restore_started = True
-            safety_backup = _create_safety_backup(
-                backup_id,
-                login,
-                display_name,
-                project_root=project_root,
-            )
-            with _status_mutex:
-                status = _read_status_unlocked(project_root)
-                status["safety_backup_id"] = safety_backup["id"]
-                _write_status_unlocked(status, project_root)
+            with schedule_mutation("restore_apply"):
+                begin_restore(
+                    login,
+                    f"Restoring from backup {backup_id}",
+                    project_root=project_root,
+                )
+                restore_started = True
+                safety_backup = _create_safety_backup(
+                    backup_id,
+                    login,
+                    display_name,
+                    project_root=project_root,
+                )
+                with _status_mutex:
+                    status = _read_status_unlocked(project_root)
+                    status["safety_backup_id"] = safety_backup["id"]
+                    _write_status_unlocked(status, project_root)
 
-            replaced_paths = _apply_restore_payload(payload, project_root=project_root)
-            lock_manager.clear_for_restore(login, project_root=project_root)
-            status = complete_restore(
-                login,
-                backup_id,
-                safety_backup_id=safety_backup["id"],
-                message="Restore completed",
-                project_root=project_root,
-            )
-            return {
-                "ok": True,
-                "restored_from": backup_id,
-                "safety_backup": {
-                    "id": safety_backup["id"],
-                    "download_url": safety_backup["download_url"],
-                },
-                "base_revision": payload["base_revision"],
-                "individual_revision": payload["individual_revision"],
-                "restore_generation": int(status.get("generation") or 0),
-            }
+                replaced_paths = _apply_restore_payload(payload, project_root=project_root)
+                lock_manager.clear_for_restore(login, project_root=project_root)
+                status = complete_restore(
+                    login,
+                    backup_id,
+                    safety_backup_id=safety_backup["id"],
+                    message="Restore completed",
+                    project_root=project_root,
+                )
+                return {
+                    "ok": True,
+                    "restored_from": backup_id,
+                    "safety_backup": {
+                        "id": safety_backup["id"],
+                        "download_url": safety_backup["download_url"],
+                    },
+                    "base_revision": payload["base_revision"],
+                    "individual_revision": payload["individual_revision"],
+                    "restore_generation": int(status.get("generation") or 0),
+                }
+        except ScheduleMutationBusy as exc:
+            raise RestoreError(
+                "Schedule lifecycle is busy",
+                code="LIFECYCLE_BUSY",
+                status_code=503,
+            ) from exc
         except RestoreStatusError as exc:
             raise RestoreError(exc.message, code=exc.code, status_code=exc.status_code) from exc
         except backup_manager.BackupError as exc:

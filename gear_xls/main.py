@@ -11,6 +11,7 @@ from tkinter import filedialog, messagebox
 import os
 import threading
 import webbrowser
+import tempfile
 
 # Импортируем новый сервис пайплайна
 from services.schedule_pipeline import SchedulePipeline, SchedulePipelineError
@@ -63,8 +64,17 @@ def run_script():
     try:
         # Выполняем основную обработку через пайплайн
         spiski_data = load_spiski_data()
-        result = pipeline.process_excel_to_outputs(selected_file, output_dirs, spiski_data=spiski_data)
-        reset_web_editor_state(result.get("individual_blocks"))
+        with tempfile.TemporaryDirectory(prefix="schedgen_html_stage_") as staged_html_dir:
+            staged_output_dirs = dict(output_dirs)
+            staged_output_dirs["html"] = staged_html_dir
+            result = pipeline.process_excel_to_outputs(selected_file, staged_output_dirs, spiski_data=spiski_data)
+            reset_web_editor_state(
+                result.get("individual_blocks"),
+                group_buildings=result.get("buildings"),
+                snapshot_source=selected_file,
+                html_source_path=result.get("html_file"),
+            )
+            result["html_file"] = os.path.join(output_dirs["html"], "schedule.html")
         print(f"Обработка завершена:")
         print(f"  - Занятий обработано: {result['activities_count']}")
         print(f"  - Зданий создано: {result['buildings_count']}")

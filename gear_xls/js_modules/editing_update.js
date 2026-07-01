@@ -97,6 +97,15 @@ function reapplyLessonTypeFilterAfterBlockEdit() {
     refreshCompactRowsAfterBlockEdit();
 }
 
+function escapeEditDialogAttr(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // Функция открытия диалога редактирования с поддержкой зданий
 function openEditDialog(block, origLeft, origTop, building) {
     if (
@@ -197,23 +206,23 @@ function openEditDialog(block, origLeft, origTop, building) {
                 </label>
                 <label>
                     Предмет:
-                    <input type="text" id="edit-subject" value="${subject}" required>
+                    <input type="text" id="edit-subject" value="${escapeEditDialogAttr(subject)}" required>
                 </label>
                 <label>
                     Преподаватель:
-                    <input type="text" id="edit-teacher" value="${teacher}">
+                    <input type="text" id="edit-teacher" value="${escapeEditDialogAttr(teacher)}">
                 </label>
                 <label>
                     Группа/Ученики:
-                    <input type="text" id="edit-students" value="${students}">
+                    <input type="text" id="edit-students" value="${escapeEditDialogAttr(students)}">
                 </label>
                 <label>
                     Кабинет:
-                    <input type="text" id="edit-room" value="${room}">
+                    <input type="text" id="edit-room" value="${escapeEditDialogAttr(room)}">
                 </label>
                 <label>
                     Время (HH:MM-HH:MM):
-                    <input type="text" id="edit-time" value="${timeRange}" pattern="[0-9]{2}:[0-9]{2}-[0-9]{2}:[0-9]{2}" 
+                    <input type="text" id="edit-time" value="${escapeEditDialogAttr(timeRange)}" pattern="[0-9]{2}:[0-9]{2}-[0-9]{2}:[0-9]{2}"
                         placeholder="09:00-10:30" title="Формат: ЧЧ:ММ-ЧЧ:ММ">
                 </label>
                 <div class="button-row">
@@ -416,7 +425,9 @@ function openEditDialog(block, origLeft, origTop, building) {
             block.innerHTML = `<strong>${newSubject}</strong><br>${newTeacher}<br>${newStudents}<br>${newRoom}<br>${newTime}`;
 
             // Refresh lesson type and re-apply filter after subject may have changed
-            if (wasExistingGroupBlock) {
+            if (originalLessonType === 'veranstaltung') {
+                block.setAttribute('data-lesson-type', 'veranstaltung');
+            } else if (wasExistingGroupBlock) {
                 block.setAttribute('data-lesson-type', 'group');
             }
             if (typeof updateBlockLessonType === 'function') {

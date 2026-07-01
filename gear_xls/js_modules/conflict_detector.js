@@ -52,6 +52,23 @@ var ConflictDetector = (function() {
         return lessonType || 'group';
     }
 
+    function normalizeBuilding(value) {
+        return normalizeText(value).toLowerCase();
+    }
+
+    function normalizeRoom(value, building) {
+        var room = normalizeText(value);
+        var normalizedBuilding = normalizeBuilding(building);
+
+        if (normalizedBuilding === 'villa' && room.length > 1 && room.charAt(0).toUpperCase() === 'V') {
+            return room.slice(1).trim().toLowerCase();
+        }
+        if (normalizedBuilding === 'kolibri' && room.length > 1 && room.charAt(0).toUpperCase() === 'K') {
+            return room.slice(1).trim().toLowerCase();
+        }
+        return room.toLowerCase();
+    }
+
     function extractGroupMarkers(students) {
         var normalized = normalizeText(students);
         var markers = [];
@@ -108,8 +125,10 @@ var ConflictDetector = (function() {
         var subject = lines[0] || '';
         var teacher = lines[1] || '';
         var students = lines[2] || '';
-        var room = lines[3] || '';
-        var timeRange = lines[4] || '';
+        var room = blockElement.getAttribute('data-room') || lines[3] || '';
+        var startTime = normalizeText(blockElement.getAttribute('data-start-time'));
+        var endTime = normalizeText(blockElement.getAttribute('data-end-time'));
+        var timeRange = startTime && endTime ? startTime + '-' + endTime : lines[4] || '';
         var lessonType = normalizeLessonType(blockElement.getAttribute('data-lesson-type'));
         var parsedTime = null;
 
@@ -125,6 +144,9 @@ var ConflictDetector = (function() {
             teacher: teacher,
             students: students,
             room: room,
+            normalizedBuilding: normalizeBuilding(building),
+            normalizedRoom: normalizeRoom(room, building),
+            blockId: blockElement.getAttribute('data-block-id') || '',
             lessonType: lessonType,
             groupMarkers: lessonType === 'group' ? extractGroupMarkers(students) : [],
             timeRange: timeRange,
@@ -141,6 +163,21 @@ var ConflictDetector = (function() {
 
     function detectConflictType(block1, block2) {
         var sharedGroupMarker;
+        var hasEvent = block1.lessonType === 'veranstaltung' || block2.lessonType === 'veranstaltung';
+
+        if (hasEvent) {
+            if (
+                block1.normalizedRoom &&
+                block1.normalizedRoom === block2.normalizedRoom &&
+                block1.normalizedBuilding === block2.normalizedBuilding
+            ) {
+                return {
+                    type: 'room',
+                    label: block1.room + (block1.building ? ' (' + block1.building + ')' : '')
+                };
+            }
+            return null;
+        }
 
         if (block1.teacher && block1.teacher === block2.teacher) {
             return {
@@ -149,7 +186,11 @@ var ConflictDetector = (function() {
             };
         }
 
-        if (block1.room && block1.room === block2.room && block1.building === block2.building) {
+        if (
+            block1.normalizedRoom &&
+            block1.normalizedRoom === block2.normalizedRoom &&
+            block1.normalizedBuilding === block2.normalizedBuilding
+        ) {
             return {
                 type: 'room',
                 label: block1.room + (block1.building ? ' (' + block1.building + ')' : '')
@@ -191,6 +232,10 @@ var ConflictDetector = (function() {
             for (var j = i + 1; j < parsedBlocks.length; j++) {
                 var block1 = parsedBlocks[i];
                 var block2 = parsedBlocks[j];
+
+                if (block1.blockId && block1.blockId === block2.blockId) {
+                    continue;
+                }
 
                 if (!block1.day || !block2.day || block1.day !== block2.day) {
                     continue;

@@ -52,6 +52,9 @@ function canResizeBlock(block) {
     var role = getResizeRole();
     var lessonType = getResizeLessonType(block);
 
+    if (lessonType === 'veranstaltung') {
+        return false;
+    }
     if (authUi && typeof authUi.isEditMode === 'function' && !authUi.isEditMode()) {
         return false;
     }

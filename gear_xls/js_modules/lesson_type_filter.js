@@ -12,6 +12,9 @@ function classifyLessonType(subject) {
     if (!subject) {
         return 'group';
     }
+    if (String(subject).trim() === 'Veranstaltung') {
+        return 'veranstaltung';
+    }
     if (subject.indexOf('Nachhilfe') !== -1) {
         return 'nachhilfe';
     }
@@ -40,9 +43,9 @@ function updateBlockLessonType(block) {
         return;
     }
 
-    // Preserve explicit 'trial' type — classifyLessonType cannot produce it
+    // Preserve explicit state-backed types that classifyLessonType should not infer away.
     var explicitType = (block.getAttribute('data-lesson-type') || '').trim();
-    if (explicitType === 'group') {
+    if (explicitType === 'group' || explicitType === 'veranstaltung') {
         return explicitType;
     }
     if (block.getAttribute('data-block-id') && explicitType && explicitType !== 'group') {

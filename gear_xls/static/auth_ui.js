@@ -17,6 +17,14 @@
       "#menuItemNewSchedule",
     ],
     editor: ["#exportToExcel"],
+    event_manager: [
+      "#exportToExcel",
+      "#create-block-button",
+      "#toggle-add-mode",
+      "#delete-block-button",
+      ".col-add-btn",
+      ".col-delete-btn",
+    ],
   };
 
   var EDIT_SELECTORS = [
@@ -42,12 +50,32 @@
     return window.CURRENT_USER || "";
   }
 
-  function isEditableRole(role) {
+  function isLegacyLockRole(role) {
     return role === "admin" || role === "editor" || role === "organizer";
   }
 
+  function isEditableRole(role) {
+    return isLegacyLockRole(role);
+  }
+
   function canEditNow(role) {
-    return isEditableRole(role) && isEditMode;
+    return isLegacyLockRole(role) && isEditMode;
+  }
+
+  function canUseEventEditor(role) {
+    return role === "admin" || role === "event_manager";
+  }
+
+  function canManageColumns(role) {
+    return isLegacyLockRole(role);
+  }
+
+  function canPublish(role) {
+    return role === "admin";
+  }
+
+  function canExport(role) {
+    return role === "admin";
   }
 
   function getBlockLessonType(block) {
@@ -57,6 +85,17 @@
   function canMutateBlock(role, block) {
     var lessonType = getBlockLessonType(block);
 
+    if (lessonType === "veranstaltung") {
+      if (role === "admin") {
+        return true;
+      }
+      return (
+        role === "event_manager" &&
+        block &&
+        (block.getAttribute("data-owner-kind") || "event_manager") === "event_manager" &&
+        (block.getAttribute("data-created-by") || "") === currentUser()
+      );
+    }
     if (role === "admin") {
       return true;
     }
@@ -85,6 +124,9 @@
       return action === "delete"
         ? "Организатор может удалять только trial-занятия."
         : "Организатор может изменять только trial-занятия.";
+    }
+    if (lessonType === "veranstaltung") {
+      return "Veranstaltung доступна для изменения только администратору или владельцу event-manager.";
     }
     if (role === "editor" && lessonType === "group") {
       return action === "delete"
@@ -134,6 +176,7 @@
       admin: "администратор",
       editor: "редактор",
       organizer: "организатор",
+      event_manager: "event manager",
       viewer: "наблюдатель",
     };
 
@@ -302,6 +345,13 @@
         "body.schedgen-readonly [data-drag-handle] { pointer-events: none !important; }",
         'body.schedgen-readonly .activity-block[data-lesson-type="group"] { cursor: default !important; }',
         'body[data-user-role="organizer"] #exportToExcel { display: none !important; }',
+        'body[data-user-role="event_manager"] #exportToExcel,',
+        'body[data-user-role="event_manager"] #menu-publish-item,',
+        'body[data-user-role="event_manager"] #create-block-button,',
+        'body[data-user-role="event_manager"] #toggle-add-mode,',
+        'body[data-user-role="event_manager"] #delete-block-button,',
+        'body[data-user-role="event_manager"] .col-add-btn,',
+        'body[data-user-role="event_manager"] .col-delete-btn { display: none !important; }',
       ].join("\n")
     );
   }
@@ -315,14 +365,14 @@
     new MutationObserver(function () {
       syncShellOffsets();
       syncUiState(currentRole());
-      if (currentRole() === "editor" || currentRole() === "organizer") {
+      if (currentRole() !== "admin") {
         processGroupBlocks();
       }
     }).observe(document.body, { childList: true, subtree: true });
   }
 
   function applyRoleRestrictions(role) {
-    if (role === "editor" || role === "organizer") {
+    if (role !== "admin") {
       attachEditorEventGuards();
       processGroupBlocks();
     }
@@ -334,14 +384,15 @@
     toggleSelectors(HIDE_SELECTORS.viewer, role === "viewer");
     toggleSelectors(HIDE_SELECTORS.organizer, role === "organizer");
     toggleSelectors(HIDE_SELECTORS.editor, role === "editor");
+    toggleSelectors(HIDE_SELECTORS.event_manager, role === "event_manager");
     toggleSelectors(
       EDIT_SELECTORS,
-      role === "viewer" || (isEditableRole(role) && !isEditMode)
+      role === "viewer" || !canManageColumns(role) || (isLegacyLockRole(role) && !isEditMode)
     );
 
     document.body.classList.toggle(
       "schedgen-readonly",
-      role === "viewer" || (isEditableRole(role) && !isEditMode)
+      role === "viewer" || (isLegacyLockRole(role) && !isEditMode)
     );
 
     if (!canEditNow(role)) {
@@ -720,7 +771,12 @@
     currentRole: currentRole,
     currentUser: currentUser,
     isEditableRole: isEditableRole,
+    isLegacyLockRole: isLegacyLockRole,
+    canUseEventEditor: canUseEventEditor,
     canMutateBlock: canMutateBlock,
+    canManageColumns: canManageColumns,
+    canPublish: canPublish,
+    canExport: canExport,
     getBlockLessonType: getBlockLessonType,
     isEditMode: function () {
       return isEditMode;

@@ -1,0 +1,11 @@
+ROLE_EVENT_MANAGER = "event_manager"
+
+LESSON_TYPE_EVENT = "veranstaltung"
+EVENT_SUBJECT = "Veranstaltung"
+
+EVENT_OWNER_EVENT_MANAGER = "event_manager"
+EVENT_OWNER_ADMIN = "admin"
+EVENT_OWNER_KINDS = frozenset({EVENT_OWNER_EVENT_MANAGER, EVENT_OWNER_ADMIN})
+
+EVENT_DEFAULT_COLOR = "#7c3aed"
+

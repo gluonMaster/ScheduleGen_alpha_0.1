@@ -46,7 +46,7 @@ from gear_xls.runtime_paths import (
     set_project_root_env,
 )
 
-from auth import authenticate, current_user, get_or_create_secret_key, login_required, role_required
+from auth import authenticate, current_user, get_or_create_secret_key, load_users, login_required, role_required
 import backup_manager
 from excel_exporter import ExcelExportValidationError, process_schedule_export_request
 import lock_manager
@@ -55,6 +55,10 @@ import rooms_report
 import rooms_routes
 import state_manager
 from base_schedule_manager import BaseRevisionConflict, BaseScheduleValidationError
+from gear_xls.event_domain import EVENT_OWNER_ADMIN, EVENT_OWNER_EVENT_MANAGER, ROLE_EVENT_MANAGER
+from gear_xls.event_room_config import get_event_room_config
+from gear_xls.schedule_mutation_coordinator import ScheduleMutationBusy, schedule_mutation
+from gear_xls.schedule_state_errors import ScheduleStateError
 
 
 def _build_log_handlers():
@@ -108,10 +112,12 @@ JSON_AUTH_PATHS = {
     "/api/lock",
     "/api/status",
     "/api/blocks",
+    "/api/events",
     "/api/columns",
     "/api/individual_lessons",
     "/api/schedule",
     "/api/schedule/publish",
+    "/api/users/event_managers",
     "/api/rooms/availability",
     "/api/backups",
     "/api/restore/status",
@@ -131,10 +137,21 @@ RESTORE_BLOCK_MESSAGE = (
 )
 
 
+@app.errorhandler(ScheduleMutationBusy)
+def _schedule_mutation_busy_response(exc):
+    return jsonify(exc.to_payload()), exc.status_code
+
+
+@app.errorhandler(ScheduleStateError)
+def _schedule_state_error_response(exc):
+    return jsonify(exc.to_payload()), exc.status_code
+
+
 def _json_auth_path(path):
     return (
         path in JSON_AUTH_PATHS
         or path.startswith("/api/blocks/")
+        or path.startswith("/api/events/")
         or path.startswith("/api/backups/")
         or path.startswith("/api/restore/")
     )
@@ -235,6 +252,94 @@ def _individual_mutation_payload(result, include_revision=False):
         if revision is not None:
             payload["individual_revision"] = revision
     return payload
+
+
+def _event_mutation_response(result, *, deleted=False):
+    payload = _individual_mutation_payload(result, include_revision=bool(getattr(result, "ok", False)))
+    if not getattr(result, "ok", False):
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": result.error or "Event mutation failed",
+                    "code": result.code or "EVENT_MUTATION_FAILED",
+                    **payload,
+                }
+            ),
+            int(getattr(result, "status_code", 400) or 400),
+        )
+
+    body = {
+        "ok": True,
+        "block": result.value,
+        **payload,
+    }
+    if deleted:
+        body["deleted_block"] = result.value
+    return jsonify(body)
+
+
+def _public_user(user):
+    return {
+        "login": user.get("login"),
+        "display_name": user.get("display_name") or user.get("login"),
+        "role": user.get("role"),
+    }
+
+
+def _event_manager_users():
+    users = []
+    for user in load_users():
+        if not isinstance(user, dict) or user.get("role") != ROLE_EVENT_MANAGER:
+            continue
+        public = _public_user(user)
+        if public.get("login"):
+            users.append(public)
+    users.sort(key=lambda item: (str(item.get("display_name") or "").casefold(), str(item.get("login") or "").casefold()))
+    return users
+
+
+def _find_user(login):
+    login = str(login or "").strip()
+    if not login:
+        return None
+    for user in load_users():
+        if isinstance(user, dict) and user.get("login") == login:
+            return _public_user(user)
+    return None
+
+
+def _resolve_event_author(actor, payload):
+    role = actor.get("role")
+    if role == ROLE_EVENT_MANAGER:
+        return {
+            "login": actor.get("login"),
+            "display_name": actor.get("display_name") or actor.get("login"),
+            "owner_kind": EVENT_OWNER_EVENT_MANAGER,
+        }, None
+    if role != "admin":
+        return None, ("Forbidden", "FORBIDDEN", 403)
+
+    requested_login = str(
+        (payload or {}).get("author_login")
+        or (payload or {}).get("created_by")
+        or ""
+    ).strip()
+    if not requested_login or requested_login == actor.get("login"):
+        return {
+            "login": actor.get("login"),
+            "display_name": actor.get("display_name") or actor.get("login"),
+            "owner_kind": EVENT_OWNER_ADMIN,
+        }, None
+
+    selected = _find_user(requested_login)
+    if not selected or selected.get("role") != ROLE_EVENT_MANAGER:
+        return None, ("Invalid event author", "INVALID_EVENT_AUTHOR", 400)
+    return {
+        "login": selected.get("login"),
+        "display_name": selected.get("display_name") or selected.get("login"),
+        "owner_kind": EVENT_OWNER_EVENT_MANAGER,
+    }, None
 
 
 def _is_backup_download_path(path):
@@ -498,6 +603,7 @@ def schedule():
         f"  window.CURRENT_USER = {json.dumps(user['login'])};\n"
         f"  window.USER_ROLE = {json.dumps(user['role'])};\n"
         f"  window.DISPLAY_NAME = {json.dumps(user['display_name'])};\n"
+        f"  window.EVENT_ROOM_SCOPE = {json.dumps(get_event_room_config(), ensure_ascii=False)};\n"
         f'  window.PUBLISHED_BASE_AVAILABLE = {"true" if published_base_available else "false"};\n'
         "</script>\n"
         '<link rel="stylesheet" href="/static/nav.css">\n'
@@ -509,6 +615,7 @@ def schedule():
 
     auth_ui_tag = (
         '<script src="/static/auth_ui.js"></script>\n'
+        '<script src="/static/event_manager_view.js"></script>\n'
         '<script src="/static/base_sync_ui.js"></script>\n'
         '<script src="/static/lock_ui.js"></script>\n'
         '<script src="/js_modules/trial_ui.js"></script>\n'
@@ -712,6 +819,8 @@ def api_backups_create():
         )
     except backup_manager.BackupError as exc:
         return _backup_error_response(exc)
+    except ScheduleMutationBusy as exc:
+        return jsonify(exc.to_payload()), exc.status_code
     except Exception as exc:
         logger.exception("Unexpected backup creation error")
         return jsonify({"ok": False, "error": str(exc), "code": "BACKUP_CREATE_FAILED"}), 500
@@ -900,11 +1009,22 @@ def api_publish_schedule():
             }
         ), 400
     try:
-        result = state_manager.publish_base(
-            blocks,
-            user["login"],
-            expected_base_revision=data.get("expected_base_revision"),
-        )
+        with schedule_mutation("publish_base_event_conflict_check"):
+            conflict = state_manager.find_saved_event_conflict_for_base_blocks(blocks)
+            if conflict:
+                return jsonify(
+                    {
+                        "ok": False,
+                        "error": "Published base conflicts with saved Veranstaltung",
+                        "code": "EVENT_ROOM_CONFLICT",
+                        "conflict": conflict,
+                    }
+                ), 409
+            result = state_manager.publish_base(
+                blocks,
+                user["login"],
+                expected_base_revision=data.get("expected_base_revision"),
+            )
     except BaseRevisionConflict as exc:
         logger.warning(
             "Publish rejected due to base revision conflict: login=%s expected=%r current=%r",
@@ -945,6 +1065,45 @@ def api_publish_schedule():
     )
 
 
+@app.route("/api/users/event_managers", methods=["GET"])
+@login_required
+@role_required("admin")
+def api_event_manager_users():
+    return jsonify({"ok": True, "users": _event_manager_users()})
+
+
+@app.route("/api/events", methods=["POST"])
+@login_required
+def api_create_event():
+    user = current_user()
+    data = request.get_json(force=True, silent=True) or {}
+    author, error = _resolve_event_author(user, data)
+    if error:
+        message, code, status = error
+        return jsonify({"ok": False, "error": message, "code": code}), status
+    result = state_manager.create_event(data, user, author)
+    return _event_mutation_response(result)
+
+
+@app.route("/api/events/<block_id>", methods=["PUT"])
+@login_required
+def api_update_event(block_id):
+    user = current_user()
+    data = request.get_json(force=True, silent=True) or {}
+    result = state_manager.update_event(block_id, data, user)
+    return _event_mutation_response(result)
+
+
+@app.route("/api/events/<block_id>", methods=["DELETE"])
+@login_required
+def api_delete_event(block_id):
+    user = current_user()
+    data = request.get_json(force=True, silent=True) or {}
+    expected_version = data.get("expected_version", data.get("version", request.args.get("version")))
+    result = state_manager.delete_event(block_id, expected_version, user)
+    return _event_mutation_response(result, deleted=True)
+
+
 @app.route("/api/blocks", methods=["POST"])
 @login_required
 def api_create_block():
@@ -957,6 +1116,10 @@ def api_create_block():
     data = request.get_json(force=True, silent=True) or {}
     result = state_manager.add_block(data, user["role"])
     block, error = result
+    if error == "EVENT_ROOM_CONFLICT":
+        payload = {"ok": False, "error": "Event room conflict", "code": "EVENT_ROOM_CONFLICT"}
+        payload.update(_individual_mutation_payload(result))
+        return jsonify(payload), 409
     if error:
         payload = {"ok": False, "error": error, "code": "VALIDATION_ERROR"}
         payload.update(_individual_mutation_payload(result))
@@ -990,6 +1153,14 @@ def api_update_block(block_id):
         payload = {"ok": False, "error": "Block not found", "code": "NOT_FOUND"}
         payload.update(_individual_mutation_payload(result))
         return jsonify(payload), 404
+    if error == "FORBIDDEN_EVENT_LEGACY":
+        payload = {"ok": False, "error": "Use /api/events for Veranstaltung blocks", "code": "FORBIDDEN"}
+        payload.update(_individual_mutation_payload(result))
+        return jsonify(payload), 403
+    if error == "EVENT_ROOM_CONFLICT":
+        payload = {"ok": False, "error": "Event room conflict", "code": "EVENT_ROOM_CONFLICT"}
+        payload.update(_individual_mutation_payload(result))
+        return jsonify(payload), 409
     if error:
         payload = {"ok": False, "error": error, "code": "VALIDATION_ERROR"}
         payload.update(_individual_mutation_payload(result))
@@ -1016,6 +1187,10 @@ def api_delete_block(block_id):
     deleted, del_err = result
     if del_err == "FORBIDDEN":
         payload = {"ok": False, "error": "Forbidden lesson_type", "code": "FORBIDDEN"}
+        payload.update(_individual_mutation_payload(result))
+        return jsonify(payload), 403
+    if del_err == "FORBIDDEN_EVENT_LEGACY":
+        payload = {"ok": False, "error": "Use /api/events for Veranstaltung blocks", "code": "FORBIDDEN"}
         payload.update(_individual_mutation_payload(result))
         return jsonify(payload), 403
     if del_err == "EXPIRED_TRIAL_PRUNED":
@@ -1136,6 +1311,10 @@ def api_delete_column():
             ), 403
     result = state_manager.delete_column_blocks(building, day, room)
     count, _error = result
+    if _error == "COLUMN_HAS_EVENT_BLOCKS":
+        payload = {"ok": False, "error": "Column contains Veranstaltung blocks", "code": "COLUMN_HAS_EVENT_BLOCKS"}
+        payload.update(_individual_mutation_payload(result))
+        return jsonify(payload), 409
     return jsonify(
         {
             "ok": True,
@@ -1202,7 +1381,8 @@ def export_to_excel():
 
     except ExcelExportValidationError as e:
         logger.warning("Excel export validation failed: %s", e.message)
-        return jsonify({"error": e.message, "code": e.code}), 400
+        status_code = 422 if e.code == "NO_EXPORTABLE_ROWS" else 400
+        return jsonify({"error": e.message, "code": e.code}), status_code
     except Exception as e:
         logger.error("Ошибка при экспорте в Excel: %s", e)
         import traceback

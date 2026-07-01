@@ -98,6 +98,11 @@ def _read_zip_entry(path, name):
 
 
 def _valid_entries(project_root, *, schedule_html=MINIMAL_SCHEDULE_HTML, schema=None, schema_version=None):
+    effective_schema_version = (
+        schema_version
+        if schema_version is not None
+        else backup_manager.BACKUP_SCHEMA_VERSION
+    )
     base = {
         "published_at": "2026-05-01T10:00:00",
         "published_by": "admin",
@@ -133,15 +138,38 @@ def _valid_entries(project_root, *, schedule_html=MINIMAL_SCHEDULE_HTML, schema=
         "state/individual_lessons.json": json.dumps(individual).encode("utf-8"),
         "html/schedule.html": schedule_html.encode("utf-8"),
     }
+    if effective_schema_version != 1:
+        snapshot = {
+            "schema_version": 1,
+            "generation_id": "gen-test",
+            "generated_at": "2026-05-01T10:00:00Z",
+            "source": "test",
+            "blocks": [
+                {
+                    "id": "group-1",
+                    "building": "Villa",
+                    "day": "Mo",
+                    "room": "1.01",
+                    "subject": "Math",
+                    "teacher": "",
+                    "students": "",
+                    "start_time": "10:00",
+                    "end_time": "11:00",
+                    "lesson_type": "group",
+                }
+            ],
+        }
+        entries[backup_manager.GROUP_OCCUPANCY_ARCHIVE_PATH] = json.dumps(snapshot).encode("utf-8")
     for archive_path in backup_manager.SPISKI_ARCHIVE_PATHS:
         entries[archive_path] = b"item\n"
+    expected_content_paths = (
+        backup_manager.V1_EXPECTED_CONTENT_PATHS
+        if effective_schema_version == 1
+        else backup_manager.EXPECTED_CONTENT_PATHS
+    )
     manifest = {
         "schema": schema if schema is not None else backup_manager.BACKUP_SCHEMA,
-        "schema_version": (
-            schema_version
-            if schema_version is not None
-            else backup_manager.BACKUP_SCHEMA_VERSION
-        ),
+        "schema_version": effective_schema_version,
         "backup_kind": "manual",
         "created_at": "2026-05-11T14:30:00Z",
         "created_by": "admin",
@@ -157,6 +185,7 @@ def _valid_entries(project_root, *, schedule_html=MINIMAL_SCHEDULE_HTML, schema=
             "schedule_html": True,
             "base_schedule": True,
             "individual_lessons": True,
+            "group_occupancy_snapshot": effective_schema_version != 1,
             "spiski": True,
             "lock_state": False,
             "restore_status": False,
@@ -169,9 +198,18 @@ def _valid_entries(project_root, *, schedule_html=MINIMAL_SCHEDULE_HTML, schema=
                 "sha256": hashlib.sha256(entries[archive_path]).hexdigest(),
                 "size": len(entries[archive_path]),
             }
-            for archive_path in backup_manager.EXPECTED_CONTENT_PATHS
+            for archive_path in expected_content_paths
         ],
     }
+    if effective_schema_version != 1:
+        snapshot_data = json.loads(entries[backup_manager.GROUP_OCCUPANCY_ARCHIVE_PATH].decode("utf-8"))
+        manifest["occupancy_snapshot"] = {
+            "path": backup_manager.GROUP_OCCUPANCY_ARCHIVE_PATH,
+            "generation_id": snapshot_data["generation_id"],
+            "generated_at": snapshot_data["generated_at"],
+            "source": snapshot_data["source"],
+            "sha256": hashlib.sha256(entries[backup_manager.GROUP_OCCUPANCY_ARCHIVE_PATH]).hexdigest(),
+        }
     return {"manifest.json": json.dumps(manifest).encode("utf-8"), **entries}
 
 

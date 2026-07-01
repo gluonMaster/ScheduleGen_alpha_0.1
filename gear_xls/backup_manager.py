@@ -15,10 +15,23 @@ from typing import Any
 from gear_xls.runtime_paths import (
     get_backup_dir,
     get_base_schedule_path,
+    get_group_occupancy_snapshot_path,
     get_individual_lessons_path,
     get_project_root_id,
     get_schedule_html_path,
     get_spiski_dir,
+)
+from gear_xls.schedule_mutation_coordinator import schedule_mutation
+from gear_xls.event_domain import (
+    EVENT_OWNER_KINDS,
+    EVENT_SUBJECT,
+    LESSON_TYPE_EVENT,
+)
+from gear_xls.group_occupancy_snapshot import (
+    UNAVAILABLE_SNAPSHOT_SOURCE,
+    build_group_occupancy_snapshot,
+    build_snapshot_from_base_state,
+    validate_group_occupancy_snapshot,
 )
 from gear_xls.day_constants import (
     DAY_TO_WEEKDAY,
@@ -29,14 +42,15 @@ from gear_xls.day_constants import (
 
 
 BACKUP_SCHEMA = "schedgen.web_editor_backup"
-BACKUP_SCHEMA_VERSION = 1
+BACKUP_SCHEMA_VERSION = 2
+SUPPORTED_BACKUP_SCHEMA_VERSIONS = {1, 2}
 BACKUP_ID_RE = re.compile(r"^schedgen_backup_\d{8}_\d{6}_[0-9a-f]{8}$")
 BACKUP_FILENAME_RE = re.compile(r"^(schedgen_backup_\d{8}_\d{6}_[0-9a-f]{8})\.zip$")
 ALLOWED_BACKUP_KINDS = {"manual", "safety", "uploaded"}
 
 MAX_COMMENT_CHARS = 500
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
-MAX_ZIP_FILES = 30
+MAX_ZIP_FILES = 31
 MAX_UNCOMPRESSED_BYTES = 200 * 1024 * 1024
 MAX_SINGLE_FILE_UNCOMPRESSED_BYTES = 25 * 1024 * 1024
 MAX_SCHEDULE_HTML_BYTES = 25 * 1024 * 1024
@@ -51,20 +65,33 @@ ALLOWED_SPISKI_FILENAMES = (
     "kabinets_Kolibri.txt",
 )
 SPISKI_ARCHIVE_PATHS = tuple(f"spiski/{name}" for name in ALLOWED_SPISKI_FILENAMES)
-EXPECTED_CONTENT_PATHS = (
+GROUP_OCCUPANCY_ARCHIVE_PATH = "state/group_occupancy_snapshot.json"
+V1_EXPECTED_CONTENT_PATHS = (
     "state/base_schedule.json",
     "state/individual_lessons.json",
     "html/schedule.html",
     *SPISKI_ARCHIVE_PATHS,
 )
+V2_EXPECTED_CONTENT_PATHS = (
+    "state/base_schedule.json",
+    "state/individual_lessons.json",
+    GROUP_OCCUPANCY_ARCHIVE_PATH,
+    "html/schedule.html",
+    *SPISKI_ARCHIVE_PATHS,
+)
+EXPECTED_CONTENT_PATHS = V2_EXPECTED_CONTENT_PATHS
 EXPECTED_ARCHIVE_PATHS = ("manifest.json", *EXPECTED_CONTENT_PATHS)
 EXPECTED_ARCHIVE_PATH_SET = set(EXPECTED_ARCHIVE_PATHS)
 EXPECTED_CONTENT_PATH_SET = set(EXPECTED_CONTENT_PATHS)
+V1_EXPECTED_ARCHIVE_PATH_SET = {"manifest.json", *V1_EXPECTED_CONTENT_PATHS}
+V1_EXPECTED_CONTENT_PATH_SET = set(V1_EXPECTED_CONTENT_PATHS)
+V2_EXPECTED_ARCHIVE_PATH_SET = {"manifest.json", *V2_EXPECTED_CONTENT_PATHS}
+V2_EXPECTED_CONTENT_PATH_SET = set(V2_EXPECTED_CONTENT_PATHS)
 
 VALID_DAYS = WEB_EDITOR_DAY_SET
 VALID_PUBLIC_DAYS = PUBLIC_SCHEDULE_DAY_SET
 VALID_BASE_LESSON_TYPES = {"group"}
-VALID_INDIVIDUAL_LESSON_TYPES = {"individual", "nachhilfe", "trial"}
+VALID_INDIVIDUAL_LESSON_TYPES = {"individual", "nachhilfe", "trial", LESSON_TYPE_EVENT}
 TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 def _joined_marker(*parts: str) -> str:
@@ -315,6 +342,64 @@ def _validate_common_block(
             )
 
 
+def _validate_iso_date(value: Any, *, label: str, index: int, field: str) -> None:
+    if not isinstance(value, str) or not ISO_DATE_RE.fullmatch(value):
+        raise BackupValidationError(
+            f"{label} block {index}: invalid {field}",
+            code="INVALID_JSON_STATE",
+            status_code=400,
+        )
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError as exc:
+        raise BackupValidationError(
+            f"{label} block {index}: invalid {field}",
+            code="INVALID_JSON_STATE",
+            status_code=400,
+        ) from exc
+
+
+def _validate_event_block(block: dict[str, Any], *, label: str, index: int) -> None:
+    if block.get("subject") != EVENT_SUBJECT:
+        raise BackupValidationError(
+            f"{label} block {index}: Veranstaltung subject is required",
+            code="INVALID_JSON_STATE",
+            status_code=400,
+        )
+    for field in ("teacher", "created_by", "created_by_name"):
+        _validate_non_empty_string(block, field, label=label, index=index)
+    if block.get("owner_kind") not in EVENT_OWNER_KINDS:
+        raise BackupValidationError(
+            f"{label} block {index}: invalid owner_kind",
+            code="INVALID_JSON_STATE",
+            status_code=400,
+        )
+    version = block.get("version")
+    if isinstance(version, bool) or not isinstance(version, int) or version <= 0:
+        raise BackupValidationError(
+            f"{label} block {index}: version must be a positive integer",
+            code="INVALID_JSON_STATE",
+            status_code=400,
+        )
+    if _time_minutes(block["start_time"]) % 15 != 0 or _time_minutes(block["end_time"]) % 15 != 0:
+        raise BackupValidationError(
+            f"{label} block {index}: Veranstaltung time must align to 15-minute boundaries",
+            code="INVALID_JSON_STATE",
+            status_code=400,
+        )
+    event_dates = block.get("event_dates", [])
+    if event_dates is None:
+        event_dates = []
+    if not isinstance(event_dates, list):
+        raise BackupValidationError(
+            f"{label} block {index}: event_dates must be a list",
+            code="INVALID_JSON_STATE",
+            status_code=400,
+        )
+    for raw_date in event_dates:
+        _validate_iso_date(raw_date, label=label, index=index, field="event date")
+
+
 def validate_base_state(data: Any, *, label: str = "base_schedule.json") -> None:
     if not isinstance(data, dict):
         raise BackupValidationError(
@@ -378,6 +463,9 @@ def validate_individual_state(data: Any, *, label: str = "individual_lessons.jso
                 code="INVALID_JSON_STATE",
                 status_code=400,
             )
+        if block["lesson_type"] == LESSON_TYPE_EVENT:
+            _validate_event_block(block, label=label, index=index)
+            continue
         if block["lesson_type"] != "trial":
             continue
         trial_dates = block.get("trial_dates")
@@ -389,20 +477,8 @@ def validate_individual_state(data: Any, *, label: str = "individual_lessons.jso
             )
         expected_weekday = DAY_TO_WEEKDAY[block["day"]]
         for raw_date in trial_dates:
-            if not isinstance(raw_date, str) or not ISO_DATE_RE.fullmatch(raw_date):
-                raise BackupValidationError(
-                    f"{label} block {index}: invalid trial date",
-                    code="INVALID_JSON_STATE",
-                    status_code=400,
-                )
-            try:
-                parsed_date = datetime.strptime(raw_date, "%Y-%m-%d")
-            except ValueError as exc:
-                raise BackupValidationError(
-                    f"{label} block {index}: invalid trial date",
-                    code="INVALID_JSON_STATE",
-                    status_code=400,
-                ) from exc
+            _validate_iso_date(raw_date, label=label, index=index, field="trial date")
+            parsed_date = datetime.strptime(raw_date, "%Y-%m-%d")
             if parsed_date.weekday() != expected_weekday:
                 raise BackupValidationError(
                     f"{label} block {index}: trial date weekday mismatch",
@@ -500,7 +576,46 @@ def _read_spiski_file(project_root: str | None, filename: str) -> bytes:
     return data
 
 
-def _collect_source_files(project_root: str | None) -> tuple[dict[str, bytes], dict[str, Any], dict[str, Any]]:
+def validate_group_occupancy_snapshot_state(data: Any, *, label: str = "group_occupancy_snapshot.json") -> None:
+    try:
+        validate_group_occupancy_snapshot(data)
+    except Exception as exc:
+        raise BackupValidationError(
+            f"{label} is invalid",
+            code="INVALID_JSON_STATE",
+            status_code=400,
+        ) from exc
+
+
+def _read_or_build_snapshot_bytes(
+    project_root: str | None,
+    *,
+    base_state: dict[str, Any],
+    individual_state: dict[str, Any],
+) -> tuple[bytes, dict[str, Any]]:
+    path = get_group_occupancy_snapshot_path(project_root)
+    if os.path.exists(path):
+        data = _read_limited_file(path, max_bytes=MAX_JSON_BYTES, label="group_occupancy_snapshot.json")
+        parsed = _parse_json_bytes(data, label="group_occupancy_snapshot.json")
+        validate_group_occupancy_snapshot_state(parsed, label="group_occupancy_snapshot.json")
+        return data, parsed
+
+    if base_state.get("published_at"):
+        snapshot = build_snapshot_from_base_state(base_state)
+        validate_group_occupancy_snapshot_state(snapshot, label="group_occupancy_snapshot.json")
+        return _json_bytes(snapshot), snapshot
+
+    snapshot = build_group_occupancy_snapshot(
+        [],
+        source=UNAVAILABLE_SNAPSHOT_SOURCE,
+        generation_id="occupancy-unavailable",
+        generated_at="1970-01-01T00:00:00Z",
+    )
+    validate_group_occupancy_snapshot_state(snapshot, label="group_occupancy_snapshot.json")
+    return _json_bytes(snapshot), snapshot
+
+
+def _collect_source_files(project_root: str | None) -> tuple[dict[str, bytes], dict[str, Any], dict[str, Any], dict[str, Any]]:
     base_bytes, base_state = _read_state_json(
         get_base_schedule_path(project_root),
         label="base_schedule.json",
@@ -513,14 +628,20 @@ def _collect_source_files(project_root: str | None) -> tuple[dict[str, bytes], d
         default_state=_empty_individual_state(),
         validator=validate_individual_state,
     )
+    snapshot_bytes, snapshot_state = _read_or_build_snapshot_bytes(
+        project_root,
+        base_state=base_state,
+        individual_state=individual_state,
+    )
     files = {
         "state/base_schedule.json": base_bytes,
         "state/individual_lessons.json": individual_bytes,
+        GROUP_OCCUPANCY_ARCHIVE_PATH: snapshot_bytes,
         "html/schedule.html": _read_schedule_html(project_root),
     }
     for filename in ALLOWED_SPISKI_FILENAMES:
         files[f"spiski/{filename}"] = _read_spiski_file(project_root, filename)
-    return files, base_state, individual_state
+    return files, base_state, individual_state, snapshot_state
 
 
 def _build_manifest(
@@ -528,6 +649,7 @@ def _build_manifest(
     files: dict[str, bytes],
     base_state: dict[str, Any],
     individual_state: dict[str, Any],
+    snapshot_state: dict[str, Any],
     created_at: str,
     created_by: str,
     created_by_display_name: str,
@@ -549,10 +671,18 @@ def _build_manifest(
         "dirty_dom_included": False,
         "base_revision": base_state.get("published_at"),
         "individual_revision": individual_state.get("last_modified"),
+        "occupancy_snapshot": {
+            "path": GROUP_OCCUPANCY_ARCHIVE_PATH,
+            "generation_id": snapshot_state.get("generation_id"),
+            "generated_at": snapshot_state.get("generated_at"),
+            "source": snapshot_state.get("source"),
+            "sha256": _sha256(files[GROUP_OCCUPANCY_ARCHIVE_PATH]),
+        },
         "includes": {
             "schedule_html": True,
             "base_schedule": True,
             "individual_lessons": True,
+            "group_occupancy_snapshot": True,
             "spiski": True,
             "lock_state": False,
             "restore_status": False,
@@ -567,8 +697,13 @@ def _build_manifest(
 
 
 def _write_zip(path: str, entries: dict[str, bytes]) -> None:
+    archive_paths = (
+        ("manifest.json", *V2_EXPECTED_CONTENT_PATHS)
+        if GROUP_OCCUPANCY_ARCHIVE_PATH in entries
+        else ("manifest.json", *V1_EXPECTED_CONTENT_PATHS)
+    )
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for archive_path in EXPECTED_ARCHIVE_PATHS:
+        for archive_path in archive_paths:
             archive.writestr(archive_path, entries[archive_path])
 
 
@@ -713,13 +848,15 @@ def create_backup(
     if backup_kind not in ALLOWED_BACKUP_KINDS:
         raise BackupError("Invalid backup kind", code="INVALID_BACKUP_KIND", status_code=400)
 
-    files, base_state, individual_state = _collect_source_files(project_root)
+    with schedule_mutation("backup_capture"):
+        files, base_state, individual_state, snapshot_state = _collect_source_files(project_root)
     moment = _utc_now()
     created_at = _format_created_at(moment)
     manifest = _build_manifest(
         files=files,
         base_state=base_state,
         individual_state=individual_state,
+        snapshot_state=snapshot_state,
         created_at=created_at,
         created_by=created_by,
         created_by_display_name=created_by_display_name,
@@ -880,8 +1017,11 @@ def _load_zip_entries(path: str) -> dict[str, bytes]:
 
 def _validate_exact_archive_paths(entries: dict[str, bytes]) -> None:
     actual = set(entries)
-    missing = EXPECTED_ARCHIVE_PATH_SET - actual
-    extra = actual - EXPECTED_ARCHIVE_PATH_SET
+    if actual == V1_EXPECTED_ARCHIVE_PATH_SET or actual == V2_EXPECTED_ARCHIVE_PATH_SET:
+        return
+    expected = V2_EXPECTED_ARCHIVE_PATH_SET if GROUP_OCCUPANCY_ARCHIVE_PATH in actual else V1_EXPECTED_ARCHIVE_PATH_SET
+    missing = expected - actual
+    extra = actual - expected
     if missing:
         raise BackupValidationError(
             f"Backup ZIP is missing required file: {sorted(missing)[0]}",
@@ -901,7 +1041,8 @@ def _validate_manifest(manifest: Any, entries: dict[str, bytes]) -> dict[str, An
         raise BackupValidationError("manifest.json must be an object", code="INVALID_MANIFEST", status_code=400)
     if manifest.get("schema") != BACKUP_SCHEMA:
         raise BackupValidationError("Unsupported backup schema", code="UNSUPPORTED_BACKUP_SCHEMA", status_code=400)
-    if manifest.get("schema_version") != BACKUP_SCHEMA_VERSION:
+    schema_version = manifest.get("schema_version")
+    if schema_version not in SUPPORTED_BACKUP_SCHEMA_VERSIONS:
         raise BackupValidationError(
             "Unsupported backup schema version",
             code="UNSUPPORTED_BACKUP_SCHEMA_VERSION",
@@ -914,12 +1055,21 @@ def _validate_manifest(manifest: Any, entries: dict[str, bytes]) -> dict[str, An
     if not isinstance(files, list):
         raise BackupValidationError("manifest.files must be a list", code="INVALID_MANIFEST", status_code=400)
 
+    expected_content = V2_EXPECTED_CONTENT_PATH_SET if schema_version == 2 else V1_EXPECTED_CONTENT_PATH_SET
+    expected_archive = {"manifest.json", *expected_content}
+    if set(entries) != expected_archive:
+        raise BackupValidationError(
+            "Backup ZIP files do not match manifest schema version",
+            code="UNEXPECTED_BACKUP_FILE",
+            status_code=400,
+        )
+
     seen: set[str] = set()
     for file_entry in files:
         if not isinstance(file_entry, dict):
             raise BackupValidationError("manifest.files entries must be objects", code="INVALID_MANIFEST", status_code=400)
         archive_path = file_entry.get("path")
-        if archive_path not in EXPECTED_CONTENT_PATH_SET:
+        if archive_path not in expected_content:
             raise BackupValidationError("manifest.files contains unexpected path", code="INVALID_MANIFEST", status_code=400)
         if archive_path in seen:
             raise BackupValidationError("manifest.files contains duplicate path", code="INVALID_MANIFEST", status_code=400)
@@ -931,8 +1081,24 @@ def _validate_manifest(manifest: Any, entries: dict[str, bytes]) -> dict[str, An
         if file_entry.get("size") != len(data):
             raise BackupValidationError("Manifest size mismatch", code="CHECKSUM_MISMATCH", status_code=400)
 
-    if seen != EXPECTED_CONTENT_PATH_SET:
+    if seen != expected_content:
         raise BackupValidationError("manifest.files must list every backup file exactly once", code="INVALID_MANIFEST", status_code=400)
+    if schema_version == 2:
+        snapshot_meta = manifest.get("occupancy_snapshot")
+        if not isinstance(snapshot_meta, dict):
+            raise BackupValidationError("manifest.occupancy_snapshot must be an object", code="INVALID_MANIFEST", status_code=400)
+        snapshot = _parse_json_bytes(entries[GROUP_OCCUPANCY_ARCHIVE_PATH], label=GROUP_OCCUPANCY_ARCHIVE_PATH)
+        validate_group_occupancy_snapshot_state(snapshot, label=GROUP_OCCUPANCY_ARCHIVE_PATH)
+        if snapshot_meta.get("path") != GROUP_OCCUPANCY_ARCHIVE_PATH:
+            raise BackupValidationError("manifest.occupancy_snapshot path is invalid", code="INVALID_MANIFEST", status_code=400)
+        if snapshot_meta.get("generation_id") != snapshot.get("generation_id"):
+            raise BackupValidationError("manifest.occupancy_snapshot generation_id mismatch", code="INVALID_MANIFEST", status_code=400)
+        if snapshot_meta.get("generated_at") != snapshot.get("generated_at"):
+            raise BackupValidationError("manifest.occupancy_snapshot generated_at mismatch", code="INVALID_MANIFEST", status_code=400)
+        if snapshot_meta.get("source") != snapshot.get("source"):
+            raise BackupValidationError("manifest.occupancy_snapshot source mismatch", code="INVALID_MANIFEST", status_code=400)
+        if snapshot_meta.get("sha256") != _sha256(entries[GROUP_OCCUPANCY_ARCHIVE_PATH]):
+            raise BackupValidationError("manifest.occupancy_snapshot checksum mismatch", code="CHECKSUM_MISMATCH", status_code=400)
     return manifest
 
 
@@ -963,6 +1129,11 @@ def validate_backup_zip(path: str, *, deep: bool = True) -> dict[str, Any]:
             ),
             label="state/individual_lessons.json",
         )
+        if manifest.get("schema_version") == 2:
+            validate_group_occupancy_snapshot_state(
+                _parse_json_bytes(entries[GROUP_OCCUPANCY_ARCHIVE_PATH], label=GROUP_OCCUPANCY_ARCHIVE_PATH),
+                label=GROUP_OCCUPANCY_ARCHIVE_PATH,
+            )
         validate_schedule_html_bytes(entries["html/schedule.html"])
         for archive_path in SPISKI_ARCHIVE_PATHS:
             validate_spiski_bytes(entries[archive_path], label=archive_path)

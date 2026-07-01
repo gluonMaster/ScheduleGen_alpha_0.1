@@ -37,6 +37,9 @@ var DragDropService = (function() {
         if (authUi && typeof authUi.canMutateBlock === 'function') {
             return authUi.canMutateBlock(role, block);
         }
+        if (lessonType === 'veranstaltung') {
+            return false;
+        }
         if (role === 'admin') return true;
         if (role === 'editor') return lessonType !== 'group';
         if (role === 'organizer') return lessonType === 'trial';

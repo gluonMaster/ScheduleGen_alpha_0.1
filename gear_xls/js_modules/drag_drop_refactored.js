@@ -41,6 +41,18 @@ function initLegacyDragAndDrop() {
         }
         compactRowsDragPaused = false;
     }
+
+    function canUseLegacyBlockEvents(block) {
+        var role = window.USER_ROLE || 'viewer';
+        var lessonType = block ? (block.getAttribute('data-lesson-type') || 'group') : 'group';
+
+        if (!block) return false;
+        if (lessonType === 'veranstaltung') return false;
+        if (role === 'admin') return true;
+        if (role === 'editor') return lessonType !== 'group';
+        if (role === 'organizer') return lessonType === 'trial';
+        return false;
+    }
     
     // Функция для привязки к сетке с учетом точных размеров и границ
     function snapToGrid(left, top) {
@@ -261,6 +273,9 @@ function initLegacyDragAndDrop() {
         let isPotentialDoubleClick = false;
         
         block.addEventListener('mousedown', function(e) {
+            if (!canUseLegacyBlockEvents(block)) {
+                return;
+            }
             // Если открыт диалог редактирования или установлен флаг preventDrag, не начинаем drag
             if (window.editDialogOpen || preventDrag || isPotentialDoubleClick) {
                 e.preventDefault();
@@ -292,6 +307,9 @@ function initLegacyDragAndDrop() {
         
         // Обработчик двойного клика
         block.addEventListener('dblclick', function(e) {
+            if (!canUseLegacyBlockEvents(block)) {
+                return;
+            }
             // Очищаем таймаут и сбрасываем флаг
             if (clickTimeout) {
                 clearTimeout(clickTimeout);

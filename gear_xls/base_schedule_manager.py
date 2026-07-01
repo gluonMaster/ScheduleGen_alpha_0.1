@@ -15,6 +15,8 @@ if PROJECT_ROOT not in sys.path:
 from gear_xls.runtime_paths import get_base_schedule_path
 from gear_xls.room_name_utils import normalize_room_fields
 from gear_xls.day_constants import PUBLIC_SCHEDULE_DAY_SET
+from gear_xls.schedule_mutation_coordinator import schedule_mutation
+from gear_xls.schedule_state_errors import ScheduleStateReadError
 
 
 BASE_SCHEDULE_PATH = get_base_schedule_path()
@@ -99,17 +101,41 @@ def _read_base():
     try:
         with open(BASE_SCHEDULE_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
-        if not isinstance(data, dict):
-            return _empty_base()
-        blocks = data.get("blocks", [])
-        return {
-            "published_at": data.get("published_at"),
-            "published_by": data.get("published_by"),
-            "blocks": blocks if isinstance(blocks, list) else [],
-        }
     except Exception as exc:
         logger.warning("Failed to read base schedule: %s", exc)
-        return _empty_base()
+        raise ScheduleStateReadError(
+            "base_schedule.json is not valid JSON",
+            "BASE_SCHEDULE_CORRUPT",
+        ) from exc
+
+    if not isinstance(data, dict):
+        raise ScheduleStateReadError(
+            "base_schedule.json must be a JSON object",
+            "BASE_SCHEDULE_CORRUPT",
+        )
+    blocks = data.get("blocks", [])
+    if not isinstance(blocks, list):
+        raise ScheduleStateReadError(
+            "base_schedule.json blocks must be a list",
+            "BASE_SCHEDULE_CORRUPT",
+        )
+    published_at = data.get("published_at")
+    published_by = data.get("published_by")
+    if published_at is not None and not isinstance(published_at, str):
+        raise ScheduleStateReadError(
+            "base_schedule.json published_at must be a string or null",
+            "BASE_SCHEDULE_CORRUPT",
+        )
+    if published_by is not None and not isinstance(published_by, str):
+        raise ScheduleStateReadError(
+            "base_schedule.json published_by must be a string or null",
+            "BASE_SCHEDULE_CORRUPT",
+        )
+    return {
+        "published_at": published_at,
+        "published_by": published_by,
+        "blocks": blocks,
+    }
 
 
 def _normalize_base_blocks(blocks):
@@ -169,13 +195,8 @@ def _base_blocks_signature(blocks):
     return json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-def _write_base(state):
+def _write_base_payload(payload):
     os.makedirs(os.path.dirname(BASE_SCHEDULE_PATH), exist_ok=True)
-    payload = {
-        "published_at": state.get("published_at"),
-        "published_by": state.get("published_by"),
-        "blocks": state.get("blocks", []),
-    }
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -196,8 +217,26 @@ def _write_base(state):
                 pass
 
 
+def _write_base(state):
+    _write_base_payload(
+        {
+            "published_at": state.get("published_at"),
+            "published_by": state.get("published_by"),
+            "blocks": state.get("blocks", []),
+        }
+    )
+
+
 def get_base_schedule():
     state = _read_base()
+    state["blocks"] = _normalize_base_blocks(state.get("blocks", []))
+    return state
+
+
+def get_base_schedule_strict():
+    with _base_mutex:
+        with _locked_base_file():
+            state = _read_base()
     state["blocks"] = _normalize_base_blocks(state.get("blocks", []))
     return state
 
@@ -206,39 +245,71 @@ def get_base_revision():
     return get_base_schedule().get("published_at")
 
 
+def replace_base_schedule_state(state):
+    blocks = state.get("blocks", []) if isinstance(state, dict) else None
+    published_at = state.get("published_at") if isinstance(state, dict) else None
+    published_by = state.get("published_by") if isinstance(state, dict) else None
+    if not isinstance(blocks, list):
+        raise ScheduleStateReadError(
+            "base_schedule.json blocks must be a list",
+            "BASE_SCHEDULE_CORRUPT",
+        )
+    if published_at is not None and not isinstance(published_at, str):
+        raise ScheduleStateReadError(
+            "base_schedule.json published_at must be a string or null",
+            "BASE_SCHEDULE_CORRUPT",
+        )
+    if published_by is not None and not isinstance(published_by, str):
+        raise ScheduleStateReadError(
+            "base_schedule.json published_by must be a string or null",
+            "BASE_SCHEDULE_CORRUPT",
+        )
+    payload = {
+        "published_at": published_at,
+        "published_by": published_by,
+        "blocks": _normalize_base_blocks(blocks),
+    }
+    with schedule_mutation("base_schedule_replace"):
+        with _base_mutex:
+            with _locked_base_file():
+                _write_base_payload(payload)
+    return payload
+
+
 def publish_base(blocks, published_by, expected_base_revision=None):
-    with _base_mutex:
-        with _locked_base_file():
-            current_state = _read_base()
-            current_revision = _normalize_revision(current_state.get("published_at"))
-            expected_revision = _normalize_revision(expected_base_revision)
+    with schedule_mutation("base_schedule_publish"):
+        with _base_mutex:
+            with _locked_base_file():
+                current_state = _read_base()
+                current_revision = _normalize_revision(current_state.get("published_at"))
+                expected_revision = _normalize_revision(expected_base_revision)
 
-            if expected_revision != current_revision:
-                raise BaseRevisionConflict(expected_revision, current_revision)
+                if expected_revision != current_revision:
+                    raise BaseRevisionConflict(expected_revision, current_revision)
 
-            filtered_blocks = []
-            for index, block in enumerate(blocks or []):
-                if not isinstance(block, dict):
-                    continue
-                normalized_block = normalize_room_fields(block)
-                _validate_public_base_block(normalized_block, index)
-                if normalized_block.get("lesson_type") == "group":
-                    filtered_blocks.append(normalized_block)
-            if _base_blocks_signature(current_state.get("blocks", [])) == _base_blocks_signature(
-                filtered_blocks
-            ):
-                current_state["blocks"] = _normalize_base_blocks(current_state.get("blocks", []))
-                current_state["changed"] = False
-                return current_state
+                filtered_blocks = []
+                for index, block in enumerate(blocks or []):
+                    if not isinstance(block, dict):
+                        continue
+                    normalized_block = normalize_room_fields(block)
+                    _validate_public_base_block(normalized_block, index)
+                    if normalized_block.get("lesson_type") == "group":
+                        filtered_blocks.append(normalized_block)
+                if _base_blocks_signature(current_state.get("blocks", [])) == _base_blocks_signature(
+                    filtered_blocks
+                ):
+                    current_state["blocks"] = _normalize_base_blocks(current_state.get("blocks", []))
+                    current_state["changed"] = False
+                    return current_state
 
-            state = {
-                "published_at": datetime.utcnow().isoformat(),
-                "published_by": published_by,
-                "blocks": filtered_blocks,
-                "changed": True,
-            }
-            _write_base(state)
-            return state
+                state = {
+                    "published_at": datetime.utcnow().isoformat(),
+                    "published_by": published_by,
+                    "blocks": filtered_blocks,
+                    "changed": True,
+                }
+                _write_base(state)
+                return state
 
 
 def base_has_group_lessons_in_column(building, day, room):

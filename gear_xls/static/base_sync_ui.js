@@ -551,6 +551,12 @@
   function applyBaseScheduleData(data) {
     var blocks;
 
+    if (
+      window.SchedGenEventManagerView &&
+      typeof window.SchedGenEventManagerView.filterSchedulePayload === "function"
+    ) {
+      data = window.SchedGenEventManagerView.filterSchedulePayload(data);
+    }
     if (!data || (!("base_revision" in data) && !("published_base_available" in data))) {
       return data || null;
     }
@@ -1384,14 +1390,32 @@
       resolveRoomName(table, day, colIndex) || lines[3] || block.getAttribute("data-room") || "",
       building
     );
-    timeRange = resolveBlockTimeRangeFromRows(block);
-
-    if (!timeRange) {
+    if (currentRole() === "event_manager") {
       timeRange = resolveBlockTimeRangeFromText(block) || resolveBlockTimeRangeFromAttrs(block);
-      rows = timeRange ? deriveRowsFromTimeRange(timeRange) : null;
+      rows =
+        timeRange &&
+        window.SchedGenEventManagerView &&
+        typeof window.SchedGenEventManagerView.resolveRowsForBlock === "function"
+          ? window.SchedGenEventManagerView.resolveRowsForBlock({
+              lesson_type: "group",
+              start_time: timeRange.start,
+              end_time: timeRange.end,
+            })
+          : null;
       if (rows) {
         block.setAttribute("data-start-row", String(rows.start_row));
         block.setAttribute("data-row-span", String(rows.row_span));
+      }
+    } else {
+      timeRange = resolveBlockTimeRangeFromRows(block);
+
+      if (!timeRange) {
+        timeRange = resolveBlockTimeRangeFromText(block) || resolveBlockTimeRangeFromAttrs(block);
+        rows = timeRange ? deriveRowsFromTimeRange(timeRange) : null;
+        if (rows) {
+          block.setAttribute("data-start-row", String(rows.start_row));
+          block.setAttribute("data-row-span", String(rows.row_span));
+        }
       }
     }
 
@@ -1548,6 +1572,9 @@
     if (colIndex >= 0) {
       return colIndex;
     }
+    if (currentRole() === "event_manager") {
+      return -1;
+    }
     if (typeof addColumnIfMissing === "function") {
       return addColumnIfMissing(day, room, building);
     }
@@ -1558,7 +1585,18 @@
     var startRow = toInteger(block.start_row, -1);
     var rowSpan = toInteger(block.row_span, -1);
     var minutes;
+    var eventRows;
 
+    if (
+      currentRole() === "event_manager" &&
+      window.SchedGenEventManagerView &&
+      typeof window.SchedGenEventManagerView.resolveRowsForBlock === "function"
+    ) {
+      eventRows = window.SchedGenEventManagerView.resolveRowsForBlock(block);
+      if (eventRows) {
+        return eventRows;
+      }
+    }
     if (startRow >= 0 && rowSpan >= 1) {
       return { start_row: startRow, row_span: rowSpan };
     }
